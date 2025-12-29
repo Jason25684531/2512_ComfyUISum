@@ -1,1 +1,8 @@
-# Define additional routes here if needed
+"""
+Routes 模块
+定义额外的路由和辅助功能
+目前主要路由在 app.py 中实现
+"""
+
+# 未来可以在这里添加更多路由
+# 例如: 图片下载、任务取消、批量查询等

@@ -1,2 +1,4 @@
 Flask==2.1.2
 Redis==4.5.1
+flask-cors==3.0.10
+requests==2.28.1

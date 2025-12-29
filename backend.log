@@ -1,0 +1,94 @@
+2025-12-29 17:14:46,162 - __main__ - ERROR - ✗ Redis 连接失败: Error 11001 connecting to redis:6379. getaddrinfo failed.
+2025-12-29 17:14:46,165 - __main__ - INFO - 🚀 Backend API 启动中...
+2025-12-29 17:14:46,189 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://10.20.152.244:5000
+2025-12-29 17:14:46,189 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-12-29 17:14:46,190 - werkzeug - INFO -  * Restarting with stat
+2025-12-29 17:14:49,025 - __main__ - ERROR - ✗ Redis 连接失败: Error 11001 connecting to redis:6379. getaddrinfo failed.
+2025-12-29 17:14:49,028 - __main__ - INFO - 🚀 Backend API 启动中...
+2025-12-29 17:14:49,037 - werkzeug - WARNING -  * Debugger is active!
+2025-12-29 17:14:49,038 - werkzeug - INFO -  * Debugger PIN: 298-628-555
+2025-12-29 17:15:13,091 - werkzeug - INFO - 10.20.152.244 - - [29/Dec/2025 17:15:13] "[33mGET / HTTP/1.1[0m" 404 -
+2025-12-29 17:15:13,231 - werkzeug - INFO - 10.20.152.244 - - [29/Dec/2025 17:15:13] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2025-12-29 17:15:30,079 - __main__ - ERROR - ✗ Redis 连接失败: Error 11001 connecting to redis:6379. getaddrinfo failed.
+2025-12-29 17:15:30,081 - __main__ - INFO - 🚀 Backend API 启动中...
+2025-12-29 17:15:30,098 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://10.20.152.244:5000
+2025-12-29 17:15:30,098 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-12-29 17:15:30,098 - werkzeug - INFO -  * Restarting with stat
+2025-12-29 17:15:32,922 - __main__ - ERROR - ✗ Redis 连接失败: Error 11001 connecting to redis:6379. getaddrinfo failed.
+2025-12-29 17:15:32,924 - __main__ - INFO - 🚀 Backend API 启动中...
+2025-12-29 17:15:32,933 - werkzeug - WARNING -  * Debugger is active!
+2025-12-29 17:15:32,935 - werkzeug - INFO -  * Debugger PIN: 298-628-555
+2025-12-29 17:16:41,363 - __main__ - ERROR - ✗ Redis 连接失败: Error 11001 connecting to redis:6379. getaddrinfo failed.
+2025-12-29 17:16:41,367 - __main__ - INFO - 🚀 Backend API 启动中...
+2025-12-29 17:16:41,388 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://10.20.152.244:5000
+2025-12-29 17:16:41,388 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-12-29 17:16:41,389 - werkzeug - INFO -  * Restarting with stat
+2025-12-29 17:16:44,225 - __main__ - ERROR - ✗ Redis 连接失败: Error 11001 connecting to redis:6379. getaddrinfo failed.
+2025-12-29 17:16:44,227 - __main__ - INFO - 🚀 Backend API 启动中...
+2025-12-29 17:16:44,239 - werkzeug - WARNING -  * Debugger is active!
+2025-12-29 17:16:44,240 - werkzeug - INFO -  * Debugger PIN: 298-628-555
+2025-12-29 17:18:17,789 - werkzeug - INFO -  * Detected change in 'D:\\01_Project\\2512_ComfyUISum\\backend\\src\\app.py', reloading
+2025-12-29 17:18:17,815 - werkzeug - INFO -  * Restarting with stat
+2025-12-29 17:18:17,980 - __main__ - ERROR - ✗ Redis 连接失败: Authentication required.
+2025-12-29 17:18:17,981 - __main__ - INFO - 🚀 Backend API 启动中...
+2025-12-29 17:18:17,990 - werkzeug - WARNING -  * Debugger is active!
+2025-12-29 17:18:17,991 - werkzeug - INFO -  * Debugger PIN: 298-628-555
+2025-12-29 17:18:39,097 - __main__ - ERROR - ✗ Redis 连接失败: Authentication required.
+2025-12-29 17:18:39,098 - __main__ - INFO - 🚀 Backend API 启动中...
+2025-12-29 17:18:39,113 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://10.20.152.244:5000
+2025-12-29 17:18:39,113 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-12-29 17:18:39,115 - werkzeug - INFO -  * Restarting with stat
+2025-12-29 17:18:39,287 - __main__ - ERROR - ✗ Redis 连接失败: Authentication required.
+2025-12-29 17:18:39,288 - __main__ - INFO - 🚀 Backend API 启动中...
+2025-12-29 17:18:39,298 - werkzeug - WARNING -  * Debugger is active!
+2025-12-29 17:18:39,299 - werkzeug - INFO -  * Debugger PIN: 298-628-555
+2025-12-29 17:18:41,962 - __main__ - ERROR - ✗ Redis 连接失败: Authentication required.
+2025-12-29 17:18:41,963 - __main__ - INFO - 🚀 Backend API 启动中...
+2025-12-29 17:18:41,976 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://10.20.152.244:5000
+2025-12-29 17:18:41,976 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-12-29 17:18:41,976 - werkzeug - INFO -  * Restarting with stat
+2025-12-29 17:18:42,147 - __main__ - ERROR - ✗ Redis 连接失败: Authentication required.
+2025-12-29 17:18:42,148 - __main__ - INFO - 🚀 Backend API 启动中...
+2025-12-29 17:18:42,156 - werkzeug - WARNING -  * Debugger is active!
+2025-12-29 17:18:42,158 - werkzeug - INFO -  * Debugger PIN: 298-628-555
+2025-12-29 17:20:49,379 - __main__ - INFO - ✓ Redis 连接成功: localhost:6379
+2025-12-29 17:20:49,379 - __main__ - INFO - 🚀 Backend API 启动中...
+2025-12-29 17:20:49,393 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://10.20.152.244:5000
+2025-12-29 17:20:49,393 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-12-29 17:20:49,393 - werkzeug - INFO -  * Restarting with stat
+2025-12-29 17:20:49,565 - __main__ - INFO - ✓ Redis 连接成功: localhost:6379
+2025-12-29 17:20:49,566 - __main__ - INFO - 🚀 Backend API 启动中...
+2025-12-29 17:20:49,576 - werkzeug - WARNING -  * Debugger is active!
+2025-12-29 17:20:49,577 - werkzeug - INFO -  * Debugger PIN: 298-628-555
+2025-12-29 17:22:02,811 - werkzeug - INFO - 127.0.0.1 - - [29/Dec/2025 17:22:02] "GET /health HTTP/1.1" 200 -
+2025-12-29 17:22:04,818 - __main__ - INFO - ✓ 任务已推送到队列: job_id=24251fa8-f7f0-4bca-82be-eb862dedc258, prompt='a cyberpunk cat in neon city'
+2025-12-29 17:22:04,820 - werkzeug - INFO - 127.0.0.1 - - [29/Dec/2025 17:22:04] "[35m[1mPOST /api/generate HTTP/1.1[0m" 202 -
+2025-12-29 17:22:07,326 - werkzeug - INFO - 127.0.0.1 - - [29/Dec/2025 17:22:07] "GET /api/status/24251fa8-f7f0-4bca-82be-eb862dedc258 HTTP/1.1" 200 -
+2025-12-29 17:22:09,331 - __main__ - WARNING - prompt 参数为空
+2025-12-29 17:22:09,331 - werkzeug - INFO - 127.0.0.1 - - [29/Dec/2025 17:22:09] "[31m[1mPOST /api/generate HTTP/1.1[0m" 400 -
+2025-12-29 17:22:11,338 - __main__ - WARNING - 任务不存在: job_id=00000000-0000-0000-0000-000000000000
+2025-12-29 17:22:11,338 - werkzeug - INFO - 127.0.0.1 - - [29/Dec/2025 17:22:11] "[33mGET /api/status/00000000-0000-0000-0000-000000000000 HTTP/1.1[0m" 404 -
+2025-12-29 17:23:34,363 - werkzeug - INFO -  * Detected change in 'D:\\01_Project\\2512_ComfyUISum\\backend\\src\\app.py', reloading
+2025-12-29 17:23:34,390 - werkzeug - INFO -  * Restarting with stat
+2025-12-29 17:23:34,555 - __main__ - INFO - ✓ Redis 连接成功: localhost:6379
+2025-12-29 17:23:34,556 - __main__ - INFO - 🚀 Backend API 启动中...
+2025-12-29 17:23:34,565 - werkzeug - WARNING -  * Debugger is active!
+2025-12-29 17:23:34,566 - werkzeug - INFO -  * Debugger PIN: 298-628-555
