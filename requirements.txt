@@ -1,0 +1,15 @@
+# Web Framework (Day 2)
+Flask==3.0.0
+flask-cors==4.0.0
+
+# Database / Queue (Day 2 & 3)
+redis==5.0.1
+
+# HTTP Client (Day 3 - for calling ComfyUI)
+requests==2.31.0
+
+# WebSocket Client (Day 3 - for listening to ComfyUI progress)
+websocket-client==1.7.0
+
+# Environment Variables (Optional but recommended)
+python-dotenv==1.0.0

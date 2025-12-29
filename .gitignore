@@ -5,3 +5,4 @@ storage/
 ComfyUIworkflow/
 redis_data/
 __pycache__/
+openspec/
