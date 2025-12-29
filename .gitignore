@@ -1,0 +1,7 @@
+# 忽略檔案
+venv/
+storage/
+.env
+ComfyUIworkflow/
+redis_data/
+__pycache__/
