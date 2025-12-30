@@ -179,6 +179,34 @@ def health():
 
 
 # ============================================
+# Static File Serving (for generated images)
+# ============================================
+@app.route('/outputs/<path:filename>', methods=['GET'])
+def serve_output(filename):
+    """
+    GET /outputs/<filename>
+    Serve generated images from storage/outputs directory
+    """
+    import os
+    from flask import send_from_directory, abort
+    
+    # Get the absolute path to storage/outputs
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    outputs_dir = os.path.join(current_dir, '..', '..', 'storage', 'outputs')
+    outputs_dir = os.path.abspath(outputs_dir)
+    
+    logger.info(f"📁 Serving file: {filename} from {outputs_dir}")
+    
+    # Check if file exists
+    file_path = os.path.join(outputs_dir, filename)
+    if not os.path.exists(file_path):
+        logger.warning(f"文件不存在: {file_path}")
+        return abort(404)
+    
+    return send_from_directory(outputs_dir, filename)
+
+
+# ============================================
 # Application Entry Point
 # ============================================
 if __name__ == '__main__':
