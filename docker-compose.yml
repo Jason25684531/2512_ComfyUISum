@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  # 您的 Redis 服務
+  # Redis 服務
   redis:
     image: redis:7.2
     container_name: studio-redis
@@ -9,18 +9,51 @@ services:
       - "6379:6379"
     command: redis-server --requirepass mysecret --appendonly yes
     volumes:
-      # [關鍵] 將容器內的 /data 對應到您 Windows 本地的 ./redis_data 資料夾
-      # 這樣就算刪除容器，資料也還在！
       - ./redis_data:/data
     restart: always
     networks:
       - studio-net
 
-  # (預告) 明天 Day 2 我們會把 Flask 加在這裡
-  # web:
-  #   build: ./backend
-  #   ports: ["5000:5000"]
-  #   depends_on: [redis]
+  # Backend API 服務
+  backend:
+    build: ./backend
+    container_name: studio-backend
+    ports:
+      - "5000:5000"
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=mysecret
+      - FLASK_HOST=0.0.0.0
+      - FLASK_PORT=5000
+    depends_on:
+      - redis
+    restart: always
+    networks:
+      - studio-net
+    volumes:
+      - ./storage/outputs:/app/storage/outputs
+
+  # Worker 服務
+  worker:
+    build: ./worker
+    container_name: studio-worker
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=mysecret
+      - COMFY_HOST=host.docker.internal
+      - COMFY_PORT=8188
+    depends_on:
+      - redis
+    restart: always
+    networks:
+      - studio-net
+    volumes:
+      - ./storage:/worker/storage
+      # 掛載 ComfyUI 的 input/output 目錄（需根據實際路徑調整）
+      # - /path/to/ComfyUI/input:/comfyui/input
+      # - /path/to/ComfyUI/output:/comfyui/output
 
 networks:
   studio-net:

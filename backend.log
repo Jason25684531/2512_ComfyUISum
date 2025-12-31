@@ -1,94 +1,113 @@
-2025-12-29 17:14:46,162 - __main__ - ERROR - ✗ Redis 连接失败: Error 11001 connecting to redis:6379. getaddrinfo failed.
-2025-12-29 17:14:46,165 - __main__ - INFO - 🚀 Backend API 启动中...
-2025-12-29 17:14:46,189 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+2025-12-31 18:28:00,028 - __main__ - INFO - ✓ Redis 连接成功: localhost:6379
+2025-12-31 18:28:00,029 - __main__ - INFO - 🚀 Backend API 启动中...
+2025-12-31 18:28:00,044 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
  * Running on all addresses (0.0.0.0)
  * Running on http://127.0.0.1:5000
  * Running on http://10.20.152.244:5000
-2025-12-29 17:14:46,189 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
-2025-12-29 17:14:46,190 - werkzeug - INFO -  * Restarting with stat
-2025-12-29 17:14:49,025 - __main__ - ERROR - ✗ Redis 连接失败: Error 11001 connecting to redis:6379. getaddrinfo failed.
-2025-12-29 17:14:49,028 - __main__ - INFO - 🚀 Backend API 启动中...
-2025-12-29 17:14:49,037 - werkzeug - WARNING -  * Debugger is active!
-2025-12-29 17:14:49,038 - werkzeug - INFO -  * Debugger PIN: 298-628-555
-2025-12-29 17:15:13,091 - werkzeug - INFO - 10.20.152.244 - - [29/Dec/2025 17:15:13] "[33mGET / HTTP/1.1[0m" 404 -
-2025-12-29 17:15:13,231 - werkzeug - INFO - 10.20.152.244 - - [29/Dec/2025 17:15:13] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
-2025-12-29 17:15:30,079 - __main__ - ERROR - ✗ Redis 连接失败: Error 11001 connecting to redis:6379. getaddrinfo failed.
-2025-12-29 17:15:30,081 - __main__ - INFO - 🚀 Backend API 启动中...
-2025-12-29 17:15:30,098 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
- * Running on all addresses (0.0.0.0)
- * Running on http://127.0.0.1:5000
- * Running on http://10.20.152.244:5000
-2025-12-29 17:15:30,098 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
-2025-12-29 17:15:30,098 - werkzeug - INFO -  * Restarting with stat
-2025-12-29 17:15:32,922 - __main__ - ERROR - ✗ Redis 连接失败: Error 11001 connecting to redis:6379. getaddrinfo failed.
-2025-12-29 17:15:32,924 - __main__ - INFO - 🚀 Backend API 启动中...
-2025-12-29 17:15:32,933 - werkzeug - WARNING -  * Debugger is active!
-2025-12-29 17:15:32,935 - werkzeug - INFO -  * Debugger PIN: 298-628-555
-2025-12-29 17:16:41,363 - __main__ - ERROR - ✗ Redis 连接失败: Error 11001 connecting to redis:6379. getaddrinfo failed.
-2025-12-29 17:16:41,367 - __main__ - INFO - 🚀 Backend API 启动中...
-2025-12-29 17:16:41,388 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
- * Running on all addresses (0.0.0.0)
- * Running on http://127.0.0.1:5000
- * Running on http://10.20.152.244:5000
-2025-12-29 17:16:41,388 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
-2025-12-29 17:16:41,389 - werkzeug - INFO -  * Restarting with stat
-2025-12-29 17:16:44,225 - __main__ - ERROR - ✗ Redis 连接失败: Error 11001 connecting to redis:6379. getaddrinfo failed.
-2025-12-29 17:16:44,227 - __main__ - INFO - 🚀 Backend API 启动中...
-2025-12-29 17:16:44,239 - werkzeug - WARNING -  * Debugger is active!
-2025-12-29 17:16:44,240 - werkzeug - INFO -  * Debugger PIN: 298-628-555
-2025-12-29 17:18:17,789 - werkzeug - INFO -  * Detected change in 'D:\\01_Project\\2512_ComfyUISum\\backend\\src\\app.py', reloading
-2025-12-29 17:18:17,815 - werkzeug - INFO -  * Restarting with stat
-2025-12-29 17:18:17,980 - __main__ - ERROR - ✗ Redis 连接失败: Authentication required.
-2025-12-29 17:18:17,981 - __main__ - INFO - 🚀 Backend API 启动中...
-2025-12-29 17:18:17,990 - werkzeug - WARNING -  * Debugger is active!
-2025-12-29 17:18:17,991 - werkzeug - INFO -  * Debugger PIN: 298-628-555
-2025-12-29 17:18:39,097 - __main__ - ERROR - ✗ Redis 连接失败: Authentication required.
-2025-12-29 17:18:39,098 - __main__ - INFO - 🚀 Backend API 启动中...
-2025-12-29 17:18:39,113 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
- * Running on all addresses (0.0.0.0)
- * Running on http://127.0.0.1:5000
- * Running on http://10.20.152.244:5000
-2025-12-29 17:18:39,113 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
-2025-12-29 17:18:39,115 - werkzeug - INFO -  * Restarting with stat
-2025-12-29 17:18:39,287 - __main__ - ERROR - ✗ Redis 连接失败: Authentication required.
-2025-12-29 17:18:39,288 - __main__ - INFO - 🚀 Backend API 启动中...
-2025-12-29 17:18:39,298 - werkzeug - WARNING -  * Debugger is active!
-2025-12-29 17:18:39,299 - werkzeug - INFO -  * Debugger PIN: 298-628-555
-2025-12-29 17:18:41,962 - __main__ - ERROR - ✗ Redis 连接失败: Authentication required.
-2025-12-29 17:18:41,963 - __main__ - INFO - 🚀 Backend API 启动中...
-2025-12-29 17:18:41,976 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
- * Running on all addresses (0.0.0.0)
- * Running on http://127.0.0.1:5000
- * Running on http://10.20.152.244:5000
-2025-12-29 17:18:41,976 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
-2025-12-29 17:18:41,976 - werkzeug - INFO -  * Restarting with stat
-2025-12-29 17:18:42,147 - __main__ - ERROR - ✗ Redis 连接失败: Authentication required.
-2025-12-29 17:18:42,148 - __main__ - INFO - 🚀 Backend API 启动中...
-2025-12-29 17:18:42,156 - werkzeug - WARNING -  * Debugger is active!
-2025-12-29 17:18:42,158 - werkzeug - INFO -  * Debugger PIN: 298-628-555
-2025-12-29 17:20:49,379 - __main__ - INFO - ✓ Redis 连接成功: localhost:6379
-2025-12-29 17:20:49,379 - __main__ - INFO - 🚀 Backend API 启动中...
-2025-12-29 17:20:49,393 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
- * Running on all addresses (0.0.0.0)
- * Running on http://127.0.0.1:5000
- * Running on http://10.20.152.244:5000
-2025-12-29 17:20:49,393 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
-2025-12-29 17:20:49,393 - werkzeug - INFO -  * Restarting with stat
-2025-12-29 17:20:49,565 - __main__ - INFO - ✓ Redis 连接成功: localhost:6379
-2025-12-29 17:20:49,566 - __main__ - INFO - 🚀 Backend API 启动中...
-2025-12-29 17:20:49,576 - werkzeug - WARNING -  * Debugger is active!
-2025-12-29 17:20:49,577 - werkzeug - INFO -  * Debugger PIN: 298-628-555
-2025-12-29 17:22:02,811 - werkzeug - INFO - 127.0.0.1 - - [29/Dec/2025 17:22:02] "GET /health HTTP/1.1" 200 -
-2025-12-29 17:22:04,818 - __main__ - INFO - ✓ 任务已推送到队列: job_id=24251fa8-f7f0-4bca-82be-eb862dedc258, prompt='a cyberpunk cat in neon city'
-2025-12-29 17:22:04,820 - werkzeug - INFO - 127.0.0.1 - - [29/Dec/2025 17:22:04] "[35m[1mPOST /api/generate HTTP/1.1[0m" 202 -
-2025-12-29 17:22:07,326 - werkzeug - INFO - 127.0.0.1 - - [29/Dec/2025 17:22:07] "GET /api/status/24251fa8-f7f0-4bca-82be-eb862dedc258 HTTP/1.1" 200 -
-2025-12-29 17:22:09,331 - __main__ - WARNING - prompt 参数为空
-2025-12-29 17:22:09,331 - werkzeug - INFO - 127.0.0.1 - - [29/Dec/2025 17:22:09] "[31m[1mPOST /api/generate HTTP/1.1[0m" 400 -
-2025-12-29 17:22:11,338 - __main__ - WARNING - 任务不存在: job_id=00000000-0000-0000-0000-000000000000
-2025-12-29 17:22:11,338 - werkzeug - INFO - 127.0.0.1 - - [29/Dec/2025 17:22:11] "[33mGET /api/status/00000000-0000-0000-0000-000000000000 HTTP/1.1[0m" 404 -
-2025-12-29 17:23:34,363 - werkzeug - INFO -  * Detected change in 'D:\\01_Project\\2512_ComfyUISum\\backend\\src\\app.py', reloading
-2025-12-29 17:23:34,390 - werkzeug - INFO -  * Restarting with stat
-2025-12-29 17:23:34,555 - __main__ - INFO - ✓ Redis 连接成功: localhost:6379
-2025-12-29 17:23:34,556 - __main__ - INFO - 🚀 Backend API 启动中...
-2025-12-29 17:23:34,565 - werkzeug - WARNING -  * Debugger is active!
-2025-12-29 17:23:34,566 - werkzeug - INFO -  * Debugger PIN: 298-628-555
+2025-12-31 18:28:00,045 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-12-31 18:28:00,045 - werkzeug - INFO -  * Restarting with stat
+2025-12-31 18:28:00,209 - __main__ - INFO - ✓ Redis 连接成功: localhost:6379
+2025-12-31 18:28:00,210 - __main__ - INFO - 🚀 Backend API 启动中...
+2025-12-31 18:28:00,221 - werkzeug - WARNING -  * Debugger is active!
+2025-12-31 18:28:00,222 - werkzeug - INFO -  * Debugger PIN: 298-628-555
+2025-12-31 18:28:20,622 - __main__ - WARNING - Checkpoints 目錄不存在: D:\02_software\ComfyUI_windows_portable\ComfyUI\models\checkpoints
+2025-12-31 18:28:20,622 - __main__ - WARNING - UNET 目錄不存在: D:\02_software\ComfyUI_windows_portable\ComfyUI\models\unet
+2025-12-31 18:28:20,622 - __main__ - WARNING - 未找到任何模型，返回預設列表
+2025-12-31 18:28:20,622 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:28:20] "GET /api/models HTTP/1.1" 200 -
+2025-12-31 18:28:35,646 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:28:35] "OPTIONS /api/generate HTTP/1.1" 200 -
+2025-12-31 18:28:35,764 - __main__ - INFO - ✓ 任务已推送到队列: job_id=5f3725bd-607f-4a0b-aaa0-e718293bd50d, prompt='飲料旁邊放一盞檯燈'
+2025-12-31 18:28:35,774 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:28:35] "[35m[1mPOST /api/generate HTTP/1.1[0m" 202 -
+2025-12-31 18:28:37,779 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:28:37] "GET /api/status/5f3725bd-607f-4a0b-aaa0-e718293bd50d HTTP/1.1" 200 -
+2025-12-31 18:28:39,783 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:28:39] "GET /api/status/5f3725bd-607f-4a0b-aaa0-e718293bd50d HTTP/1.1" 200 -
+2025-12-31 18:31:41,932 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:31:41] "OPTIONS /api/generate HTTP/1.1" 200 -
+2025-12-31 18:31:42,095 - __main__ - INFO - ✓ 任务已推送到队列: job_id=f0ac349c-9abf-4114-9cd6-594d04e823e8, prompt='飲料旁邊放一盞檯燈'
+2025-12-31 18:31:42,099 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:31:42] "[35m[1mPOST /api/generate HTTP/1.1[0m" 202 -
+2025-12-31 18:31:44,106 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:31:44] "GET /api/status/f0ac349c-9abf-4114-9cd6-594d04e823e8 HTTP/1.1" 200 -
+2025-12-31 18:31:46,104 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:31:46] "GET /api/status/f0ac349c-9abf-4114-9cd6-594d04e823e8 HTTP/1.1" 200 -
+2025-12-31 18:31:48,105 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:31:48] "GET /api/status/f0ac349c-9abf-4114-9cd6-594d04e823e8 HTTP/1.1" 200 -
+2025-12-31 18:32:16,731 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:32:16] "OPTIONS /api/generate HTTP/1.1" 200 -
+2025-12-31 18:32:16,779 - __main__ - INFO - ✓ 任务已推送到队列: job_id=7766a145-ba62-4c54-8500-3e5d8a3d3ac9, prompt='飲料旁邊放一盞檯燈'
+2025-12-31 18:32:16,781 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:32:16] "[35m[1mPOST /api/generate HTTP/1.1[0m" 202 -
+2025-12-31 18:32:18,788 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:32:18] "GET /api/status/7766a145-ba62-4c54-8500-3e5d8a3d3ac9 HTTP/1.1" 200 -
+2025-12-31 18:32:20,788 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:32:20] "GET /api/status/7766a145-ba62-4c54-8500-3e5d8a3d3ac9 HTTP/1.1" 200 -
+2025-12-31 18:32:22,789 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:32:22] "GET /api/status/7766a145-ba62-4c54-8500-3e5d8a3d3ac9 HTTP/1.1" 200 -
+2025-12-31 18:32:24,790 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:32:24] "GET /api/status/7766a145-ba62-4c54-8500-3e5d8a3d3ac9 HTTP/1.1" 200 -
+2025-12-31 18:32:26,788 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:32:26] "GET /api/status/7766a145-ba62-4c54-8500-3e5d8a3d3ac9 HTTP/1.1" 200 -
+2025-12-31 18:32:28,786 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:32:28] "GET /api/status/7766a145-ba62-4c54-8500-3e5d8a3d3ac9 HTTP/1.1" 200 -
+2025-12-31 18:32:30,787 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:32:30] "GET /api/status/7766a145-ba62-4c54-8500-3e5d8a3d3ac9 HTTP/1.1" 200 -
+2025-12-31 18:32:32,918 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:32:32] "GET /api/status/7766a145-ba62-4c54-8500-3e5d8a3d3ac9 HTTP/1.1" 200 -
+2025-12-31 18:32:34,918 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:32:34] "GET /api/status/7766a145-ba62-4c54-8500-3e5d8a3d3ac9 HTTP/1.1" 200 -
+2025-12-31 18:32:36,918 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:32:36] "GET /api/status/7766a145-ba62-4c54-8500-3e5d8a3d3ac9 HTTP/1.1" 200 -
+2025-12-31 18:32:38,786 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:32:38] "GET /api/status/7766a145-ba62-4c54-8500-3e5d8a3d3ac9 HTTP/1.1" 200 -
+2025-12-31 18:32:40,787 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:32:40] "GET /api/status/7766a145-ba62-4c54-8500-3e5d8a3d3ac9 HTTP/1.1" 200 -
+2025-12-31 18:32:42,788 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:32:42] "GET /api/status/7766a145-ba62-4c54-8500-3e5d8a3d3ac9 HTTP/1.1" 200 -
+2025-12-31 18:32:44,918 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:32:44] "GET /api/status/7766a145-ba62-4c54-8500-3e5d8a3d3ac9 HTTP/1.1" 200 -
+2025-12-31 18:32:46,918 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:32:46] "GET /api/status/7766a145-ba62-4c54-8500-3e5d8a3d3ac9 HTTP/1.1" 200 -
+2025-12-31 18:32:48,918 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:32:48] "GET /api/status/7766a145-ba62-4c54-8500-3e5d8a3d3ac9 HTTP/1.1" 200 -
+2025-12-31 18:32:50,917 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:32:50] "GET /api/status/7766a145-ba62-4c54-8500-3e5d8a3d3ac9 HTTP/1.1" 200 -
+2025-12-31 18:32:52,923 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:32:52] "GET /api/status/7766a145-ba62-4c54-8500-3e5d8a3d3ac9 HTTP/1.1" 200 -
+2025-12-31 18:32:52,945 - __main__ - INFO - 📁 Serving file: 7766a145-ba62-4c54-8500-3e5d8a3d3ac9.png from D:\01_Project\2512_ComfyUISum\storage\outputs
+2025-12-31 18:32:52,969 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:32:52] "GET /outputs/7766a145-ba62-4c54-8500-3e5d8a3d3ac9.png HTTP/1.1" 200 -
+2025-12-31 18:34:06,342 - __main__ - WARNING - Checkpoints 目錄不存在: D:\02_software\ComfyUI_windows_portable\ComfyUI\models\checkpoints
+2025-12-31 18:34:06,343 - __main__ - WARNING - UNET 目錄不存在: D:\02_software\ComfyUI_windows_portable\ComfyUI\models\unet
+2025-12-31 18:34:06,343 - __main__ - WARNING - 未找到任何模型，返回預設列表
+2025-12-31 18:34:06,343 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:34:06] "GET /api/models HTTP/1.1" 200 -
+2025-12-31 18:34:07,618 - __main__ - WARNING - Checkpoints 目錄不存在: D:\02_software\ComfyUI_windows_portable\ComfyUI\models\checkpoints
+2025-12-31 18:34:07,618 - __main__ - WARNING - UNET 目錄不存在: D:\02_software\ComfyUI_windows_portable\ComfyUI\models\unet
+2025-12-31 18:34:07,618 - __main__ - WARNING - 未找到任何模型，返回預設列表
+2025-12-31 18:34:07,618 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:34:07] "GET /api/models HTTP/1.1" 200 -
+2025-12-31 18:34:47,263 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:34:47] "OPTIONS /api/generate HTTP/1.1" 200 -
+2025-12-31 18:34:47,306 - __main__ - INFO - ✓ 任务已推送到队列: job_id=24923866-04ea-4aa1-b4d8-f1669faebe0c, prompt='圖一的角色換成圖二的頭，保持圖一身體不變'
+2025-12-31 18:34:47,310 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:34:47] "[35m[1mPOST /api/generate HTTP/1.1[0m" 202 -
+2025-12-31 18:34:49,317 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:34:49] "GET /api/status/24923866-04ea-4aa1-b4d8-f1669faebe0c HTTP/1.1" 200 -
+2025-12-31 18:34:51,316 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:34:51] "GET /api/status/24923866-04ea-4aa1-b4d8-f1669faebe0c HTTP/1.1" 200 -
+2025-12-31 18:34:53,315 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:34:53] "GET /api/status/24923866-04ea-4aa1-b4d8-f1669faebe0c HTTP/1.1" 200 -
+2025-12-31 18:34:55,918 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:34:55] "GET /api/status/24923866-04ea-4aa1-b4d8-f1669faebe0c HTTP/1.1" 200 -
+2025-12-31 18:34:57,917 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:34:57] "GET /api/status/24923866-04ea-4aa1-b4d8-f1669faebe0c HTTP/1.1" 200 -
+2025-12-31 18:34:59,316 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:34:59] "GET /api/status/24923866-04ea-4aa1-b4d8-f1669faebe0c HTTP/1.1" 200 -
+2025-12-31 18:35:01,920 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:35:01] "GET /api/status/24923866-04ea-4aa1-b4d8-f1669faebe0c HTTP/1.1" 200 -
+2025-12-31 18:35:03,919 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:35:03] "GET /api/status/24923866-04ea-4aa1-b4d8-f1669faebe0c HTTP/1.1" 200 -
+2025-12-31 18:35:05,919 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:35:05] "GET /api/status/24923866-04ea-4aa1-b4d8-f1669faebe0c HTTP/1.1" 200 -
+2025-12-31 18:35:07,919 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:35:07] "GET /api/status/24923866-04ea-4aa1-b4d8-f1669faebe0c HTTP/1.1" 200 -
+2025-12-31 18:35:09,921 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:35:09] "GET /api/status/24923866-04ea-4aa1-b4d8-f1669faebe0c HTTP/1.1" 200 -
+2025-12-31 18:35:11,927 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:35:11] "GET /api/status/24923866-04ea-4aa1-b4d8-f1669faebe0c HTTP/1.1" 200 -
+2025-12-31 18:35:13,919 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:35:13] "GET /api/status/24923866-04ea-4aa1-b4d8-f1669faebe0c HTTP/1.1" 200 -
+2025-12-31 18:35:15,920 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:35:15] "GET /api/status/24923866-04ea-4aa1-b4d8-f1669faebe0c HTTP/1.1" 200 -
+2025-12-31 18:35:17,918 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:35:17] "GET /api/status/24923866-04ea-4aa1-b4d8-f1669faebe0c HTTP/1.1" 200 -
+2025-12-31 18:35:19,926 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:35:19] "GET /api/status/24923866-04ea-4aa1-b4d8-f1669faebe0c HTTP/1.1" 200 -
+2025-12-31 18:35:19,955 - __main__ - INFO - 📁 Serving file: 24923866-04ea-4aa1-b4d8-f1669faebe0c.png from D:\01_Project\2512_ComfyUISum\storage\outputs
+2025-12-31 18:35:19,956 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:35:19] "GET /outputs/24923866-04ea-4aa1-b4d8-f1669faebe0c.png HTTP/1.1" 200 -
+2025-12-31 18:36:12,968 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:36:12] "OPTIONS /api/generate HTTP/1.1" 200 -
+2025-12-31 18:36:13,338 - __main__ - INFO - ✓ 任务已推送到队列: job_id=8d87a5b6-f5b3-4e87-9c5f-938055605d43, prompt='圖1的女生拖著圖2的行李箱，站在圖3的地鐵站入口，逼真的光影'
+2025-12-31 18:36:13,404 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:36:13] "[35m[1mPOST /api/generate HTTP/1.1[0m" 202 -
+2025-12-31 18:36:15,415 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:36:15] "GET /api/status/8d87a5b6-f5b3-4e87-9c5f-938055605d43 HTTP/1.1" 200 -
+2025-12-31 18:36:37,476 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:36:37] "OPTIONS /api/generate HTTP/1.1" 200 -
+2025-12-31 18:36:37,854 - __main__ - INFO - ✓ 任务已推送到队列: job_id=19d04b17-1a9b-45df-9954-f7ab6e0a6ecd, prompt='圖1的女生拖著圖2的行李箱，站在圖3的地鐵站入口，逼真的光影'
+2025-12-31 18:36:37,869 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:36:37] "[35m[1mPOST /api/generate HTTP/1.1[0m" 202 -
+2025-12-31 18:36:39,877 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:36:39] "GET /api/status/19d04b17-1a9b-45df-9954-f7ab6e0a6ecd HTTP/1.1" 200 -
+2025-12-31 18:37:10,728 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:37:10] "OPTIONS /api/generate HTTP/1.1" 200 -
+2025-12-31 18:37:10,791 - __main__ - INFO - ✓ 任务已推送到队列: job_id=3f680948-d538-4024-80d0-712eee2a6bfa, prompt='A photorealistic 3D rendered product shot'
+2025-12-31 18:37:10,794 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:37:10] "[35m[1mPOST /api/generate HTTP/1.1[0m" 202 -
+2025-12-31 18:37:12,800 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:37:12] "GET /api/status/3f680948-d538-4024-80d0-712eee2a6bfa HTTP/1.1" 200 -
+2025-12-31 18:37:14,800 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:37:14] "GET /api/status/3f680948-d538-4024-80d0-712eee2a6bfa HTTP/1.1" 200 -
+2025-12-31 18:37:16,799 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:37:16] "GET /api/status/3f680948-d538-4024-80d0-712eee2a6bfa HTTP/1.1" 200 -
+2025-12-31 18:37:18,799 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:37:18] "GET /api/status/3f680948-d538-4024-80d0-712eee2a6bfa HTTP/1.1" 200 -
+2025-12-31 18:37:20,800 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:37:20] "GET /api/status/3f680948-d538-4024-80d0-712eee2a6bfa HTTP/1.1" 200 -
+2025-12-31 18:37:20,806 - __main__ - INFO - 📁 Serving file: 3f680948-d538-4024-80d0-712eee2a6bfa.png from D:\01_Project\2512_ComfyUISum\storage\outputs
+2025-12-31 18:37:20,807 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:37:20] "GET /outputs/3f680948-d538-4024-80d0-712eee2a6bfa.png HTTP/1.1" 200 -
+2025-12-31 18:37:27,465 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:37:27] "OPTIONS /api/generate HTTP/1.1" 200 -
+2025-12-31 18:37:27,471 - __main__ - INFO - ✓ 任务已推送到队列: job_id=1273649e-c05c-4d0a-bd44-3a6cc665ea2b, prompt='A photorealistic 3D rendered product shot'
+2025-12-31 18:37:27,473 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:37:27] "[35m[1mPOST /api/generate HTTP/1.1[0m" 202 -
+2025-12-31 18:37:29,477 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:37:29] "GET /api/status/1273649e-c05c-4d0a-bd44-3a6cc665ea2b HTTP/1.1" 200 -
+2025-12-31 18:37:31,478 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:37:31] "GET /api/status/1273649e-c05c-4d0a-bd44-3a6cc665ea2b HTTP/1.1" 200 -
+2025-12-31 18:37:33,479 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:37:33] "GET /api/status/1273649e-c05c-4d0a-bd44-3a6cc665ea2b HTTP/1.1" 200 -
+2025-12-31 18:37:35,478 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:37:35] "GET /api/status/1273649e-c05c-4d0a-bd44-3a6cc665ea2b HTTP/1.1" 200 -
+2025-12-31 18:37:37,482 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:37:37] "GET /api/status/1273649e-c05c-4d0a-bd44-3a6cc665ea2b HTTP/1.1" 200 -
+2025-12-31 18:37:37,489 - __main__ - INFO - 📁 Serving file: 1273649e-c05c-4d0a-bd44-3a6cc665ea2b.png from D:\01_Project\2512_ComfyUISum\storage\outputs
+2025-12-31 18:37:37,490 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:37:37] "GET /outputs/1273649e-c05c-4d0a-bd44-3a6cc665ea2b.png HTTP/1.1" 200 -
+2025-12-31 18:38:00,520 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:38:00] "OPTIONS /api/generate HTTP/1.1" 200 -
+2025-12-31 18:38:00,840 - __main__ - INFO - ✓ 任务已推送到队列: job_id=aaacb315-98c9-427a-82b2-512c90c1c52a, prompt='圖1的女生拖著圖2的行李箱，站在圖3的地鐵站入口，逼真的光影'
+2025-12-31 18:38:00,843 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:38:00] "[35m[1mPOST /api/generate HTTP/1.1[0m" 202 -
+2025-12-31 18:38:02,854 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:38:02] "GET /api/status/aaacb315-98c9-427a-82b2-512c90c1c52a HTTP/1.1" 200 -
+2025-12-31 18:38:04,852 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:38:04] "GET /api/status/aaacb315-98c9-427a-82b2-512c90c1c52a HTTP/1.1" 200 -
+2025-12-31 18:38:06,851 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:38:06] "GET /api/status/aaacb315-98c9-427a-82b2-512c90c1c52a HTTP/1.1" 200 -

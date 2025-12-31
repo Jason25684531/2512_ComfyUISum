@@ -15,7 +15,30 @@ from redis import Redis, RedisError
 # Configuration & Logging Setup
 # ============================================
 app = Flask(__name__)
-CORS(app)  # 允许前端跨域访问
+
+# 設定 CORS - 允許所有來源的跨域請求
+CORS(app, 
+     origins=["*"],
+     allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+     supports_credentials=False)
+
+# 手動處理 OPTIONS 預檢請求
+@app.before_request
+def handle_preflight():
+    if request.method == "OPTIONS":
+        response = app.make_default_options_response()
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
+        return response
+
+@app.after_request
+def after_request(response):
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
+    return response
 
 # 配置日志记录器
 logging.basicConfig(
@@ -28,12 +51,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Redis 连接配置
-# 本地开发默认 localhost，Docker Compose 环境设置环境变量 REDIS_HOST=redis
-REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
-REDIS_PORT = int(os.getenv('REDIS_PORT', 6379))
-REDIS_PASSWORD = os.getenv('REDIS_PASSWORD', 'mysecret')
-REDIS_QUEUE_NAME = 'job_queue'
+# 從 config 載入配置
+from config import (
+    REDIS_HOST, REDIS_PORT, REDIS_PASSWORD, JOB_QUEUE,
+    STORAGE_OUTPUT_DIR
+)
+REDIS_QUEUE_NAME = JOB_QUEUE
 
 try:
     redis_client = Redis(
@@ -52,7 +75,7 @@ except RedisError as e:
 # API Endpoints
 # ============================================
 
-@app.route('/api/generate', methods=['POST'])
+@app.route('/api/generate', methods=['POST', 'OPTIONS'])
 def generate():
     """
     POST /api/generate
@@ -79,19 +102,26 @@ def generate():
             return jsonify({'error': 'Missing JSON data'}), 400
         
         prompt = data.get('prompt', '').strip()
-        if not prompt:
-            logger.warning("prompt 参数为空")
-            return jsonify({'error': 'prompt is required and cannot be empty'}), 400
+        workflow = data.get('workflow', 'text_to_image')
+        
+        # 只有 text_to_image 需要 prompt
+        if workflow == 'text_to_image' and not prompt:
+            logger.warning("text_to_image 的 prompt 参数为空")
+            return jsonify({'error': 'prompt is required for text_to_image'}), 400
         
         # 2. 生成唯一的 job_id
         job_id = str(uuid.uuid4())
         
-        # 3. 构造任务数据
+        # 3. 构造任务数据 (包含所有前端傳來的參數)
         job_data = {
             'job_id': job_id,
             'prompt': prompt,
             'seed': data.get('seed', -1),  # -1 表示随机
-            'workflow': data.get('workflow', 'sdxl'),
+            'workflow': data.get('workflow', 'text_to_image'),
+            'model': data.get('model', 'turbo_fp8'),
+            'aspect_ratio': data.get('aspect_ratio', '1:1'),
+            'batch_size': data.get('batch_size', 1),
+            'images': data.get('images', {}),  # Base64 圖片字典
             'created_at': datetime.now().isoformat()
         }
         
@@ -168,6 +198,56 @@ def status(job_id):
         return jsonify({'error': 'Internal server error'}), 500
 
 
+@app.route('/api/cancel/<job_id>', methods=['POST'])
+def cancel_job(job_id):
+    """
+    POST /api/cancel/<job_id>
+    取消正在執行的任務
+    
+    Response:
+    {
+        "success": true,
+        "message": "Task cancelled"
+    }
+    """
+    try:
+        if redis_client is None:
+            logger.error("Redis 客户端未初始化")
+            return jsonify({'error': 'Redis service unavailable'}), 503
+        
+        # 檢查任務是否存在
+        status_key = f"job:status:{job_id}"
+        job_status = redis_client.hgetall(status_key)
+        
+        if not job_status:
+            logger.warning(f"任務不存在: job_id={job_id}")
+            return jsonify({'error': 'Job not found'}), 404
+        
+        current_status = job_status.get('status', 'unknown')
+        
+        # 如果任務已經完成或失敗，無法取消
+        if current_status in ['finished', 'failed', 'cancelled']:
+            return jsonify({
+                'success': False,
+                'message': f'Cannot cancel job with status: {current_status}'
+            }), 400
+        
+        # 將狀態設置為 cancelled
+        redis_client.hset(status_key, 'status', 'cancelled')
+        redis_client.hset(status_key, 'error', 'Task cancelled by user')
+        
+        logger.info(f"✓ 任務已標記為取消: job_id={job_id}")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Task cancelled'
+        }), 200
+    
+    except Exception as e:
+        logger.error(f"✗ cancel 接口异常: {e}", exc_info=True)
+        return jsonify({'error': 'Internal server error'}), 500
+
+
 @app.route('/health', methods=['GET'])
 def health():
     """健康检查接口"""
@@ -175,6 +255,62 @@ def health():
     return jsonify({
         'status': 'ok',
         'redis': redis_status
+    }), 200
+
+
+@app.route('/api/models', methods=['GET'])
+def get_models():
+    """
+    GET /api/models
+    掃描 ComfyUI 模型目錄，回傳可用模型列表
+    
+    Response:
+    {
+        "models": ["model1.safetensors", "model2.ckpt"],
+        "unet_models": ["unet1.safetensors"]
+    }
+    """
+    from config import COMFYUI_CHECKPOINTS_DIR, COMFYUI_UNET_DIR
+    
+    models = []
+    unet_models = []
+    
+    # 掃描 Checkpoints 目錄
+    try:
+        if COMFYUI_CHECKPOINTS_DIR.exists():
+            for file_path in COMFYUI_CHECKPOINTS_DIR.rglob("*"):
+                if file_path.is_file() and file_path.suffix.lower() in ['.safetensors', '.ckpt']:
+                    # 使用相對路徑（相對於 checkpoints 目錄）
+                    rel_path = file_path.relative_to(COMFYUI_CHECKPOINTS_DIR)
+                    models.append(str(rel_path))
+            logger.info(f"✓ 找到 {len(models)} 個 Checkpoint 模型")
+        else:
+            logger.warning(f"Checkpoints 目錄不存在: {COMFYUI_CHECKPOINTS_DIR}")
+    except Exception as e:
+        logger.error(f"掃描 Checkpoints 失敗: {e}")
+    
+    # 掃描 UNET 目錄
+    try:
+        if COMFYUI_UNET_DIR.exists():
+            for file_path in COMFYUI_UNET_DIR.rglob("*"):
+                if file_path.is_file() and file_path.suffix.lower() in ['.safetensors', '.ckpt', '.pt']:
+                    rel_path = file_path.relative_to(COMFYUI_UNET_DIR)
+                    unet_models.append(str(rel_path))
+            logger.info(f"✓ 找到 {len(unet_models)} 個 UNET 模型")
+        else:
+            logger.warning(f"UNET 目錄不存在: {COMFYUI_UNET_DIR}")
+    except Exception as e:
+        logger.error(f"掃描 UNET 失敗: {e}")
+    
+    # 如果沒有找到任何模型，返回預設列表
+    if not models and not unet_models:
+        logger.warning("未找到任何模型，返回預設列表")
+        models = ["default_model.safetensors"]
+        unet_models = ["z-image/z-image-turbo-fp8-e4m3fn.safetensors"]
+    
+    return jsonify({
+        'models': sorted(models),
+        'unet_models': sorted(unet_models)
     }), 200
 
 
