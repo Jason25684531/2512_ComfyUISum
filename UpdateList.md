@@ -2,6 +2,129 @@
 
 ---
 
+## 📅 2026-01-02: 程式碼清理與架構整理
+
+### 🧹 代碼清理
+
+| 項目 | 類型 | 說明 |
+|------|------|------|
+| `frontend/app.js` | ❌ 已刪除 | 功能已整合到 index.html 內的 `<script>` 區塊 |
+| `frontend/test_navigation.html` | ❌ 已刪除 | 開發期間的導航測試頁面，已不再需要 |
+| `frontend/diagnostic.html` | ❌ 已刪除 | 開發期間的診斷面板，已不再需要 |
+| `backend/src/__pycache__/` | ❌ 已刪除 | Python 編譯快取 |
+| `worker/src/__pycache__/` | ❌ 已刪除 | Python 編譯快取 |
+| `backend.log` | ❌ 已刪除 | 根目錄日誌檔案 |
+
+### 📁 目前專案結構
+
+```
+ComfyUISum/
+├── backend/                     # Flask API 服務 (Port 5000)
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   ├── Readmd/                  # API 文檔
+│   └── src/
+│       ├── app.py              # API 端點 (generate, status, cancel, models, history)
+│       ├── config.py           # Backend 配置
+│       └── database.py         # MySQL 資料庫操作 (連接池, Jobs 表)
+│
+├── worker/                      # 任務處理服務
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   └── src/
+│       ├── main.py             # Worker 主迴圈 (Redis 監聽, 任務處理)
+│       ├── comfy_client.py     # ComfyUI API 客戶端 (WebSocket 進度)
+│       ├── json_parser.py      # Workflow JSON 解析器 (參數注入)
+│       ├── config.py           # Worker 配置
+│       └── check_comfy_connection.py  # 診斷工具
+│
+├── frontend/                    # Web UI (Single Page Application)
+│   ├── index.html              # 主頁面 (含所有 JS 邏輯)
+│   └── style.css               # 樣式表
+│
+├── ComfyUIworkflow/             # ComfyUI Workflow 模板
+│   ├── text_to_image_*.json
+│   ├── face_swap_*.json
+│   ├── multi_image_blend_*.json
+│   ├── single_image_edit_*.json
+│   └── sketch_to_image_*.json
+│
+├── storage/                     # 本地儲存
+│   ├── inputs/                 # 暫存上傳圖片 (24h)
+│   ├── outputs/                # 生成結果 (30天)
+│   └── models/
+│
+├── openspec/                    # 專案規格文檔
+│   ├── project.md              # 專案說明
+│   ├── AGENTS.md
+│   ├── specs/                  # 模組規格
+│   └── changes/                # 變更記錄
+│
+├── docker-compose.yml           # Docker 編排 (Redis + MySQL + Backend + Worker)
+├── docker-compose.dev.yml       # 開發環境配置
+├── .env                         # 環境變數
+├── .gitignore                   # Git 忽略規則
+├── requirements.txt             # Python 依賴 (根目錄)
+├── README.md                    # 專案說明
+├── STARTUP_GUIDE.md             # 啟動指南
+└── start_all.bat               # 一鍵啟動腳本
+```
+
+### 🔌 API 端點清單
+
+| 方法 | 端點 | 功能 | 說明 |
+|------|------|------|------|
+| POST | `/api/generate` | 提交生成任務 | 支援 5 種工作流 |
+| GET | `/api/status/{job_id}` | 查詢任務狀態 | 含進度百分比 |
+| POST | `/api/cancel/{job_id}` | 取消任務 | 發送中斷指令到 ComfyUI |
+| GET | `/api/models` | 獲取模型列表 | 掃描 checkpoints + unet |
+| GET | `/api/history` | 獲取歷史記錄 | 支援分頁 (limit/offset) |
+| GET | `/health` | 健康檢查 | 回傳 Redis + MySQL 狀態 |
+| GET | `/outputs/{filename}` | 獲取生成圖片 | 靜態檔案服務 |
+
+### 🔄 資料流程
+
+```
+[Frontend] → POST /api/generate → [Backend] → Redis Queue
+                                       ↓
+                              [Worker] ← BLPOP Redis
+                                       ↓
+                              Parse Workflow → [ComfyUI]
+                                       ↓
+                              WebSocket 監聽進度
+                                       ↓
+                              複製輸出圖片 → storage/outputs/
+                                       ↓
+                              更新 Redis 狀態 + MySQL 記錄
+                                       ↓
+[Frontend] ← GET /api/status ← [Backend] ← Redis
+```
+
+### 📋 下一步展望 (Phase 4 規劃)
+
+#### 優先級 1: 穩定性與日誌
+- [ ] Worker 錯誤日誌寫入檔案 (`logs/worker.log`)
+- [ ] Backend 錯誤日誌寫入檔案 (`logs/backend.log`)
+- [ ] API 請求日誌 (request/response)
+
+#### 優先級 2: 功能增強
+- [ ] Prompt 模板系統 - 預設風格選擇
+- [ ] 圖片收藏功能 - 標記喜歡的圖片
+- [ ] 進階參數 - CFG Scale, Steps, Sampler 選項
+
+#### 優先級 3: 性能優化
+- [ ] 圖片壓縮 - 上傳前自動壓縮大圖
+- [ ] 結果快取 - 相同參數直接返回快取結果
+- [ ] 併發控制 - 限制同時處理的任務數量
+
+#### 優先級 4: 部署完善
+- [ ] HTTPS 支援 - 使用 Nginx 反向代理
+- [ ] 用戶認證 - 簡易 API Key 認證
+- [ ] 監控面板 - 任務統計和系統狀態
+- [ ] Ngrok 整合 - 內網穿透測試
+
+---
+
 ## 📅 2026-01-02: Phase 3 - Data & Intelligence 完成
 
 ### 🎯 今日完成事項 (Phase 3 全部完成)

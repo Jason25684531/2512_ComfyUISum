@@ -917,6 +917,9 @@
                 }
             });
 
+            // 保存當前視圖到 localStorage（防止刷新後跳轉）
+            localStorage.setItem('currentView', 'canvas');
+
             lucide.createIcons();
         }
 
@@ -935,6 +938,9 @@
             document.getElementById('tool-selector-overlay').classList.add('hidden');
             document.getElementById('studio-workspace').classList.remove('hidden');
             document.getElementById('studio-workspace').classList.add('flex');
+            
+            // 保存當前視圖到 localStorage（防止刷新後跳轉）
+            localStorage.setItem('currentView', 'canvas');
         }
 
         // ESC 鍵關閉選單 (只在 overlay 可見時)
@@ -988,6 +994,9 @@
 
             // 重新渲染工作區
             renderWorkspace(toolId);
+            
+            // 保存當前視圖到 localStorage（防止刷新後跳轉）
+            localStorage.setItem('currentView', 'canvas');
             
             lucide.createIcons();
         }
