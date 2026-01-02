@@ -111,3 +111,7 @@
 2025-12-31 18:38:02,854 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:38:02] "GET /api/status/aaacb315-98c9-427a-82b2-512c90c1c52a HTTP/1.1" 200 -
 2025-12-31 18:38:04,852 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:38:04] "GET /api/status/aaacb315-98c9-427a-82b2-512c90c1c52a HTTP/1.1" 200 -
 2025-12-31 18:38:06,851 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:38:06] "GET /api/status/aaacb315-98c9-427a-82b2-512c90c1c52a HTTP/1.1" 200 -
+2025-12-31 18:38:24,267 - __main__ - WARNING - Checkpoints 目錄不存在: D:\02_software\ComfyUI_windows_portable\ComfyUI\models\checkpoints
+2025-12-31 18:38:24,267 - __main__ - WARNING - UNET 目錄不存在: D:\02_software\ComfyUI_windows_portable\ComfyUI\models\unet
+2025-12-31 18:38:24,267 - __main__ - WARNING - 未找到任何模型，返回預設列表
+2025-12-31 18:38:24,268 - werkzeug - INFO - 127.0.0.1 - - [31/Dec/2025 18:38:24] "GET /api/models HTTP/1.1" 200 -
