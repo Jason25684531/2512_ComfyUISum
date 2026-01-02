@@ -237,8 +237,8 @@
                 Dashboard
             </button>
             
-            <button class="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium text-gray-400 group nav-item">
-                <i data-lucide="image" class="w-5 h-5"></i>
+            <button onclick="navigateTo('gallery')" class="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium text-gray-400 group nav-item" data-id="gallery">
+                <i data-lucide="image" class="w-5 h-5 group-hover:text-white"></i>
                 Personal Gallery
             </button>
         </nav>
@@ -591,6 +591,55 @@
         </div><!-- End view-canvas -->
 
         <!-- ============================================ -->
+        <!-- VIEW: Personal Gallery                      -->
+        <!-- ============================================ -->
+        <div id="view-gallery" class="view-section hidden h-full overflow-y-auto p-6 md:p-8">
+            <div class="max-w-7xl mx-auto w-full">
+                <!-- Header -->
+                <div class="mb-8 flex items-center justify-between">
+                    <div>
+                        <h1 class="text-3xl font-bold mb-2 text-white">Personal Gallery</h1>
+                        <p class="text-gray-400">回顧您的創作歷史，重新混音您的作品</p>
+                    </div>
+                    <button onclick="loadHistory()" class="glass-card px-4 py-2 rounded-lg text-sm font-medium hover:bg-white/10 flex items-center gap-2">
+                        <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                        重新整理
+                    </button>
+                </div>
+
+                <!-- Filters (未來擴展) -->
+                <div class="glass-card rounded-xl p-4 mb-6 flex items-center gap-4">
+                    <span class="text-sm text-gray-400">篩選:</span>
+                    <button class="px-3 py-1 rounded-lg bg-purple-500/20 border border-purple-500/50 text-purple-300 text-sm">
+                        全部
+                    </button>
+                    <button class="px-3 py-1 rounded-lg hover:bg-white/5 border border-transparent text-gray-400 text-sm">
+                        已完成
+                    </button>
+                    <button class="px-3 py-1 rounded-lg hover:bg-white/5 border border-transparent text-gray-400 text-sm">
+                        生成中
+                    </button>
+                </div>
+
+                <!-- Gallery Grid -->
+                <div id="gallery-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    <!-- Loading State -->
+                    <div class="col-span-full text-center py-12 text-gray-500">
+                        <i data-lucide="loader" class="w-8 h-8 mx-auto mb-4 animate-spin"></i>
+                        <p>載入歷史記錄中...</p>
+                    </div>
+                </div>
+
+                <!-- Pagination (未來擴展) -->
+                <div id="gallery-pagination" class="hidden mt-8 flex justify-center gap-2">
+                    <button class="glass-card px-4 py-2 rounded-lg text-sm hover:bg-white/10">上一頁</button>
+                    <span class="px-4 py-2 text-sm text-gray-400">第 1 頁</span>
+                    <button class="glass-card px-4 py-2 rounded-lg text-sm hover:bg-white/10">下一頁</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================ -->
         <!-- VIEW: Motion Workspace                      -->
         <!-- ============================================ -->
         <div id="view-motion" class="view-section hidden h-full">
@@ -829,6 +878,14 @@
                     el.classList.remove('active-nav');
                 }
             });
+
+            // 如果切換到 Gallery，自動載入歷史記錄
+            if (viewId === 'gallery') {
+                loadHistory();
+            }
+
+            // 保存當前視圖到 localStorage
+            localStorage.setItem('currentView', viewId);
 
             lucide.createIcons();
         }
@@ -1213,6 +1270,7 @@
             if (event) {
                 event.preventDefault();
                 event.stopPropagation();
+                event.stopImmediatePropagation();
             }
             
             console.log('[Generate] 開始處理...');
@@ -1220,13 +1278,13 @@
             // 檢查是否已選擇工具
             if (!currentTool) {
                 showStatus('⚠️ 請先選擇一個工具', 'warning');
-                return false;
+                return Promise.reject('No tool selected');
             }
             
             const btn = document.getElementById('btn-generate');
             if (!btn) {
                 console.error('[Generate] 找不到 Generate 按鈕');
-                return false;
+                return Promise.reject('Button not found');
             }
             
             const statusDiv = document.getElementById('status-message');
@@ -1241,7 +1299,7 @@
             // 驗證輸入
             if (!prompt && currentTool === 'text_to_image') {
                 showStatus('⚠️ Please enter a prompt', 'warning');
-                return false;
+                return Promise.reject('No prompt');
             }
 
             // 驗證圖片上傳
@@ -1250,7 +1308,7 @@
                 for (const upload of config.uploads) {
                     if (!uploadedImages[upload.id]) {
                         showStatus(`⚠️ Please upload ${upload.label}`, 'warning');
-                        return false;
+                        return Promise.reject('Missing image upload');
                     }
                 }
             }
@@ -1302,10 +1360,10 @@
                 console.error('Generate error:', error);
                 showStatus(`❌ Error: ${error.message}`, 'error');
                 restoreButton(btn, originalHTML);
-                return false;
+                return Promise.reject(error);
             }
             
-            return false;
+            return Promise.resolve();
         }
 
         // ==========================================
@@ -1459,6 +1517,186 @@
         }
 
         // ==========================================
+        // Personal Gallery 功能
+        // ==========================================
+        
+        /**
+         * 載入歷史記錄並渲染 Gallery
+         */
+        async function loadHistory() {
+            const galleryGrid = document.getElementById('gallery-grid');
+            
+            // 顯示 Loading 狀態
+            galleryGrid.innerHTML = `
+                <div class="col-span-full text-center py-12 text-gray-500">
+                    <i data-lucide="loader" class="w-8 h-8 mx-auto mb-4 animate-spin"></i>
+                    <p>載入歷史記錄中...</p>
+                </div>
+            `;
+            lucide.createIcons();
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/history?limit=50&offset=0`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const data = await response.json();
+                const jobs = data.jobs || [];
+                
+                console.log('[Gallery] 載入歷史記錄:', jobs.length, '筆');
+                
+                if (jobs.length === 0) {
+                    galleryGrid.innerHTML = `
+                        <div class="col-span-full text-center py-20 text-gray-500">
+                            <i data-lucide="image-off" class="w-12 h-12 mx-auto mb-4 opacity-50"></i>
+                            <p class="text-lg">目前沒有任何創作記錄</p>
+                            <p class="text-sm mt-2">開始您的第一個創作吧！</p>
+                        </div>
+                    `;
+                } else {
+                    renderGalleryItems(jobs);
+                }
+                
+                lucide.createIcons();
+            } catch (error) {
+                console.error('[Gallery] 載入失敗:', error);
+                galleryGrid.innerHTML = `
+                    <div class="col-span-full text-center py-12 text-red-400">
+                        <i data-lucide="alert-circle" class="w-8 h-8 mx-auto mb-4"></i>
+                        <p>載入失敗: ${error.message}</p>
+                        <button onclick="loadHistory()" class="mt-4 px-4 py-2 glass-card rounded-lg hover:bg-white/10">
+                            重試
+                        </button>
+                    </div>
+                `;
+                lucide.createIcons();
+            }
+        }
+        
+        /**
+         * 渲染 Gallery 項目
+         */
+        function renderGalleryItems(jobs) {
+            const galleryGrid = document.getElementById('gallery-grid');
+            
+            const htmlItems = jobs.map(job => {
+                const outputPaths = job.output_path ? job.output_path.split(',') : [];
+                const firstImage = outputPaths[0] || '';
+                const imageCount = outputPaths.length;
+                
+                const date = job.created_at ? new Date(job.created_at).toLocaleString('zh-TW', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                }) : '未知時間';
+                
+                const statusColors = {
+                    'finished': 'bg-green-500/20 text-green-300 border-green-500/50',
+                    'failed': 'bg-red-500/20 text-red-300 border-red-500/50',
+                    'processing': 'bg-yellow-500/20 text-yellow-300 border-yellow-500/50',
+                    'queued': 'bg-blue-500/20 text-blue-300 border-blue-500/50',
+                    'cancelled': 'bg-gray-500/20 text-gray-300 border-gray-500/50'
+                };
+                const statusClass = statusColors[job.status] || 'bg-gray-500/20 text-gray-300';
+                
+                return `
+                    <div class="glass-card rounded-xl overflow-hidden group hover:scale-105 transition-transform cursor-pointer">
+                        <div class="relative aspect-video bg-black/40 overflow-hidden">
+                            ${firstImage ? `
+                                <img src="${firstImage}" alt="Generated" 
+                                     class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" />
+                            ` : `
+                                <div class="w-full h-full flex items-center justify-center text-gray-600">
+                                    <i data-lucide="image-off" class="w-8 h-8"></i>
+                                </div>
+                            `}
+                            ${imageCount > 1 ? `
+                                <div class="absolute top-2 right-2 bg-black/70 backdrop-blur-sm px-2 py-1 rounded-lg text-xs font-medium">
+                                    <i data-lucide="images" class="w-3 h-3 inline mr-1"></i>
+                                    ${imageCount}
+                                </div>
+                            ` : ''}
+                            <div class="absolute top-2 left-2 ${statusClass} px-2 py-1 rounded-lg text-xs font-medium border">
+                                ${job.status}
+                            </div>
+                        </div>
+                        <div class="p-4">
+                            <p class="text-sm text-white font-medium mb-2 line-clamp-2 min-h-[2.5rem]">
+                                ${job.prompt || '(無提示詞)'}
+                            </p>
+                            <div class="flex items-center gap-2 text-xs text-gray-500 mb-3">
+                                <span class="px-2 py-0.5 bg-white/5 rounded">${job.workflow}</span>
+                                <span class="px-2 py-0.5 bg-white/5 rounded">${job.aspect_ratio || '1:1'}</span>
+                            </div>
+                            <div class="text-xs text-gray-600 mb-3">${date}</div>
+                            <div class="flex gap-2">
+                                <button onclick='remixJob(${JSON.stringify(job).replace(/'/g, "&#39;")})' 
+                                        class="flex-1 glass-card px-3 py-2 rounded-lg text-sm hover:bg-purple-500/20 hover:border-purple-500/50 border border-white/10 flex items-center justify-center gap-2">
+                                    <i data-lucide="repeat" class="w-4 h-4"></i>
+                                    Remix
+                                </button>
+                                ${firstImage ? `
+                                    <a href="${firstImage}" download 
+                                       class="glass-card px-3 py-2 rounded-lg text-sm hover:bg-white/10 border border-white/10 flex items-center justify-center"
+                                       onclick="event.stopPropagation()">
+                                        <i data-lucide="download" class="w-4 h-4"></i>
+                                    </a>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            galleryGrid.innerHTML = htmlItems;
+            lucide.createIcons();
+        }
+        
+        /**
+         * Remix 功能
+         */
+        function remixJob(jobData) {
+            console.log('[Gallery] Remix Job:', jobData);
+            
+            showCompositionMenu();
+            setTimeout(() => {
+                const toolMapping = {
+                    'text_to_image': 'text_to_image',
+                    'face_swap': 'face_swap',
+                    'multi_image_blend': 'multi_blend',
+                    'sketch_to_image': 'sketch',
+                    'single_image_edit': 'single_edit'
+                };
+                const toolId = toolMapping[jobData.workflow] || 'text_to_image';
+                selectTool(toolId);
+                
+                setTimeout(() => {
+                    const promptInput = document.getElementById('prompt-input');
+                    if (promptInput && jobData.prompt) promptInput.value = jobData.prompt;
+                    
+                    const seedInput = document.getElementById('seed-input');
+                    if (seedInput && jobData.seed !== undefined) seedInput.value = jobData.seed;
+                    
+                    const modelSelect = document.getElementById('model-select');
+                    if (modelSelect && jobData.model) modelSelect.value = jobData.model;
+                    
+                    if (jobData.aspect_ratio) {
+                        const ratioButtons = document.querySelectorAll('.ratio-btn');
+                        ratioButtons.forEach(btn => {
+                            if (btn.dataset.ratio === jobData.aspect_ratio) btn.click();
+                        });
+                    }
+                    
+                    console.log('[Gallery] Remix 參數已填充');
+                }, 300);
+            }, 300);
+        }
+
+        // ==========================================
         // 頁面載入完成後初始化
         // ==========================================
         document.addEventListener('DOMContentLoaded', () => {
@@ -1471,7 +1709,10 @@
             // 載入模型列表
             fetchModels();
             
-            // 使用事件委派 - 綁定到 document
+            // 防止重複點擊的標記
+            let isGenerating = false;
+            
+            // 使用事件委派 - 綁定到 document (使用 capture 模式)
             document.addEventListener('click', function(e) {
                 // 1. Generate 按鈕攔截 (最高優先級)
                 const genBtn = e.target.closest('#btn-generate');
@@ -1480,6 +1721,12 @@
                     e.stopPropagation();
                     e.stopImmediatePropagation();
                     
+                    // 防止重複觸發
+                    if (isGenerating) {
+                        console.log('[Generate] 已在處理中，忽略重複點擊');
+                        return false;
+                    }
+                    
                     // 雙重保險：如果按鈕已經 disable，不要再觸發
                     if (genBtn.disabled || genBtn.classList.contains('cursor-not-allowed')) {
                         console.log('[Generate] 按鈕禁用中，忽略點擊');
@@ -1487,7 +1734,11 @@
                     }
 
                     console.log('[Generate] 按鈕被點擊');
-                    handleGenerate(e);
+                    isGenerating = true;
+                    handleGenerate(e).finally(() => {
+                        // 任務完成或失敗後，重置標記
+                        setTimeout(() => { isGenerating = false; }, 500);
+                    });
                     return false;
                 }
                 
@@ -1517,6 +1768,19 @@
             });
             
             console.log('[Init] 事件委派已設定');
+
+            // ==========================================
+            // 恢復上次的視圖狀態
+            // ==========================================
+            const savedView = localStorage.getItem('currentView');
+            if (savedView && savedView !== 'dashboard') {
+                console.log('[Init] 恢復上次視圖:', savedView);
+                navigateTo(savedView);
+            } else {
+                console.log('[Init] 顯示預設 Dashboard');
+                // 確保 Dashboard 為預設顯示
+                navigateTo('dashboard');
+            }
         });
     </script>
 </body>

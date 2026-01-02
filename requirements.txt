@@ -1,15 +1,25 @@
-# Web Framework (Day 2)
-Flask==3.0.0
+# ===========================================
+# ComfyUI Studio - 统一依赖管理
+# ===========================================
+# 本地开发用，包含 Backend + Worker 所有依赖
+# Docker 部署时使用各自目录下的 requirements.txt
+
+# Web Framework
+Flask==2.3.0
+Werkzeug==2.3.0
 flask-cors==4.0.0
 
-# Database / Queue (Day 2 & 3)
+# Database
+mysql-connector-python==8.2.0
+
+# Queue / Cache
 redis==5.0.1
 
-# HTTP Client (Day 3 - for calling ComfyUI)
+# HTTP Client
 requests==2.31.0
 
-# WebSocket Client (Day 3 - for listening to ComfyUI progress)
+# WebSocket Client
 websocket-client==1.7.0
 
-# Environment Variables (Optional but recommended)
+# Environment Variables
 python-dotenv==1.0.0

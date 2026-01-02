@@ -58,6 +58,35 @@ from config import (
 )
 REDIS_QUEUE_NAME = JOB_QUEUE
 
+# ============================================
+# Database Connection Setup
+# ============================================
+from database import Database
+
+# 載入資料庫配置
+DB_HOST = os.getenv("DB_HOST", "localhost")
+DB_PORT = int(os.getenv("DB_PORT", 3306))
+DB_USER = os.getenv("DB_USER", "studio_user")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "studio_password")
+DB_NAME = os.getenv("DB_NAME", "studio_db")
+
+# 初始化資料庫連接
+db_client = None
+try:
+    db_client = Database(
+        host=DB_HOST,
+        port=DB_PORT,
+        user=DB_USER,
+        password=DB_PASSWORD,
+        database=DB_NAME
+    )
+    logger.info(f"✓ 資料庫連接成功: {DB_HOST}:{DB_PORT}/{DB_NAME}")
+except Exception as e:
+    logger.warning(f"⚠️ 資料庫連接失敗 (功能降級): {e}")
+
+# ============================================
+# Redis Connection Setup
+# ============================================
 try:
     redis_client = Redis(
         host=REDIS_HOST, 
@@ -145,7 +174,20 @@ def generate():
         })
         redis_client.expire(status_key, 86400)  # 24小时过期
         
-        # 6. 返回成功响应
+        # 6. 寫入資料庫 (如果資料庫可用)
+        if db_client:
+            db_client.insert_job(
+                job_id=job_id,
+                prompt=prompt,
+                workflow=workflow,
+                model=job_data.get('model', 'turbo_fp8'),
+                aspect_ratio=job_data.get('aspect_ratio', '1:1'),
+                batch_size=job_data.get('batch_size', 1),
+                seed=job_data.get('seed', -1),
+                status='queued'
+            )
+        
+        # 7. 返回成功响应
         return jsonify({
             'job_id': job_id,
             'status': 'queued'
@@ -183,6 +225,12 @@ def status(job_id):
         if not job_status:
             logger.warning(f"任务不存在: job_id={job_id}")
             return jsonify({'error': 'Job not found'}), 404
+        
+        # 如果任務已完成且資料庫可用，同步狀態到資料庫
+        current_status = job_status.get('status', 'unknown')
+        if db_client and current_status in ['finished', 'failed', 'cancelled']:
+            output_path = job_status.get('image_url', '')
+            db_client.update_job_status(job_id, current_status, output_path)
         
         # 返回状态信息
         return jsonify({
@@ -248,13 +296,78 @@ def cancel_job(job_id):
         return jsonify({'error': 'Internal server error'}), 500
 
 
+@app.route('/api/history', methods=['GET'])
+def get_history():
+    """
+    GET /api/history?limit=50&offset=0
+    獲取歷史記錄列表
+    
+    Query Parameters:
+        limit: 返回數量 (預設 50)
+        offset: 偏移量 (預設 0)
+    
+    Response:
+    {
+        "total": 120,
+        "limit": 50,
+        "offset": 0,
+        "jobs": [
+            {
+                "id": "uuid",
+                "prompt": "...",
+                "workflow": "text_to_image",
+                "model": "turbo_fp8",
+                "status": "finished",
+                "output_path": "/outputs/xxx.png,/outputs/yyy.png",
+                "created_at": "2024-12-31T10:00:00"
+            }
+        ]
+    }
+    """
+    try:
+        if db_client is None:
+            logger.error("資料庫未初始化")
+            return jsonify({'error': 'Database service unavailable'}), 503
+        
+        # 解析查詢參數
+        limit = int(request.args.get('limit', 50))
+        offset = int(request.args.get('offset', 0))
+        
+        # 限制單次查詢數量
+        limit = min(limit, 100)
+        
+        # 從資料庫獲取歷史記錄
+        jobs = db_client.get_history(limit=limit, offset=offset)
+        
+        logger.info(f"✓ 查詢歷史記錄: {len(jobs)} 筆 (limit={limit}, offset={offset})")
+        
+        return jsonify({
+            'total': len(jobs),  # 簡化版本，實際可查詢總數
+            'limit': limit,
+            'offset': offset,
+            'jobs': jobs
+        }), 200
+    
+    except Exception as e:
+        logger.error(f"✗ history 接口异常: {e}", exc_info=True)
+        return jsonify({'error': 'Internal server error'}), 500
+
+
 @app.route('/health', methods=['GET'])
 def health():
-    """健康检查接口"""
+    """健康检查接口 - 檢查 Redis 和 MySQL 狀態"""
     redis_status = 'healthy' if redis_client and redis_client.ping() else 'unavailable'
+    
+    mysql_status = 'unavailable'
+    if db_client:
+        mysql_status = 'healthy' if db_client.check_connection() else 'error'
+    
+    overall_status = 'ok' if redis_status == 'healthy' else 'degraded'
+    
     return jsonify({
-        'status': 'ok',
-        'redis': redis_status
+        'status': overall_status,
+        'redis': redis_status,
+        'mysql': mysql_status
     }), 200
 
 

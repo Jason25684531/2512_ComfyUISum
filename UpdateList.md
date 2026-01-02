@@ -2,6 +2,178 @@
 
 ---
 
+## 📅 2026-01-02: Phase 3 - Data & Intelligence 完成
+
+### 🎯 今日完成事項 (Phase 3 全部完成)
+
+| 模組 | 功能 | 狀態 |
+|------|------|------|
+| **Database** | MySQL 8.0 資料庫建置 | ✅ 完成 |
+| **Database** | Jobs 表 Schema 設計 | ✅ 完成 |
+| **Backend** | 資料庫連接池整合 | ✅ 完成 |
+| **Backend** | `GET /api/history` 歷史記錄 API | ✅ 完成 |
+| **Backend** | 任務狀態同步到資料庫 | ✅ 完成 |
+| **Frontend** | Personal Gallery 頁面 | ✅ 完成 |
+| **Frontend** | Remix 功能（重新使用參數） | ✅ 完成 |
+| **Worker** | 資料庫同步清理（Soft Delete） | ✅ 完成 |
+| **Worker** | ComfyUI 錯誤重試機制 | ✅ 完成 |
+| **Docker** | MySQL 服務整合 | ✅ 完成 |
+| **Docker** | Backend Healthcheck | ✅ 完成 |
+| **Docker** | 鏡像大小優化 | ✅ 完成 |
+
+### 🗄️ 新增資料庫架構
+
+#### Jobs 表結構
+```sql
+CREATE TABLE jobs (
+    id VARCHAR(36) PRIMARY KEY,              -- Job UUID
+    prompt TEXT,                             -- 提示詞
+    workflow VARCHAR(50),                    -- 工作流類型
+    model VARCHAR(100),                      -- 使用模型
+    aspect_ratio VARCHAR(10),                -- 圖片比例
+    batch_size INT DEFAULT 1,                -- 批次數量
+    seed INT DEFAULT -1,                     -- 隨機種子
+    status VARCHAR(20),                      -- 狀態 (queued, processing, finished, failed)
+    output_path TEXT,                        -- 輸出路徑 (多張用逗號分隔)
+    created_at TIMESTAMP DEFAULT NOW,        -- 建立時間
+    updated_at TIMESTAMP ON UPDATE NOW,      -- 更新時間
+    is_deleted BOOLEAN DEFAULT FALSE,        -- 軟刪除標記
+    INDEX idx_status (status),
+    INDEX idx_created_at (created_at),
+    INDEX idx_is_deleted (is_deleted)
+);
+```
+
+### 🆕 新增 API 端點
+
+| 方法 | 端點 | 功能 | 參數 |
+|------|------|------|------|
+| GET | `/api/history` | 獲取歷史記錄 | `limit` (預設 50), `offset` (預設 0) |
+| GET | `/health` | 健康檢查（強化版） | - (回傳 Redis + MySQL 狀態) |
+
+### 🎨 新增前端功能
+
+#### Personal Gallery
+- **響應式網格佈局**: 1-4 欄自適應顯示
+- **卡片資訊**: 縮圖、提示詞、工作流類型、日期、狀態
+- **圖片數量標記**: 批次生成時顯示圖片數
+- **狀態顏色編碼**: 
+  - ✅ Finished (綠色)
+  - ❌ Failed (紅色)
+  - ⏳ Processing (黃色)
+  - 📋 Queued (藍色)
+  - 🚫 Cancelled (灰色)
+
+#### Remix 功能
+點擊歷史記錄的 "Remix" 按鈕：
+1. 自動跳轉到 Image Composition 工作區
+2. 選擇對應的工作流工具
+3. 填充原始參數（Prompt、Seed、Model、Aspect Ratio）
+4. 允許快速修改並重新生成
+
+### 🔧 系統韌性強化
+
+#### Worker 自動維護
+- **啟動時清理**: 刪除過期檔案並同步資料庫
+- **定期清理**: 每小時執行一次
+- **軟刪除機制**: 刪除檔案時標記資料庫 `is_deleted = TRUE`，保留歷史記錄
+
+#### 錯誤重試機制
+- **ComfyUI 連接重試**: 失敗時等待 5 秒後重試 1 次
+- **Redis 斷線重連**: 自動重連並繼續處理佇列
+
+### 🐳 Docker 優化
+
+#### MySQL 服務
+- **版本**: MySQL 8.0
+- **端口**: 3306 (本地 DBeaver 可連接)
+- **持久化**: `./mysql_data:/var/lib/mysql`
+- **Healthcheck**: 確保資料庫就緒後才啟動 Backend
+
+#### 鏡像優化
+- **Python 版本**: 升級到 3.10-slim
+- **Pip 優化**: `--no-cache-dir` 減少鏡像大小
+- **Backend Healthcheck**: 每 30 秒檢查 `/health` 端點
+
+### 📦 依賴更新
+
+#### Backend
+```txt
++ mysql-connector-python==8.2.0
+```
+
+### 🔄 資料流程圖
+
+```
+┌──────────┐     ┌──────────┐     ┌──────────┐
+│  Browser │────▶│  Backend │────▶│   MySQL  │
+│          │     │   API    │     │          │
+└──────────┘     └────┬─────┘     └──────────┘
+     ▲                │                 ▲
+     │                ▼                 │
+     │          ┌──────────┐            │
+     │          │  Redis   │            │
+     │          │  Queue   │            │
+     │          └────┬─────┘            │
+     │               │                  │
+     │               ▼                  │
+     │          ┌──────────┐       Soft Delete
+     │          │  Worker  │            │
+     │          │          ├────────────┘
+     │          └────┬─────┘
+     │               │
+     │               ▼
+     │          ┌──────────┐
+     └──────────│ ComfyUI  │
+                │          │
+                └──────────┘
+```
+
+### 📝 環境變數更新
+
+#### .env 新增配置
+```ini
+# MySQL Database Configuration
+DB_HOST=localhost
+DB_PORT=3306
+DB_USER=studio_user
+DB_PASSWORD=studio_password
+DB_NAME=studio_db
+```
+
+### 🧪 測試驗證步驟
+
+1. **啟動完整堆疊**
+   ```bash
+   docker-compose up -d
+   ```
+
+2. **檢查健康狀態**
+   ```bash
+   curl http://localhost:5000/health
+   # 應回傳: {"status":"ok","redis":"healthy","mysql":"healthy"}
+   ```
+
+3. **生成測試圖片**
+   - 提交任務並確認資料庫有記錄
+
+4. **訪問 Personal Gallery**
+   - 確認能看到歷史記錄
+   - 測試 Remix 功能
+
+5. **測試清理機制**
+   - 修改檔案時間戳模擬過期檔案
+   - 重啟 Worker 確認自動清理
+
+### 🚀 部署提醒
+
+1. **資料庫初始化**: 首次啟動時 Backend 會自動建立 `jobs` 表
+2. **資料持久化**: 確保 `./mysql_data` 目錄有寫入權限
+3. **本地開發**: Backend 和 Worker 需要手動設定 `DB_HOST=localhost`
+4. **Docker 環境**: 自動使用 `DB_HOST=mysql` 透過內部網路連接
+
+---
+
 ## 📅 2024-12-31: 今日總結與下週展望
 
 ### 🎯 今日完成事項 (Phase 2 全部完成)

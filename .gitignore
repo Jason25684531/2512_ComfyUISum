@@ -4,5 +4,9 @@ storage/
 .env
 ComfyUIworkflow/
 redis_data/
+mysql_data/
 __pycache__/
 openspec/
+
+# 日誌文件
+*.log

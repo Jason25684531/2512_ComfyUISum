@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>导航测试</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-white p-8">
+    <div class="max-w-2xl mx-auto space-y-4">
+        <h1 class="text-2xl font-bold mb-6">🔍 导航和 LocalStorage 测试</h1>
+        
+        <div class="bg-gray-800 p-4 rounded">
+            <h2 class="font-bold mb-2">当前视图状态：</h2>
+            <div id="current-view" class="text-yellow-400 font-mono"></div>
+        </div>
+
+        <div class="bg-gray-800 p-4 rounded space-y-2">
+            <button onclick="testNav('dashboard')" class="w-full bg-blue-600 px-4 py-2 rounded">导航到 Dashboard</button>
+            <button onclick="testNav('gallery')" class="w-full bg-green-600 px-4 py-2 rounded">导航到 Gallery</button>
+            <button onclick="testNav('canvas')" class="w-full bg-purple-600 px-4 py-2 rounded">导航到 Canvas</button>
+        </div>
+
+        <div class="bg-gray-800 p-4 rounded">
+            <h2 class="font-bold mb-2">测试按钮事件：</h2>
+            <button id="test-btn" class="bg-red-600 px-6 py-3 rounded font-bold">
+                点击我 (应该只触发一次)
+            </button>
+            <div id="click-count" class="mt-2 text-sm text-gray-400"></div>
+        </div>
+
+        <div class="bg-gray-800 p-4 rounded">
+            <h2 class="font-bold mb-2">事件日志：</h2>
+            <div id="log" class="text-xs font-mono space-y-1 max-h-60 overflow-y-auto"></div>
+        </div>
+    </div>
+
+    <script>
+        let clickCount = 0;
+        const logDiv = document.getElementById('log');
+
+        function log(msg) {
+            const time = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `<div>[${time}] ${msg}</div>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function updateView() {
+            const current = localStorage.getItem('currentView') || '(未设置)';
+            document.getElementById('current-view').textContent = current;
+        }
+
+        function testNav(viewId) {
+            log(`📍 navigateTo('${viewId}') 被调用`);
+            localStorage.setItem('currentView', viewId);
+            updateView();
+            log(`✅ localStorage 已更新为: ${viewId}`);
+        }
+
+        // 测试按钮点击
+        document.getElementById('test-btn').addEventListener('click', function(e) {
+            clickCount++;
+            document.getElementById('click-count').textContent = `点击次数: ${clickCount}`;
+            log(`🖱️ 按钮被点击 (第 ${clickCount} 次)`);
+            
+            if (clickCount > 1) {
+                log(`⚠️ 警告: 按钮被多次触发！可能有事件冒泡问题`);
+            }
+        });
+
+        // 监听 storage 事件
+        window.addEventListener('storage', function(e) {
+            log(`📦 Storage 事件: ${e.key} = ${e.newValue}`);
+            updateView();
+        });
+
+        // 页面加载时
+        window.addEventListener('DOMContentLoaded', () => {
+            log('✅ 页面加载完成');
+            updateView();
+        });
+
+        // 测试：模拟主页面的问题
+        document.addEventListener('click', function(e) {
+            const target = e.target;
+            log(`🖱️ Document click: ${target.tagName}#${target.id || '(无ID)'}`);
+            
+            // 如果点击了按钮，检查是否会触发多次
+            if (target.id === 'test-btn') {
+                log(`   ↳ 这是测试按钮`);
+            }
+        });
+    </script>
+</body>
+</html>

@@ -14,6 +14,28 @@ services:
     networks:
       - studio-net
 
+  # MySQL 資料庫服務
+  mysql:
+    image: mysql:8.0
+    container_name: studio-mysql
+    ports:
+      - "3307:3306"  # 映射到本地 3307 避免冲突
+    environment:
+      - MYSQL_ROOT_PASSWORD=rootpassword
+      - MYSQL_DATABASE=studio_db
+      - MYSQL_USER=studio_user
+      - MYSQL_PASSWORD=studio_password
+    volumes:
+      - ./mysql_data:/var/lib/mysql
+    restart: always
+    networks:
+      - studio-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # Backend API 服務
   backend:
     build: ./backend
@@ -26,15 +48,23 @@ services:
       - REDIS_PASSWORD=mysecret
       - FLASK_HOST=0.0.0.0
       - FLASK_PORT=5000
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USER=studio_user
+      - DB_PASSWORD=studio_password
+      - DB_NAME=studio_db
     depends_on:
-      - redis
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
     restart: always
     networks:
       - studio-net
     volumes:
       - ./storage/outputs:/app/storage/outputs
 
-  # Worker 服務
+  # Worker 服務 (生產環境使用，開發時建議停用)
   worker:
     build: ./worker
     container_name: studio-worker
@@ -44,10 +74,19 @@ services:
       - REDIS_PASSWORD=mysecret
       - COMFY_HOST=host.docker.internal
       - COMFY_PORT=8188
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USER=studio_user
+      - DB_PASSWORD=studio_password
+      - DB_NAME=studio_db
     depends_on:
       - redis
+      - mysql
     restart: always
     networks:
+      - studio-net
+    profiles:
+      - production  # 添加 profile，預設不啟動
       - studio-net
     volumes:
       - ./storage:/worker/storage

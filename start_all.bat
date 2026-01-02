@@ -1,8 +1,14 @@
 @echo off
 chcp 65001 >nul
 echo ============================================
-echo 🚀 Studio 服務啟動中...
+echo Studio Development Mode - Local Worker
 echo ============================================
+echo.
+echo Description: For local development
+echo   - Docker: MySQL + Redis only
+echo   - Backend/Worker: Local Python environment
+echo   - Benefits: Instant reload, easy debugging
+echo.
 
 cd /d "%~dp0"
 
@@ -13,9 +19,9 @@ if exist "venv\Scripts\activate.bat" (
 )
 
 echo.
-echo [Info] 將在兩個視窗中分別啟動服務：
-echo   - Backend API (Port 5000)
-echo   - Worker (連接 ComfyUI)
+echo [Info] Starting services in separate windows:
+echo   - Backend API on Port 5000
+echo   - Worker connected to ComfyUI
 echo.
 
 :: 在新視窗啟動 Backend
@@ -34,6 +40,11 @@ echo.
 echo 📍 Backend API: http://127.0.0.1:5000
 echo 📍 Frontend:    http://127.0.0.1:5500/frontend/index.html
 echo.
-echo 關閉服務：直接關閉對應的命令提示字元視窗
+echo Tips:
+echo   - Docker Worker is disabled by default
+echo   - Local Worker allows direct log viewing
+echo   - Code changes take effect after restart
+echo.
+echo To stop: Close the command windows directly
 echo.
 pause

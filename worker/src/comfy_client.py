@@ -40,16 +40,32 @@ class ComfyClient:
         # 確保輸出目錄存在
         STORAGE_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     
-    def check_connection(self) -> bool:
+    def check_connection(self, retry: int = 1) -> bool:
         """
         檢查 ComfyUI 是否可連接
+        
+        Args:
+            retry: 失敗時重試次數（預設 1 次）
+        
+        Returns:
+            是否連接成功
         """
-        try:
-            response = requests.get(f"{self.http_url}/system_stats", timeout=5)
-            return response.status_code == 200
-        except Exception as e:
-            print(f"[ComfyClient] 連接失敗: {e}")
-            return False
+        for attempt in range(retry + 1):
+            try:
+                response = requests.get(f"{self.http_url}/system_stats", timeout=5)
+                if response.status_code == 200:
+                    return True
+            except (requests.ConnectionError, requests.Timeout) as e:
+                if attempt < retry:
+                    print(f"[ComfyClient] 連接失敗 ({attempt + 1}/{retry + 1})，5 秒後重試: {e}")
+                    time.sleep(5)
+                else:
+                    print(f"[ComfyClient] 連接失敗（已重試 {retry} 次）: {e}")
+            except Exception as e:
+                print(f"[ComfyClient] 連接異常: {e}")
+                break
+        
+        return False
     
     def queue_prompt(self, workflow: dict) -> Optional[str]:
         """

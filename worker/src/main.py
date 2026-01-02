@@ -110,9 +110,13 @@ def cleanup_old_temp_files():
         print(f"[Worker] 🗑️ 已清理 {deleted_count} 個過期暫存檔案")
 
 
-def cleanup_old_output_files():
+def cleanup_old_output_files(db_client=None):
     """
     清理 storage/outputs 中超過 30 天的圖片檔案
+    並同步軟刪除資料庫記錄
+    
+    Args:
+        db_client: Database 客戶端實例（用於同步軟刪除）
     """
     from config import STORAGE_OUTPUT_DIR
     
@@ -122,6 +126,7 @@ def cleanup_old_output_files():
     cutoff_time = datetime.now() - timedelta(days=30)
     deleted_count = 0
     total_size = 0
+    db_synced = 0
     
     for filepath in STORAGE_OUTPUT_DIR.glob("*"):
         if not filepath.is_file():
@@ -131,15 +136,29 @@ def cleanup_old_output_files():
             file_mtime = datetime.fromtimestamp(filepath.stat().st_mtime)
             if file_mtime < cutoff_time:
                 file_size = filepath.stat().st_size
+                filename = filepath.name
+                
+                # 刪除檔案
                 filepath.unlink()
                 deleted_count += 1
                 total_size += file_size
+                
+                # 同步軟刪除資料庫記錄 (如果有資料庫連接)
+                if db_client:
+                    try:
+                        if db_client.soft_delete_by_output_path(filename):
+                            db_synced += 1
+                    except Exception as db_err:
+                        print(f"[Worker] ⚠️ 資料庫軟刪除失敗: {db_err}")
+                
         except Exception as e:
             print(f"[Worker] ⚠️ 無法刪除 {filepath}: {e}")
     
     if deleted_count > 0:
         size_mb = total_size / (1024 * 1024)
         print(f"[Worker] 🗑️ 已清理 {deleted_count} 個超過 30 天的輸出圖片 (釋放 {size_mb:.2f} MB)")
+        if db_client and db_synced > 0:
+            print(f"[Worker] 📊 已同步軟刪除資料庫記錄: {db_synced} 筆")
 
 
 def update_job_status(
@@ -355,24 +374,49 @@ def main():
         print(f"[Worker] ❌ Redis 連接失敗: {e}")
         sys.exit(1)
     
-    # 2. 初始化 ComfyUI 客戶端
+    # 2. 連接資料庫 (可選)
+    db_client = None
+    try:
+        # 嘗試從環境變數載入資料庫配置
+        db_host = os.getenv("DB_HOST", "localhost")
+        db_port = int(os.getenv("DB_PORT", 3306))
+        db_user = os.getenv("DB_USER", "studio_user")
+        db_password = os.getenv("DB_PASSWORD", "studio_password")
+        db_name = os.getenv("DB_NAME", "studio_db")
+        
+        # 動態導入 Database 類
+        sys.path.insert(0, str(Path(__file__).parent.parent.parent / "backend" / "src"))
+        from database import Database
+        
+        db_client = Database(
+            host=db_host,
+            port=db_port,
+            user=db_user,
+            password=db_password,
+            database=db_name
+        )
+        print(f"[Worker] ✅ 資料庫連接成功 ({db_host}:{db_port}/{db_name})")
+    except Exception as e:
+        print(f"[Worker] ⚠️ 資料庫連接失敗 (功能降級): {e}")
+    
+    # 3. 初始化 ComfyUI 客戶端
     client = ComfyClient()
     
-    # 3. 檢查 ComfyUI 連接
+    # 4. 檢查 ComfyUI 連接
     if client.check_connection():
         print("[Worker] ✅ ComfyUI 連接成功")
     else:
         print("[Worker] ⚠️ ComfyUI 尚未啟動，將持續等待...")
     
-    # 4. 清理舊的暫存檔案
+    # 5. 清理舊的暫存檔案
     print("[Worker] 🗑️ 清理過期暫存檔案...")
     cleanup_old_temp_files()
     
-    # 5. 清理超過 30 天的輸出圖片
+    # 6. 清理超過 30 天的輸出圖片 (並同步資料庫)
     print("[Worker] 🗑️ 清理超過 30 天的輸出圖片...")
-    cleanup_old_output_files()
+    cleanup_old_output_files(db_client)
     
-    # 6. 開始處理佇列
+    # 7. 開始處理佇列
     print(f"\n[Worker] 監聽佇列: {JOB_QUEUE}")
     print(f"[Worker] ComfyUI Input 目錄: {COMFYUI_INPUT_DIR}")
     print("[Worker] 等待任務中...\n")
@@ -385,7 +429,7 @@ def main():
             # 定期清理暫存檔案和輸出圖片
             if time.time() - last_cleanup_time > CLEANUP_INTERVAL:
                 cleanup_old_temp_files()
-                cleanup_old_output_files()
+                cleanup_old_output_files(db_client)
                 last_cleanup_time = time.time()
             
             # BLPOP: 阻塞式取出任務 (超時 5 秒)
