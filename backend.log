@@ -885,3 +885,24 @@
 2026-01-02 17:02:27,927 - database - INFO - ✓ 查詢歷史記錄: 8 筆
 2026-01-02 17:02:27,929 - __main__ - INFO - ✓ 查詢歷史記錄: 8 筆 (limit=50, offset=0)
 2026-01-02 17:02:27,930 - werkzeug - INFO - 127.0.0.1 - - [02/Jan/2026 17:02:27] "GET /api/history?limit=50&offset=0 HTTP/1.1" 200 -
+2026-01-02 17:02:34,903 - __main__ - WARNING - Checkpoints 目錄不存在: D:\02_software\ComfyUI_windows_portable\ComfyUI\models\checkpoints
+2026-01-02 17:02:34,903 - __main__ - WARNING - UNET 目錄不存在: D:\02_software\ComfyUI_windows_portable\ComfyUI\models\unet
+2026-01-02 17:02:34,903 - __main__ - WARNING - 未找到任何模型，返回預設列表
+2026-01-02 17:02:34,904 - werkzeug - INFO - 127.0.0.1 - - [02/Jan/2026 17:02:34] "GET /api/models HTTP/1.1" 200 -
+2026-01-02 17:02:34,909 - database - INFO - ✓ 查詢歷史記錄: 8 筆
+2026-01-02 17:02:34,911 - __main__ - INFO - ✓ 查詢歷史記錄: 8 筆 (limit=50, offset=0)
+2026-01-02 17:02:34,911 - werkzeug - INFO - 127.0.0.1 - - [02/Jan/2026 17:02:34] "GET /api/history?limit=50&offset=0 HTTP/1.1" 200 -
+2026-01-02 17:03:34,189 - __main__ - WARNING - Checkpoints 目錄不存在: D:\02_software\ComfyUI_windows_portable\ComfyUI\models\checkpoints
+2026-01-02 17:03:34,190 - __main__ - WARNING - UNET 目錄不存在: D:\02_software\ComfyUI_windows_portable\ComfyUI\models\unet
+2026-01-02 17:03:34,190 - __main__ - WARNING - 未找到任何模型，返回預設列表
+2026-01-02 17:03:34,190 - werkzeug - INFO - 127.0.0.1 - - [02/Jan/2026 17:03:34] "GET /api/models HTTP/1.1" 200 -
+2026-01-02 17:03:34,193 - database - INFO - ✓ 查詢歷史記錄: 8 筆
+2026-01-02 17:03:34,196 - __main__ - INFO - ✓ 查詢歷史記錄: 8 筆 (limit=50, offset=0)
+2026-01-02 17:03:34,196 - werkzeug - INFO - 127.0.0.1 - - [02/Jan/2026 17:03:34] "GET /api/history?limit=50&offset=0 HTTP/1.1" 200 -
+2026-01-02 17:03:36,928 - __main__ - WARNING - Checkpoints 目錄不存在: D:\02_software\ComfyUI_windows_portable\ComfyUI\models\checkpoints
+2026-01-02 17:03:36,930 - __main__ - WARNING - UNET 目錄不存在: D:\02_software\ComfyUI_windows_portable\ComfyUI\models\unet
+2026-01-02 17:03:36,930 - __main__ - WARNING - 未找到任何模型，返回預設列表
+2026-01-02 17:03:36,930 - werkzeug - INFO - 127.0.0.1 - - [02/Jan/2026 17:03:36] "GET /api/models HTTP/1.1" 200 -
+2026-01-02 17:03:36,934 - database - INFO - ✓ 查詢歷史記錄: 8 筆
+2026-01-02 17:03:36,937 - __main__ - INFO - ✓ 查詢歷史記錄: 8 筆 (limit=50, offset=0)
+2026-01-02 17:03:36,937 - werkzeug - INFO - 127.0.0.1 - - [02/Jan/2026 17:03:36] "GET /api/history?limit=50&offset=0 HTTP/1.1" 200 -
