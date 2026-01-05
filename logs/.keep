@@ -1,0 +1,15 @@
+# Logs Directory
+
+此目錄用於儲存系統日誌檔案。
+
+## 日誌檔案說明
+
+- `backend.log` - Backend API 的請求和錯誤日誌
+- `worker.log` - Worker 任務處理日誌
+
+## 日誌管理
+
+- 日誌檔案使用 RotatingFileHandler 管理
+- 單檔最大容量: 5MB
+- 保留最近 3 份備份
+- 格式: `時間 - 模組 - 級別 - 訊息`

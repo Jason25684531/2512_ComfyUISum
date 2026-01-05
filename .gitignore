@@ -8,5 +8,13 @@ mysql_data/
 __pycache__/
 openspec/
 
+# 日誌檔案 (保留目錄結構)
+logs/*.log
+logs/*.log.*
+!logs/.keep
+
 # 日誌文件
 *.log
+
+# Ngrok 自動生成配置 (包含臨時 URL)
+frontend/config.js

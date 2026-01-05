@@ -6,8 +6,9 @@ import os
 import json
 import uuid
 import logging
+from logging.handlers import RotatingFileHandler
 from datetime import datetime
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from redis import Redis, RedisError
 
@@ -38,18 +39,45 @@ def after_request(response):
     response.headers["Access-Control-Allow-Origin"] = "*"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
+    
+    # 記錄請求日誌
+    logger.info(f"{request.method} {request.path} - {response.status_code}")
+    
     return response
 
-# 配置日志记录器
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('backend.log', encoding='utf-8'),
-        logging.StreamHandler()
-    ]
+# 配置日志记录器 (使用 RotatingFileHandler)
+log_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+# 確保 logs 目錄存在
+log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'logs')
+os.makedirs(log_dir, exist_ok=True)
+log_file = os.path.join(log_dir, 'backend.log')
+
+# 配置 RotatingFileHandler (5MB, 保留 3 份)
+file_handler = RotatingFileHandler(
+    log_file,
+    maxBytes=5*1024*1024,  # 5MB
+    backupCount=3,
+    encoding='utf-8'
 )
+file_handler.setFormatter(log_formatter)
+file_handler.setLevel(logging.INFO)
+
+# 配置控制台輸出
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(log_formatter)
+console_handler.setLevel(logging.INFO)
+
+# 配置 root logger
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+logger.addHandler(file_handler)
+logger.addHandler(console_handler)
+
+# 同時配置 Flask app logger
+app.logger.setLevel(logging.INFO)
+app.logger.addHandler(file_handler)
+app.logger.addHandler(console_handler)
 
 # 從 config 載入配置
 from config import (
@@ -339,6 +367,24 @@ def get_history():
         # 從資料庫獲取歷史記錄
         jobs = db_client.get_history(limit=limit, offset=offset)
         
+        # 處理 output_path：轉換為前端可訪問的 URL 格式
+        for job in jobs:
+            output_path = job.get('output_path')
+            if output_path:
+                # 如果是逗號分隔的多個路徑，處理每一個
+                paths = output_path.split(',')
+                # 移除路徑前綴，只保留檔名，並轉換為 URL 格式
+                formatted_paths = []
+                for path in paths:
+                    path = path.strip()
+                    if path:
+                        # 提取檔名（移除可能的路徑前綴）
+                        filename = path.split('/')[-1].split('\\')[-1]
+                        # 轉換為完整 URL
+                        formatted_paths.append(f"/outputs/{filename}")
+                # 用逗號連接所有路徑
+                job['output_path'] = ','.join(formatted_paths) if formatted_paths else ''
+        
         logger.info(f"✓ 查詢歷史記錄: {len(jobs)} 筆 (limit={limit}, offset={offset})")
         
         return jsonify({
@@ -458,6 +504,31 @@ def serve_output(filename):
 # ============================================
 # Application Entry Point
 # ============================================
+
+# Serve frontend static files
+@app.route('/')
+def serve_index():
+    """提供前端 index.html"""
+    frontend_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'frontend')
+    return send_from_directory(frontend_dir, 'index.html')
+
+@app.route('/<path:path>')
+def serve_static(path):
+    """提供前端靜態文件（CSS, JS, 圖片等）"""
+    frontend_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'frontend')
+    
+    # 如果是 API 路徑，不處理
+    if path.startswith('api/'):
+        return jsonify({"error": "API endpoint not found"}), 404
+    
+    # 嘗試返回靜態文件
+    try:
+        return send_from_directory(frontend_dir, path)
+    except:
+        # 如果文件不存在，返回 index.html（支持 SPA 路由）
+        return send_from_directory(frontend_dir, 'index.html')
+
 if __name__ == '__main__':
     logger.info("🚀 Backend API 启动中...")
+    logger.info("📁 同時提供前端靜態文件服務")
     app.run(host='0.0.0.0', port=5000, debug=True)

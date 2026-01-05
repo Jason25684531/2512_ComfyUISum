@@ -63,6 +63,7 @@ services:
       - studio-net
     volumes:
       - ./storage/outputs:/app/storage/outputs
+      - ./logs:/app/logs  # 掛載日誌目錄
 
   # Worker 服務 (生產環境使用，開發時建議停用)
   worker:
@@ -90,6 +91,7 @@ services:
       - studio-net
     volumes:
       - ./storage:/worker/storage
+      - ./logs:/worker/logs  # 掛載日誌目錄
       # 掛載 ComfyUI 的 input/output 目錄（需根據實際路徑調整）
       # - /path/to/ComfyUI/input:/comfyui/input
       # - /path/to/ComfyUI/output:/comfyui/output

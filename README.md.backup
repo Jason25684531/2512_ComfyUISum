@@ -1,0 +1,1597 @@
+# 🎨 ComfyUI Studio - AI 圖像生成工作站
+
+> 一個整合 ComfyUI 的現代化 AI 圖像生成平台，提供直覺的 Web 介面讓設計師輕鬆使用 AI 工具。
+
+---
+
+## 📋 目錄
+
+- [快速開始](#-快速開始)
+- [專案架構](#-專案架構)
+- [系統需求](#-系統需求)
+- [詳細安裝](#-詳細安裝)
+- [啟動服務](#-啟動服務)
+- [功能說明](#-功能說明)
+- [API 文檔](#-api-文檔)
+- [維護指南](#-維護指南)
+- [故障排除](#-故障排除)
+
+---
+
+## 🚀 快速開始
+
+```powershell
+# 1. 確保 ComfyUI 正在運行 (API 模式)
+D:\02_software\ComfyUI_windows_portable\run_nvidia_gpu.bat
+
+# 2. 啟動 Docker 服務 (Redis + MySQL)
+docker-compose up -d
+
+# 3. 一鍵啟動 Backend + Worker
+.\start_all.bat
+
+# 4. 開啟前端 (使用 VS Code Live Server)
+# 瀏覽器開啟: http://127.0.0.1:5500/frontend/index.html
+```
+
+**重要提醒**：
+- 首次啟動時 MySQL 會自動初始化資料庫和 `jobs` 表
+- 確保 3306 (MySQL), 6379 (Redis), 5000 (Backend) 端口未被占用
+- 可使用 DBeaver 連接 `localhost:3306` 查看資料庫內容
+
+---
+
+## 🏗️ 專案架構
+
+```
+ComfyUISum/
+├── .env                     # 環境變數 (Redis, MySQL, ComfyUI 路徑)
+├── docker-compose.yml       # Docker 服務編排 (Redis, MySQL, Backend, Worker)
+├── start_all.bat            # 一鍵啟動腳本 (Windows)
+├── start_all_with_docker.bat # Docker 容器啟動腳本
+│
+├── frontend/                # 前端 Web 介面
+│   ├── index.html           # 主頁面 (SPA - 整合所有 JS 邏輯)
+│   └── style.css            # 樣式表 (Tailwind CSS)
+│
+├── backend/                 # Flask API 服務 (Port 5000)
+│   ├── Dockerfile           # Backend 容器映像
+│   ├── requirements.txt     # Python 依賴
+│   ├── Readmd/              # API 測試與文檔
+│   └── src/
+│       ├── app.py           # API 入口 + 路由定義 + 日誌配置
+│       ├── config.py        # 配置管理
+│       └── database.py      # MySQL 資料庫操作類
+│
+├── worker/                  # 任務處理器 (連接 ComfyUI)
+│   ├── Dockerfile           # Worker 容器映像
+│   ├── requirements.txt     # Python 依賴
+│   └── src/
+│       ├── main.py          # Worker 主迴圈 + 完整日誌系統
+│       ├── json_parser.py   # Workflow 解析與參數注入
+│       ├── comfy_client.py  # ComfyUI HTTP/WebSocket 通訊
+│       ├── config.py        # Worker 配置
+│       └── check_comfy_connection.py  # 連線診斷工具
+│
+├── ComfyUIworkflow/         # ComfyUI Workflow 模板 (JSON)
+│   ├── config.json          # 工作流配置
+│   ├── text_to_image_*.json
+│   ├── face_swap_*.json
+│   ├── multi_image_blend_*.json
+│   ├── sketch_to_image_*.json
+│   └── single_image_edit_*.json
+│
+├── storage/                 # 檔案存儲
+│   ├── inputs/              # 上傳的參考圖 (24h 自動清理)
+│   ├── outputs/             # 生成的結果圖 (30天 自動清理)
+│   └── models/              # 模型目錄 (可選)
+│
+├── logs/                    # 日誌目錄 (Phase 4 新增)
+│   ├── backend.log          # Backend API 日誌 (5MB 輪轉)
+│   ├── worker.log           # Worker 任務處理日誌 (5MB 輪轉)
+│   └── .keep                # 保留目錄結構
+│
+├── mysql_data/              # MySQL 持久化資料
+├── redis_data/              # Redis 持久化資料
+│
+└── openspec/                # 專案規格文檔 (給 AI Agent 使用)
+    ├── AGENTS.md            # AI 代理指令
+    ├── project.md           # 專案定義
+    ├── specs/               # 模組規格
+    └── changes/             # 變更記錄與任務追蹤
+```
+
+### 系統架構圖 (Phase 4 完整版)
+
+### 系統架構圖 (Phase 4 完整版)
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    使用者介面 (Frontend)                      │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐   │
+│  │Dashboard │  │ Canvas   │  │ Gallery  │  │ Settings │   │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘   │
+│       │             │             │             │           │
+│       └─────────────┴─────────────┴─────────────┘           │
+│                   HTTP REST API (Port 5500)                  │
+└───────────────────────┬─────────────────────────────────────┘
+                        │
+                        ▼
+┌─────────────────────────────────────────────────────────────┐
+│                Backend API (Flask - Port 5000)               │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  POST /api/generate  → 提交任務到 Redis Queue         │  │
+│  │  GET  /api/status    → 查詢 Redis 任務狀態           │  │
+│  │  GET  /api/history   → 查詢 MySQL 歷史記錄 (分頁)    │  │
+│  │  GET  /api/models    → 掃描 ComfyUI 模型目錄         │  │
+│  │  GET  /outputs/*     → 靜態檔案服務 (生成圖片)       │  │
+│  │  POST /api/cancel    → 取消執行中的任務              │  │
+│  │  GET  /health        → 健康檢查 (Redis + MySQL)     │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                                                              │
+│  📝 日誌系統: logs/backend.log                              │
+│     - RotatingFileHandler (5MB × 3 backups)                │
+│     - 記錄所有 HTTP 請求 (Method, Path, Status)            │
+│     - 記錄 Exception Stack Trace                            │
+└───────────────────┬──────────────────────┬──────────────────┘
+                    │                      │
+                    ▼                      ▼
+        ┌─────────────────────┐  ┌─────────────────────┐
+        │  Redis (Port 6379)  │  │  MySQL (Port 3306)  │
+        │  ─────────────────  │  │  ─────────────────  │
+        │  Queue:             │  │  Table: jobs        │
+        │  - studio_jobs      │  │  - id, prompt       │
+        │                     │  │  - workflow, model  │
+        │  Hash:              │  │  - status, output   │
+        │  - job:status:{id}  │  │  - created_at       │
+        │  - TTL: 24h         │  │  - is_deleted       │
+        └──────────┬──────────┘  └──────────┬──────────┘
+                   │                        │
+                   │ BLPOP (阻塞式讀取)      │ 讀寫同步
+                   ▼                        ▼
+┌─────────────────────────────────────────────────────────────┐
+│                  Worker (Python 後台服務)                     │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  1. 從 Redis Queue 取得任務 (BLPOP studio_jobs)       │  │
+│  │  2. 解析 Workflow JSON 並注入參數                     │  │
+│  │  3. 處理 Base64 圖片存到 ComfyUI/input/              │  │
+│  │  4. 透過 HTTP POST /prompt 提交到 ComfyUI            │  │
+│  │  5. 透過 WebSocket /ws 監聽執行進度 (0-100%)         │  │
+│  │  6. 複製輸出圖片到 storage/outputs/                   │  │
+│  │  7. 更新 Redis 狀態 + MySQL 記錄 (output_path)       │  │
+│  │  8. 定期清理過期檔案 (inputs: 24h, outputs: 30天)     │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                                                              │
+│  📝 日誌系統: logs/worker.log                               │
+│     - RotatingFileHandler (5MB × 3 backups)                │
+│     - 記錄任務生命週期 (開始、進度、完成、失敗)             │
+│     - 記錄 ComfyUI 連線狀態和重試事件                       │
+│     - 所有 print() 已替換為 logger.info/warning/error()    │
+└───────────────────┬─────────────────────────────────────────┘
+                    │
+                    ▼ HTTP API + WebSocket
+┌─────────────────────────────────────────────────────────────┐
+│            ComfyUI (Port 8188) - AI 圖像生成引擎             │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  HTTP API:                                            │  │
+│  │  - POST /prompt       → 提交生成任務                  │  │
+│  │  - POST /interrupt    → 中斷執行中的任務              │  │
+│  │                                                       │  │
+│  │  WebSocket:                                           │  │
+│  │  - /ws                → 即時進度推送                  │  │
+│  │    ├─ progress event  → {value, max}                │  │
+│  │    ├─ executing event → {node, prompt_id}           │  │
+│  │    └─ executed event  → {output: {images}}          │  │
+│  │                                                       │  │
+│  │  File System:                                         │  │
+│  │  - input/  → 接收上傳圖片                            │  │
+│  │  - output/ → 生成結果輸出                            │  │
+│  └──────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🔄 完整任務生命週期流程
+
+### 1️⃣ 任務提交階段
+```
+用戶操作 (Frontend)
+  ↓
+填寫 Prompt + 上傳圖片 + 設定參數 (Model, Seed, Aspect Ratio)
+  ↓
+點擊 "Generate" 按鈕
+  ↓
+POST /api/generate {workflow, prompt, images, ...}
+  ↓
+Backend API 接收請求
+  ↓
+1. 驗證參數格式
+2. 生成唯一 Job ID (UUID)
+3. 寫入 MySQL jobs 表 (status: "queued")
+4. 推送到 Redis Queue (RPUSH studio_jobs)
+5. 初始化 Redis Hash (job:status:{job_id})
+  ↓
+返回 202 {"job_id": "xxx", "status": "queued"}
+  ↓
+前端開始輪詢 GET /api/status/{job_id} (每 2 秒)
+```
+
+### 2️⃣ 任務處理階段
+```
+Worker 主迴圈監聽 (BLPOP studio_jobs)
+  ↓
+取得任務 JSON (阻塞式等待)
+  ↓
+logger.info("🚀 開始處理任務: {job_id}")
+  ↓
+更新狀態: processing (10% - 開始處理)
+  ↓
+處理上傳圖片 (15%)
+  ├─ 解碼 Base64 → 存到 ComfyUI/input/upload_{uuid}.png
+  └─ logger.info("📷 處理了 {count} 張輸入圖片")
+  ↓
+解析 Workflow JSON (20%)
+  ├─ 載入對應模板 (text_to_image, face_swap, etc.)
+  ├─ 注入參數: prompt, seed, model, aspect_ratio
+  └─ 注入圖片路徑: IMAGE_NODE_MAP 映射
+  ↓
+提交到 ComfyUI (30%)
+  ├─ POST http://localhost:8188/prompt
+  ├─ 獲得 prompt_id
+  └─ logger.info("✅ 任務已提交到 ComfyUI: {prompt_id}")
+  ↓
+WebSocket 監聽進度 (30-95%)
+  ├─ 連接 ws://localhost:8188/ws?clientId={client_id}
+  ├─ 接收 progress 事件: {"value": X, "max": Y}
+  ├─ 計算百分比: int((X / Y) * 100)
+  ├─ 更新 Redis: HSET job:status:{job_id} progress {30-95}
+  └─ 前端即時顯示: "🔄 Processing... 65%"
+  ↓
+任務完成 (ComfyUI)
+  ├─ 接收 executed 事件: {"output": {"images": [...]}}
+  ├─ logger.info("🎉 ComfyUI 任務完成")
+  └─ 獲取輸出圖片資訊
+  ↓
+複製輸出圖片 (95%)
+  ├─ 來源: ComfyUI/output/{filename}.png
+  ├─ 目標: storage/outputs/{job_id}_{filename}.png
+  ├─ 智能選擇: 優先帶 subfolder 的正式輸出
+  └─ logger.info(f"📷 收到 {len(images)} 張輸出圖片")
+  ↓
+更新最終狀態 (100%)
+  ├─ Redis: HSET job:status:{job_id} status "finished"
+  ├─ Redis: HSET job:status:{job_id} image_url "/outputs/{filename}"
+  ├─ MySQL: UPDATE jobs SET status="finished", output_path="..."
+  └─ logger.info("✅ 任務完成: {job_id}")
+```
+
+### 3️⃣ 結果展示階段
+```
+前端輪詢檢測到 status: "finished"
+  ↓
+停止輪詢
+  ↓
+解析 image_url: "/outputs/{filename}.png"
+  ↓
+構建完整 URL: API_BASE + image_url
+  ↓
+顯示結果圖片
+  ├─ 單張: grid-cols-1 (置中顯示)
+  ├─ 2張: grid-cols-2 (雙欄)
+  └─ 3-4張: grid-cols-2 grid-rows-2 (2×2 網格)
+  ↓
+提供操作按鈕
+  ├─ Download (下載到本地)
+  └─ Generate Again (重新生成)
+  ↓
+同步到 Personal Gallery
+  ├─ 顯示縮圖 + 提示詞
+  ├─ 狀態標記 (✅ Finished, ❌ Failed)
+  └─ Remix 按鈕 (重新使用參數)
+```
+
+### 4️⃣ 錯誤處理流程
+```
+任何階段發生錯誤
+  ↓
+Worker 捕獲 Exception
+  ↓
+logger.error(f"❌ 任務失敗: {error}", exc_info=True)
+  ↓
+更新狀態
+  ├─ Redis: HSET job:status:{job_id} status "failed"
+  ├─ Redis: HSET job:status:{job_id} error "{error_message}"
+  └─ MySQL: UPDATE jobs SET status="failed"
+  ↓
+前端顯示錯誤訊息
+  └─ "❌ Generation Failed: {error}"
+  ↓
+ComfyUI 連線失敗 → 自動重試 1 次 (5秒延遲)
+```
+
+### 5️⃣ 自動維護流程
+```
+Worker 啟動時
+  ↓
+cleanup_old_files()
+  ├─ 掃描 storage/inputs (刪除 > 24h)
+  ├─ 掃描 storage/outputs (刪除 > 30天)
+  ├─ 掃描 ComfyUI/input/upload_* (刪除 > 1h)
+  ├─ 標記資料庫 is_deleted = TRUE (軟刪除)
+  └─ logger.info("🧹 清理了 {count} 個檔案")
+  ↓
+每小時定期執行 cleanup_old_files()
+```
+
+---
+
+## 📝 日誌系統 (Phase 4 新增)
+
+### Backend 日誌配置
+
+**檔案位置**: `logs/backend.log`
+
+**輪轉策略**:
+- 單檔最大: 5MB
+- 保留備份: 3 份 (backend.log.1, backend.log.2, backend.log.3)
+- 編碼: UTF-8
+
+**記錄內容**:
+```
+2026-01-05 10:30:15,123 - backend.app - INFO - POST /api/generate - 202
+2026-01-05 10:30:17,456 - backend.app - INFO - GET /api/status/abc-123 - 200
+2026-01-05 10:30:20,789 - backend.app - ERROR - Database connection failed
+Traceback (most recent call last):
+  ...
+```
+
+### Worker 日誌配置
+
+**檔案位置**: `logs/worker.log`
+
+**輪轉策略**:
+- 單檔最大: 5MB
+- 保留備份: 3 份
+- 編碼: UTF-8
+
+**記錄內容**:
+```
+2026-01-05 10:30:15,123 - worker.main - INFO - ============================================================
+2026-01-05 10:30:15,124 - worker.main - INFO - Worker 日誌系統已啟動
+2026-01-05 10:30:15,125 - worker.main - INFO - 日誌檔案位置: D:\...\logs\worker.log
+2026-01-05 10:30:16,200 - worker.main - INFO - 🚀 開始處理任務: abc-123
+2026-01-05 10:30:16,250 - worker.main - INFO - 📷 處理了 2 張輸入圖片
+2026-01-05 10:30:17,100 - worker.main - INFO - ✅ 任務已提交到 ComfyUI: prompt-456
+2026-01-05 10:30:25,500 - worker.main - INFO - 📷 收到 4 張輸出圖片
+2026-01-05 10:30:26,000 - worker.main - INFO - ✅ 任務完成: abc-123
+```
+
+### 日誌級別說明
+
+| 級別 | 用途 | 範例 |
+|------|------|------|
+| **INFO** | 正常操作記錄 | 任務開始、API 請求、任務完成 |
+| **WARNING** | 非致命警告 | 重試操作、降級功能 |
+| **ERROR** | 嚴重錯誤 | 任務失敗、連線中斷、Exception |
+
+### 查看日誌指令
+
+```powershell
+# 即時監控 Backend 日誌
+Get-Content logs\backend.log -Tail 50 -Wait
+
+# 即時監控 Worker 日誌
+Get-Content logs\worker.log -Tail 50 -Wait
+
+# 搜尋錯誤記錄
+Select-String -Path logs\*.log -Pattern "ERROR"
+
+# 查看特定任務的日誌
+Select-String -Path logs\worker.log -Pattern "abc-123"
+```
+
+---
+
+## 💻 系統需求
+
+| 項目 | 最低需求 | 建議配置 |
+|------|---------|---------|
+| 作業系統 | Windows 10/11 | Windows 11 |
+| Python | 3.10+ | 3.11 |
+| 顯卡 | GTX 1060 6GB | RTX 3060 12GB+ |
+| RAM | 16GB | 32GB |
+| Docker | Docker Desktop | Docker Desktop |
+
+### 必要軟體
+
+- [Python 3.10+](https://www.python.org/downloads/)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+- [ComfyUI](https://github.com/comfyanonymous/ComfyUI)
+- [VS Code](https://code.visualstudio.com/) + Live Server 擴展
+
+---
+
+## 📦 詳細安裝
+
+### 1. Clone 專案
+
+```powershell
+git clone <repository-url>
+cd 2512_ComfyUISum
+```
+
+### 2. 建立虛擬環境
+
+```powershell
+python -m venv venv
+.\venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+### 3. 設定環境變數
+
+```powershell
+# 複製範本並編輯
+copy .env.example .env
+```
+
+`.env` 內容：
+```ini
+# Redis Configuration
+REDIS_PASSWORD=mysecret
+REDIS_HOST=localhost
+REDIS_PORT=6379
+
+# MySQL Configuration
+DB_HOST=localhost
+DB_PORT=3306
+DB_USER=studio_user
+DB_PASSWORD=studio_password
+DB_NAME=studio_db
+
+# ComfyUI Configuration
+COMFYUI_HOST=http://127.0.0.1:8188
+COMFYUI_ROOT=D:\02_software\ComfyUI_windows_portable\ComfyUI
+COMFYUI_INPUT_DIR=D:\02_software\ComfyUI_windows_portable\ComfyUI\input
+COMFYUI_OUTPUT_DIR=D:\02_software\ComfyUI_windows_portable\ComfyUI\output
+
+# Application Settings
+STORAGE_BASE_PATH=./storage
+LOG_LEVEL=INFO
+```
+
+### 4. 啟動 Docker 服務
+
+```powershell
+# 啟動所有 Docker 服務 (Redis + MySQL)
+docker-compose up -d
+
+# 驗證 Redis 連接
+docker exec studio-redis redis-cli -a mysecret ping
+# 應該回應: PONG
+
+# 驗證 MySQL 連接
+docker exec studio-mysql mysql -uroot -proot_password -e "SHOW DATABASES;"
+# 應該看到 studio_db 資料庫
+```
+
+**首次啟動提醒**:
+- MySQL 會自動初始化資料庫和 `jobs` 表
+- 確保 3306 (MySQL), 6379 (Redis), 5000 (Backend) 端口未被占用
+- 可使用 DBeaver 連接 `localhost:3306` 查看資料庫內容
+
+### 5. 設定 ComfyUI
+
+確保 ComfyUI 啟動參數包含：
+```
+--listen --enable-cors-header *
+```
+
+---
+
+## 🔧 啟動服務
+
+### 完整啟動流程（推薦）
+
+#### Step 1: 啟動 ComfyUI
+```powershell
+# 進入 ComfyUI 目錄並啟動 (API 模式)
+D:\02_software\ComfyUI_windows_portable\run_nvidia_gpu.bat
+
+# 確認啟動成功：瀏覽器開啟 http://127.0.0.1:8188
+```
+
+**重要**: 確保 ComfyUI 啟動參數包含：
+```
+--listen --enable-cors-header *
+```
+
+#### Step 2: 啟動 Docker 服務
+```powershell
+# 啟動 Redis + MySQL
+docker-compose up -d
+
+# 查看服務狀態
+docker-compose ps
+
+# 應該看到:
+# studio-redis   running   0.0.0.0:6379->6379/tcp
+# studio-mysql   running   0.0.0.0:3306->3306/tcp
+```
+
+#### Step 3: 啟動 Backend + Worker
+
+**方法 1：一鍵啟動（推薦）**
+```powershell
+.\start_all.bat
+```
+這會在獨立視窗啟動 Backend API 和 Worker，並自動配置日誌系統。
+
+**方法 2：手動啟動（開發除錯用）**
+
+**終端 1 - Backend API：**
+```powershell
+.\venv\Scripts\activate
+python backend/src/app.py
+
+# 成功訊息:
+#  * Running on http://0.0.0.0:5000
+#  * Restarting with stat
+# Backend 日誌: logs/backend.log
+```
+
+**終端 2 - Worker：**
+```powershell
+.\venv\Scripts\activate
+python worker/src/main.py
+
+# 成功訊息:
+# Worker 日誌系統已啟動
+# 日誌檔案位置: D:\...\logs\worker.log
+# Worker 已啟動，等待任務...
+```
+
+#### Step 4: 開啟前端
+
+**方法 1: VS Code Live Server**
+1. 在 VS Code 中開啟 `frontend/index.html`
+2. 右鍵選擇 "Open with Live Server"
+3. 瀏覽器自動開啟: `http://127.0.0.1:5500/frontend/index.html`
+
+**方法 2: 直接開啟**
+```powershell
+# 使用預設瀏覽器開啟
+start frontend/index.html
+```
+
+### 服務狀態檢查
+
+```powershell
+# 檢查所有服務健康狀態
+curl http://localhost:5000/health
+
+# 正常回應:
+# {"status":"ok","redis":"healthy","mysql":"healthy"}
+
+# 查看即時日誌
+Get-Content logs\backend.log -Tail 50 -Wait  # Backend 日誌
+Get-Content logs\worker.log -Tail 50 -Wait   # Worker 日誌
+```
+
+---
+
+## 🎯 使用範例
+
+### 範例 1: Text to Image (文字生成圖片)
+
+1. **選擇工作流**: Dashboard → "Text to Image"
+2. **填寫提示詞**:
+   ```
+   a futuristic cyberpunk city at night, neon lights, rain, 8k, highly detailed
+   ```
+3. **設定參數**:
+   - Model: `z-image-turbo-fp8`
+   - Aspect Ratio: `16:9`
+   - Seed: `-1` (隨機)
+   - Batch Size: `2` (生成 2 張)
+4. **點擊 Generate** → 等待進度條完成
+5. **查看結果**: 顯示 2 張圖片，可下載或重新生成
+
+### 範例 2: Face Swap (換臉)
+
+1. **選擇工作流**: Dashboard → "Face Swap"
+2. **上傳圖片**:
+   - Source Image: 上傳臉部特寫照片
+   - Target Image: 上傳要替換的全身照
+3. **填寫提示詞**: (可選，增強效果)
+   ```
+   high quality portrait, professional photo
+   ```
+4. **點擊 Generate** → 等待處理
+5. **查看結果**: 顯示換臉後的圖片
+
+### 範例 3: 查看歷史記錄
+
+1. 點擊 **Gallery** 標籤
+2. 瀏覽所有歷史生成記錄
+3. 點擊 **Remix** 按鈕重新使用參數
+4. 自動跳轉到對應工具並填充原始設定
+
+---
+
+## 🛠️ 開發除錯技巧
+
+### 1. 檢查 ComfyUI 連線
+
+```powershell
+# 測試 ComfyUI API
+curl http://127.0.0.1:8188/system_stats
+
+# 應該返回系統統計資訊 (JSON)
+```
+
+### 2. 檢查 Redis 狀態
+
+```powershell
+# 進入 Redis CLI
+docker exec -it studio-redis redis-cli -a mysecret
+
+# 查看佇列長度
+LLEN studio_jobs
+
+# 查看任務狀態
+HGETALL job:status:{job_id}
+
+# 查看所有 key
+KEYS *
+```
+
+### 3. 檢查 MySQL 資料
+
+```powershell
+# 進入 MySQL CLI
+docker exec -it studio-mysql mysql -uroot -proot_password studio_db
+
+# 查看所有任務
+SELECT id, prompt, workflow, status, created_at FROM jobs ORDER BY created_at DESC LIMIT 10;
+
+# 查看失敗任務
+SELECT * FROM jobs WHERE status='failed';
+
+# 統計任務狀態
+SELECT status, COUNT(*) FROM jobs GROUP BY status;
+```
+
+### 4. 監控日誌輸出
+
+```powershell
+# 同時監控兩個日誌檔案
+Get-Content logs\backend.log, logs\worker.log -Tail 20 -Wait
+
+# 只看錯誤訊息
+Select-String -Path logs\*.log -Pattern "ERROR" | Select-Object -Last 10
+
+# 搜尋特定任務的日誌
+Select-String -Path logs\worker.log -Pattern "abc-123-def-456"
+```
+
+### 5. 常見問題診斷
+
+**問題**: Worker 無法連接 ComfyUI
+```powershell
+# 診斷腳本
+python worker/src/check_comfy_connection.py
+
+# 檢查 ComfyUI 是否監聽
+netstat -ano | findstr :8188
+```
+
+**問題**: Redis 連接失敗
+```powershell
+# 檢查 Redis 容器狀態
+docker logs studio-redis
+
+# 重啟 Redis
+docker-compose restart redis
+```
+
+**問題**: MySQL 初始化失敗
+```powershell
+# 查看 MySQL 日誌
+docker logs studio-mysql
+
+# 完全重置資料庫
+docker-compose down
+Remove-Item -Recurse mysql_data
+docker-compose up -d
+```
+
+---
+
+## 🎯 功能說明
+
+### 支援的工作流
+
+| 工具 | 說明 | 需要圖片 |
+|------|------|---------|
+| Text to Image | 文字生成圖片 | 無 |
+| Face Swap | 換臉 | Source (頭) + Target (身體) |
+| Multi-Blend | 多圖融合 | Image A + B + C |
+| Sketch to Image | 草稿轉精稿 | 草稿圖 |
+| Single Image Edit | 單圖編輯 | 原圖 |
+
+### 參數設定
+
+| 參數 | 選項 | 說明 |
+|------|------|------|
+| Model | turbo_fp8 | 使用的模型 |
+| Aspect Ratio | 1:1, 16:9, 9:16, 2:3 | 輸出比例 |
+| Seed | -1 (隨機) 或指定數字 | 生成種子 |
+| Batch Size | 1-4 | 批次數量 |
+
+---
+
+## 📡 API 文檔
+
+### POST /api/generate
+
+提交生成任務。
+
+**Request:**
+```json
+{
+    "workflow": "text_to_image",
+    "prompt": "a beautiful sunset",
+    "seed": -1,
+    "model": "turbo_fp8",
+    "aspect_ratio": "16:9",
+    "batch_size": 1,
+    "images": {
+        "source": "data:image/png;base64,..."
+    }
+}
+```
+
+**Response (202):**
+```json
+{
+    "job_id": "uuid...",
+    "status": "queued"
+}
+```
+
+### GET /api/status/{job_id}
+
+查詢任務狀態。
+
+**Response:**
+```json
+{
+    "status": "finished",
+    "progress": 100,
+    "image_url": "/outputs/uuid.png"
+}
+```
+
+### GET /api/history
+
+獲取歷史記錄（新功能！）
+
+**Query Parameters:**
+- `limit`: 返回數量（預設 50，最大 100）
+- `offset`: 偏移量（預設 0，用於分頁）
+
+**Response:**
+```json
+{
+    "total": 120,
+    "limit": 50,
+    "offset": 0,
+    "jobs": [
+        {
+            "id": "uuid",
+            "prompt": "a cyberpunk cat",
+            "workflow": "text_to_image",
+            "model": "turbo_fp8",
+            "aspect_ratio": "16:9",
+            "batch_size": 1,
+            "seed": 12345,
+            "status": "finished",
+            "output_path": "/outputs/abc.png,/outputs/def.png",
+            "created_at": "2026-01-02T10:30:00",
+            "updated_at": "2026-01-02T10:35:00"
+        }
+    ]
+}
+```
+
+### GET /health
+
+健康檢查（強化版）
+
+**Response:**
+```json
+{
+    "status": "ok",
+    "redis": "healthy",
+    "mysql": "healthy"
+}
+```
+
+### GET /outputs/{filename}
+
+獲取生成的圖片檔案。
+
+---
+
+## 🔧 維護指南
+
+### 日常維護指令
+
+```powershell
+# 查看 Docker 服務狀態
+docker-compose ps
+
+# 查看 Redis 狀態與記憶體使用
+docker exec studio-redis redis-cli -a mysecret info memory
+
+# 清除所有任務狀態 (慎用！)
+docker exec studio-redis redis-cli -a mysecret FLUSHDB
+
+# 查看佇列長度
+docker exec studio-redis redis-cli -a mysecret LLEN studio_jobs
+
+# 備份 MySQL 資料庫
+docker exec studio-mysql mysqldump -uroot -proot_password studio_db > backup_$(Get-Date -Format 'yyyyMMdd').sql
+
+# 查看磁碟空間使用
+Get-ChildItem storage\outputs -Recurse | Measure-Object -Property Length -Sum
+Get-ChildItem logs -Recurse | Measure-Object -Property Length -Sum
+```
+
+### 日誌管理
+
+**日誌輪轉配置**:
+- 自動輪轉: 單檔達 5MB 時自動建立新檔
+- 保留策略: 保留最近 3 份備份 (總共 4 個檔案)
+- 命名格式: `backend.log`, `backend.log.1`, `backend.log.2`, `backend.log.3`
+
+**手動清理舊日誌**:
+```powershell
+# 刪除超過 7 天的日誌備份
+Get-ChildItem logs\*.log.* | Where-Object {$_.LastWriteTime -lt (Get-Date).AddDays(-7)} | Remove-Item
+
+# 壓縮舊日誌
+Compress-Archive -Path logs\*.log.* -DestinationPath logs_archive_$(Get-Date -Format 'yyyyMMdd').zip
+```
+
+**日誌分析範例**:
+```powershell
+# 統計每小時請求量
+Select-String -Path logs\backend.log -Pattern "GET|POST" | 
+  ForEach-Object {$_.Line.Substring(0,13)} | 
+  Group-Object | 
+  Sort-Object Count -Descending
+
+# 找出最慢的 API 請求
+Select-String -Path logs\backend.log -Pattern "slow|timeout"
+
+# 統計任務成功率
+$total = (Select-String -Path logs\worker.log -Pattern "開始處理任務").Count
+$success = (Select-String -Path logs\worker.log -Pattern "任務完成").Count
+Write-Output "成功率: $($success/$total*100)%"
+```
+
+### 清理暫存檔案
+
+Worker 會自動清理過期檔案：
+- **暫存圖片** (`storage/inputs`): 保留 24 小時
+- **輸出圖片** (`storage/outputs`): 保留 30 天
+- **ComfyUI 暫存** (`ComfyUI/input/upload_*`): 保留 1 小時
+
+**清理時機**:
+- Worker 啟動時執行一次
+- 之後每小時自動執行
+
+**手動清理**:
+```powershell
+# 清理 ComfyUI input 暫存
+Remove-Item "D:\02_software\ComfyUI_windows_portable\ComfyUI\input\upload_*.png" -Force
+
+# 清理輸出目錄 (慎用！會刪除所有圖片)
+Remove-Item "storage\outputs\*.png" -Force
+
+# 清理特定日期前的檔案
+$cutoffDate = (Get-Date).AddDays(-30)
+Get-ChildItem storage\outputs -File | 
+  Where-Object {$_.LastWriteTime -lt $cutoffDate} | 
+  Remove-Item -Force
+
+# 查看清理統計
+$files = Get-ChildItem storage\outputs -File
+Write-Output "總檔案數: $($files.Count)"
+Write-Output "總大小: $([math]::Round(($files | Measure-Object -Property Length -Sum).Sum / 1MB, 2)) MB"
+```
+
+### 服務重啟
+
+```powershell
+# 重啟所有 Docker 服務
+docker-compose restart
+
+# 重啟特定服務
+docker-compose restart redis
+docker-compose restart mysql
+
+# 重啟 Backend (開發模式會自動熱重載)
+# 修改 app.py 後會自動重啟，無需手動操作
+
+# 重啟 Worker (需手動重啟)
+# Ctrl+C 關閉 Worker 終端
+python worker/src/main.py
+
+# 重啟 ComfyUI
+# 關閉 ComfyUI 視窗後重新執行
+D:\02_software\ComfyUI_windows_portable\run_nvidia_gpu.bat
+
+# 查看服務啟動順序
+# 1. ComfyUI (Port 8188)
+# 2. Redis + MySQL (docker-compose up -d)
+# 3. Backend (Port 5000)
+# 4. Worker
+# 5. Frontend (Live Server Port 5500)
+```
+
+### 資料庫維護
+
+```powershell
+# 優化 MySQL 表格
+docker exec studio-mysql mysql -uroot -proot_password -e "OPTIMIZE TABLE studio_db.jobs;"
+
+# 重建索引
+docker exec studio-mysql mysql -uroot -proot_password -e "ANALYZE TABLE studio_db.jobs;"
+
+# 查看表格大小
+docker exec studio-mysql mysql -uroot -proot_password -e "
+  SELECT 
+    table_name AS 'Table',
+    ROUND(((data_length + index_length) / 1024 / 1024), 2) AS 'Size (MB)'
+  FROM information_schema.TABLES
+  WHERE table_schema = 'studio_db';
+"
+
+# 清理軟刪除的記錄 (永久刪除超過 90 天的任務)
+docker exec studio-mysql mysql -uroot -proot_password studio_db -e "
+  DELETE FROM jobs 
+  WHERE is_deleted = TRUE 
+  AND updated_at < DATE_SUB(NOW(), INTERVAL 90 DAY);
+"
+```
+
+---
+
+## ❓ 故障排除
+
+### ERR_CONNECTION_REFUSED (前端無法連接 Backend)
+
+**錯誤訊息**: `ERR_CONNECTION_REFUSED` 或 `Network Error`
+
+**原因**: Backend 未啟動或端口被占用
+
+**解決方案**:
+```powershell
+# 1. 檢查 Backend 是否運行
+netstat -ano | findstr :5000
+
+# 2. 如果沒有輸出，啟動 Backend
+python backend/src/app.py
+
+# 3. 如果端口被占用，找出並關閉占用程序
+$processId = (Get-NetTCPConnection -LocalPort 5000).OwningProcess
+Stop-Process -Id $processId -Force
+
+# 4. 確認 Backend 健康狀態
+curl http://localhost:5000/health
+```
+
+---
+
+### Redis 連接失敗
+
+**錯誤訊息**: `ConnectionError: Error connecting to Redis` 或 `Connection refused`
+
+**原因**: Redis 容器未運行或密碼錯誤
+
+**解決方案**:
+```powershell
+# 1. 檢查 Redis 容器狀態
+docker ps | findstr redis
+
+# 2. 如果未運行，啟動 Redis
+docker-compose up -d redis
+
+# 3. 測試 Redis 連接
+docker exec studio-redis redis-cli -a mysecret ping
+# 應該回應: PONG
+
+# 4. 查看 Redis 日誌
+docker logs studio-redis --tail 50
+
+# 5. 如果仍然失敗，重啟 Redis
+docker-compose restart redis
+```
+
+---
+
+### MySQL 連接失敗
+
+**錯誤訊息**: `Can't connect to MySQL server` 或 `Access denied`
+
+**原因**: MySQL 容器未就緒或憑證錯誤
+
+**解決方案**:
+```powershell
+# 1. 檢查 MySQL 容器狀態
+docker ps | findstr mysql
+
+# 2. 等待 MySQL 初始化完成 (首次啟動需要 30-60 秒)
+docker logs studio-mysql --tail 50
+
+# 3. 測試 MySQL 連接
+docker exec studio-mysql mysql -uroot -proot_password -e "SHOW DATABASES;"
+
+# 4. 檢查資料庫是否存在
+docker exec studio-mysql mysql -uroot -proot_password -e "USE studio_db; SHOW TABLES;"
+
+# 5. 如果表格不存在，Backend 會在首次啟動時自動建立
+
+# 6. 完全重置資料庫 (慎用！會刪除所有資料)
+docker-compose down
+Remove-Item -Recurse -Force mysql_data
+docker-compose up -d
+```
+
+---
+
+### ComfyUI 連接失敗
+
+**錯誤訊息**: Worker 日誌顯示 `❌ 連接 ComfyUI 失敗` 或 `Connection refused`
+
+**原因**: ComfyUI 未啟動、未開啟 API 模式、或端口錯誤
+
+**解決方案**:
+```powershell
+# 1. 確認 ComfyUI 正在運行
+netstat -ano | findstr :8188
+
+# 2. 測試 ComfyUI API
+curl http://127.0.0.1:8188/system_stats
+
+# 3. 確認 ComfyUI 啟動參數包含 API 模式
+# 檢查啟動腳本: run_nvidia_gpu.bat
+# 應該包含: --listen --enable-cors-header *
+
+# 4. 如果使用 Docker，確認網路設定
+# Worker 應該使用 host.docker.internal:8188 連接宿主機的 ComfyUI
+
+# 5. 使用診斷工具測試連接
+python worker/src/check_comfy_connection.py
+```
+
+---
+
+### Gallery 圖片無法顯示
+
+**錯誤訊息**: Gallery 顯示空白或 404 錯誤
+
+**原因**: 圖片路徑格式錯誤或檔案不存在
+
+**解決方案**:
+```powershell
+# 1. 檢查 Backend API 回傳的路徑格式
+curl http://localhost:5000/api/history?limit=5
+
+# output_path 應該是: "/outputs/filename.png"
+
+# 2. 確認圖片檔案存在
+Get-ChildItem storage\outputs
+
+# 3. 測試直接存取圖片
+curl http://localhost:5000/outputs/filename.png
+
+# 4. 檢查前端 API_BASE 配置
+# 開啟 frontend/index.html
+# 確認: const API_BASE = 'http://localhost:5000';
+
+# 5. 查看瀏覽器 Console 的錯誤訊息 (F12)
+```
+
+---
+
+### 頁面刷新跳回 Dashboard
+
+**原因**: VS Code Live Server 監聽到檔案變動自動重載
+
+**解決方案**:
+```json
+// .vscode/settings.json 已配置忽略規則
+{
+  "liveServer.settings.ignoreFiles": [
+    "**/.git/**",
+    "**/.vscode/**",
+    "**/node_modules/**",
+    "**/storage/**",
+    "**/logs/**",
+    "**/mysql_data/**",
+    "**/redis_data/**"
+  ]
+}
+```
+
+如果仍然發生：
+```powershell
+# 重啟 Live Server
+# VS Code: Ctrl+Shift+P → "Live Server: Stop" → "Live Server: Open with Live Server"
+```
+
+---
+
+### 任務卡在 Processing 狀態
+
+**原因**: Worker 崩潰、ComfyUI 錯誤、或 WebSocket 連接中斷
+
+**解決方案**:
+```powershell
+# 1. 查看 Worker 日誌
+Get-Content logs\worker.log -Tail 100
+
+# 2. 查看 Redis 任務狀態
+docker exec studio-redis redis-cli -a mysecret HGETALL job:status:{job_id}
+
+# 3. 檢查 ComfyUI 是否有錯誤
+# 查看 ComfyUI 視窗的 Terminal 輸出
+
+# 4. 手動取消任務
+curl -X POST http://localhost:5000/api/cancel/{job_id}
+
+# 5. 清空佇列重新開始
+docker exec studio-redis redis-cli -a mysecret DEL studio_jobs
+docker exec studio-redis redis-cli -a mysecret KEYS "job:status:*" | 
+  ForEach-Object {docker exec studio-redis redis-cli -a mysecret DEL $_}
+
+# 6. 重啟 Worker
+# Ctrl+C 停止 Worker
+python worker/src/main.py
+```
+
+---
+
+### 圖片未正確注入到 Workflow
+
+**錯誤訊息**: ComfyUI 錯誤 `Node XXX: required input is missing`
+
+**原因**: Workflow JSON 的 IMAGE 節點 ID 與 `json_parser.py` 的映射不匹配
+
+**解決方案**:
+```powershell
+# 1. 確認前端 toolConfig 中的 uploads.id
+# 開啟 frontend/index.html，搜尋對應的工作流配置
+
+# 2. 確認 Worker 的 IMAGE_NODE_MAP
+# 開啟 worker/src/json_parser.py，查看映射表:
+# IMAGE_NODE_MAP = {
+#     "face_swap": {"source": "11", "target": "10"},
+#     ...
+# }
+
+# 3. 檢查 Workflow JSON 檔案
+# 開啟 ComfyUIworkflow/face_swap_*.json
+# 找到 LoadImage 節點的 ID，確認是否匹配
+
+# 4. 查看 Worker 日誌的圖片處理記錄
+Select-String -Path logs\worker.log -Pattern "處理了.*張輸入圖片"
+
+# 5. 測試時添加 Debug 輸出
+# 在 json_parser.py 的 parse_workflow() 函數中添加:
+# logger.info(f"注入圖片: {node_id} -> {filename}")
+```
+
+---
+
+### 效能問題：生成速度緩慢
+
+**原因**: GPU 資源不足、模型載入慢、或多任務並行
+
+**解決方案**:
+```powershell
+# 1. 檢查 GPU 使用率
+nvidia-smi
+
+# 2. 確認 ComfyUI 使用正確的 GPU
+# 啟動腳本應該使用 run_nvidia_gpu.bat 而非 CPU 版本
+
+# 3. 限制併發任務數量
+# 只運行一個 Worker 實例，避免多任務競爭 GPU
+
+# 4. 優化模型選擇
+# 使用 FP8 量化模型 (z-image-turbo-fp8) 而非完整精度模型
+
+# 5. 清理 ComfyUI 模型快取
+# 重啟 ComfyUI 以釋放 VRAM
+```
+
+---
+
+### Docker 磁碟空間不足
+
+**錯誤訊息**: `no space left on device`
+
+**解決方案**:
+```powershell
+# 1. 查看 Docker 磁碟使用
+docker system df
+
+# 2. 清理未使用的映像
+docker image prune -a
+
+# 3. 清理未使用的容器
+docker container prune
+
+# 4. 清理未使用的卷
+docker volume prune
+
+# 5. 完整清理 (慎用！)
+docker system prune -a --volumes
+
+# 6. 清理專案輸出圖片
+Remove-Item storage\outputs\* -Force
+
+# 7. 清理舊日誌
+Remove-Item logs\*.log.* -Force
+```
+
+---
+
+## 📝 版本記錄
+
+### Phase 4 - Stability & Connectivity (2026-01-05) ✅ 已完成
+
+- ✅ **完整日誌系統**: Backend + Worker RotatingFileHandler (5MB × 3 backups)
+- ✅ **Gallery 圖片修復**: 輸出路徑格式化與前端 URL 構建優化
+- ✅ **結構化日誌**: 所有 print() 替換為 logger.info/warning/error()
+- ✅ **日誌基礎設施**: logs/ 目錄建立與 Docker volume 掛載
+- ✅ **HTTP 請求日誌**: 記錄所有 API 請求的 Method, Path, Status
+- ✅ **任務生命週期日誌**: 開始、進度、完成、失敗的完整記錄
+- ✅ **代碼品質提升**: 統一日誌格式與錯誤處理流程
+
+**日誌系統功能**:
+- 自動輪轉管理 (單檔 5MB 上限)
+- 保留最近 3 份備份
+- UTF-8 編碼支援中文
+- 時間戳 + 模組名稱 + 級別 + 訊息格式
+- 支援 Stack Trace 記錄
+
+**Gallery 優化**:
+- Backend API 自動提取檔名並格式化為 `/outputs/filename.png`
+- Frontend 正確構建完整 URL (`API_BASE + output_path`)
+- 添加 `loading="lazy"` 圖片延遲載入
+- 改善錯誤處理與 fallback 機制
+
+---
+
+### Phase 3 - Data & Intelligence (2026-01-02) ✅ 已完成
+
+- ✅ **MySQL 持久化**: Jobs 表設計與連接池整合
+- ✅ **歷史記錄 API**: `GET /api/history` 支援分頁 (limit/offset)
+- ✅ **Personal Gallery**: 響應式網格佈局與狀態顏色編碼
+- ✅ **Remix 功能**: 點擊歷史記錄重新使用參數
+- ✅ **資料庫同步清理**: 軟刪除機制 (is_deleted) 保留歷史
+- ✅ **錯誤重試**: ComfyUI 連接失敗自動重試 1 次 (5秒延遲)
+- ✅ **Docker 優化**: MySQL 整合與 Backend Healthcheck
+- ✅ **健康檢查**: 監控 Redis + MySQL 連接狀態
+
+**資料庫架構**:
+```sql
+CREATE TABLE jobs (
+    id VARCHAR(36) PRIMARY KEY,
+    prompt TEXT,
+    workflow VARCHAR(50),
+    model VARCHAR(100),
+    aspect_ratio VARCHAR(10),
+    batch_size INT DEFAULT 1,
+    seed INT DEFAULT -1,
+    status VARCHAR(20),
+    output_path TEXT,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP ON UPDATE NOW(),
+    is_deleted BOOLEAN DEFAULT FALSE
+);
+```
+
+---
+
+### Phase 2 - Maturity (2024-12-31) ✅ 已完成
+
+- ✅ **即時進度條**: WebSocket 監聽 ComfyUI 執行進度 (0-100%)
+- ✅ **動態模型列表**: 掃描 ComfyUI 模型目錄 (checkpoints + unet)
+- ✅ **任務取消**: `POST /api/cancel/{job_id}` + ComfyUI interrupt
+- ✅ **批次生成**: 支援 1-4 張圖片批次輸出
+- ✅ **Docker 容器化**: Backend + Worker + Redis 完整編排
+- ✅ **自動清理**: 暫存檔案 24h，輸出圖片 30天
+- ✅ **智能輸出選擇**: 優先選擇帶 subfolder 的正式輸出
+
+---
+
+### Phase 1 - MVP (2024-12-31) ✅ 已完成
+
+- ✅ **基礎架構**: Docker Redis, Flask API, Worker 主迴圈
+- ✅ **通訊模組**: ComfyUI HTTP + WebSocket 客戶端
+- ✅ **前端介面**: Pro Workstation Layout (Dashboard, Canvas, Gallery, Settings)
+- ✅ **工作流支援**: Text-to-Image, Face Swap, Multi-Blend, Sketch, Single Edit
+- ✅ **一鍵啟動**: start_all.bat 腳本
+
+---
+
+## 🔮 未來展望 (Roadmap)
+
+### Phase 5 - External Access & Production (進行中)
+
+#### 優先級 1: 外部存取 ⭐ 已完成
+- [x] **Ngrok 整合**: 配置公網存取 (`ngrok http 5000`)
+  - ✅ 自動啟動腳本 `start_ngrok.bat`
+  - ✅ 自動配置更新 `update_ngrok_config.ps1`
+  - ✅ 動態 API 配置 `frontend/config.js`
+  - ✅ 整合到 `startweb.bat`
+  - ✅ 測試工具 `test_ngrok_config.bat`
+  - ✅ 完整文檔 [NGROK_SETUP.md](NGROK_SETUP.md)
+- [ ] **行動端測試**: 驗證手機瀏覽器相容性
+- [ ] **HTTPS 支援**: Nginx 反向代理 + Let's Encrypt 憑證
+- [ ] **域名綁定**: 自訂域名設定
+
+**Ngrok 快速啟動**:
+```powershell
+# 1. 啟動所有後端服務 (Docker + Backend + Worker)
+.\start_all_with_docker.bat
+
+# 2. 啟動 Ngrok 並自動配置
+.\start_ngrok.bat
+
+# 3. 啟動 Web 伺服器（或直接執行 startweb.bat 選擇模式 2）
+.\startweb.bat
+```
+
+#### 優先級 2: 效能優化
+- [ ] **Redis 連接池**: 優化 Backend 與 Worker 的 Redis 連線
+- [ ] **MySQL 索引優化**: 添加複合索引提升查詢效能
+- [ ] **圖片壓縮**: 自動壓縮輸出圖片並生成縮圖
+- [ ] **CDN 整合**: 圖片加速與分散式存儲
+- [ ] **結果快取**: 相同參數直接返回快取結果
+
+#### 優先級 3: 用戶體驗增強
+- [ ] **收藏功能**: 標記喜愛的作品並分類管理
+- [ ] **Prompt 模板庫**: 預設風格模板快速應用
+- [ ] **批次下載**: 打包下載多張圖片為 ZIP
+- [ ] **分享連結**: 生成公開分享連結（帶過期時間）
+- [ ] **Gallery 分頁**: Infinite Scroll 或頁碼導航
+
+---
+
+### Phase 6 - Advanced Features (規劃中)
+
+#### 優先級 1: 工作流擴展
+- [ ] **Image to Video**: 整合 Kling / Veo3 API
+- [ ] **Super Resolution**: 圖片放大（4x, 8x）
+- [ ] **Style Transfer**: 風格遷移工具
+- [ ] **Background Removal**: 背景去除與替換
+- [ ] **Inpainting**: 圖片局部修復與編輯
+
+#### 優先級 2: 企業級功能
+- [ ] **多用戶系統**: 用戶註冊、登入、權限管理
+- [ ] **API Key 認證**: Token-based 認證機制
+- [ ] **使用量統計**: Dashboard 監控與報表
+- [ ] **Webhook 通知**: 任務完成回調 (Slack, Discord, Email)
+- [ ] **任務優先級**: VIP 用戶優先處理佇列
+
+#### 優先級 3: 部署擴展
+- [ ] **Kubernetes 部署**: 高可用性集群與自動擴展
+- [ ] **S3 存儲**: AWS S3 / MinIO 雲端圖片存儲
+- [ ] **監控告警**: Prometheus + Grafana 整合
+- [ ] **日誌聚合**: ELK Stack (Elasticsearch, Logstash, Kibana)
+- [ ] **併發控制**: 智能任務調度與資源限制
+
+---
+
+## � 相關文檔
+
+| 文檔 | 說明 |
+|------|------|
+| [UpdateList.md](UpdateList.md) | 詳細變更記錄與更新日誌 |
+| [STARTUP_GUIDE.md](STARTUP_GUIDE.md) | 快速啟動指南（如果存在）|
+| [backend/Readmd/API_TESTING.md](backend/Readmd/API_TESTING.md) | API 測試文檔 |
+| [openspec/project.md](openspec/project.md) | 專案規格說明 |
+| [openspec/AGENTS.md](openspec/AGENTS.md) | AI Agent 開發指令 |
+
+---
+
+## 🤝 貢獻指南
+
+### 開發工作流
+
+1. **Fork 專案** 並建立功能分支
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
+
+2. **開發與測試**
+   - 遵循現有代碼風格
+   - 添加必要的日誌記錄
+   - 確保所有功能正常運作
+
+3. **提交變更**
+   ```bash
+   git commit -m "feat: add new feature description"
+   ```
+
+4. **推送並建立 Pull Request**
+   ```bash
+   git push origin feature/your-feature-name
+   ```
+
+### Commit 訊息規範
+
+```
+<type>(<scope>): <subject>
+
+<body>
+
+<footer>
+```
+
+**Type 類型**:
+- `feat`: 新功能
+- `fix`: Bug 修復
+- `docs`: 文檔更新
+- `style`: 代碼格式調整
+- `refactor`: 代碼重構
+- `test`: 測試相關
+- `chore`: 建置工具或輔助工具變更
+
+**範例**:
+```
+feat(worker): add automatic retry mechanism for ComfyUI connection
+
+- Retry up to 3 times with 5 second delay
+- Log each retry attempt
+- Update task status to failed after all retries exhausted
+
+Closes #123
+```
+
+---
+
+## 🔐 安全建議
+
+### 生產環境部署
+
+1. **修改預設密碼**
+   ```ini
+   # .env
+   REDIS_PASSWORD=your_secure_password_here
+   DB_PASSWORD=your_database_password_here
+   ```
+
+2. **啟用防火牆規則**
+   ```powershell
+   # 只允許本地存取 Redis
+   New-NetFirewallRule -DisplayName "Redis Local Only" -Direction Inbound -LocalPort 6379 -Protocol TCP -Action Block
+   
+   # 只允許本地存取 MySQL
+   New-NetFirewallRule -DisplayName "MySQL Local Only" -Direction Inbound -LocalPort 3306 -Protocol TCP -Action Block
+   ```
+
+3. **使用 HTTPS**
+   - 配置 Nginx 反向代理
+   - 使用 Let's Encrypt 免費憑證
+   - 強制 HTTPS 重定向
+
+4. **限制 API 存取**
+   - 實作 Rate Limiting (Flask-Limiter)
+   - 添加 API Key 認證
+   - 記錄所有 API 請求日誌
+
+5. **定期備份**
+   ```powershell
+   # 自動備份腳本
+   $date = Get-Date -Format "yyyyMMdd_HHmmss"
+   docker exec studio-mysql mysqldump -uroot -proot_password studio_db > "backups/db_$date.sql"
+   Compress-Archive -Path storage\outputs -DestinationPath "backups/outputs_$date.zip"
+   ```
+
+---
+
+## 📞 聯絡與支援
+
+### 常見問題
+
+- **Q: 如何更換 ComfyUI 模型？**
+  - A: 將模型放入 `ComfyUI/models/checkpoints/` 或 `ComfyUI/models/unet/`，重啟 Backend 後會自動掃描
+
+- **Q: 可以同時運行多個 Worker 嗎？**
+  - A: 可以，但需要確保 GPU 資源足夠，否則會降低處理速度
+
+- **Q: 如何遷移到其他伺服器？**
+  - A: 備份 `mysql_data/`, `storage/outputs/`, `.env` 檔案，在新伺服器上執行 `docker-compose up -d`
+
+- **Q: 支援 AMD GPU 嗎？**
+  - A: 需要修改 ComfyUI 啟動腳本使用 ROCm 版本，其他部分無需修改
+
+### 技術支援
+
+- **GitHub Issues**: 回報 Bug 或功能請求
+- **文檔更新**: 提交 Pull Request 改進文檔
+- **社群討論**: (如有 Discord/Slack 頻道請補充連結)
+
+---
+
+## 📊 效能指標 (參考)
+
+### 測試環境
+- **GPU**: RTX 3060 12GB
+- **CPU**: Intel i7-12700
+- **RAM**: 32GB DDR4
+- **Storage**: NVMe SSD
+
+### 生成速度
+| 工作流 | 解析度 | 平均時間 | Batch Size |
+|--------|--------|---------|-----------|
+| Text to Image | 1024×1024 | 8-12秒 | 1 |
+| Text to Image | 1024×1024 | 15-20秒 | 4 |
+| Face Swap | 1024×1024 | 10-15秒 | 1 |
+| Multi-Blend | 1024×1024 | 12-18秒 | 1 |
+
+### 系統資源使用
+| 服務 | CPU | 記憶體 | 備註 |
+|------|-----|--------|------|
+| Backend | ~5% | ~100MB | Flask + Gunicorn |
+| Worker | ~10% | ~200MB | 待機狀態 |
+| Worker | ~15% | ~500MB | 處理任務時 |
+| Redis | ~2% | ~50MB | 輕量級快取 |
+| MySQL | ~3% | ~150MB | 持久化儲存 |
+| ComfyUI | ~80% | ~8GB | GPU 處理中 |
+
+---
+
+## 📄 授權
+
+MIT License
+
+Copyright (c) 2026 ComfyUI Studio
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+<div align="center">
+
+**⭐ 如果這個專案對你有幫助，請給我們一顆星星！**
+
+Made with ❤️ by ComfyUI Studio Team
+
+</div>

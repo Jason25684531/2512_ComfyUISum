@@ -181,7 +181,21 @@ def parse_workflow(
             print(f"[Parser] 注入 Prompt 到第一個 CLIPTextEncode 節點")
             prompt_injected = True
     
-    # 2. 嘗試 TextEncodeQwenImageEditPlus (Qwen Image Edit workflow)
+    # 2. 嘗試 StringConstantMultiline (用於 face_swap 等需要用戶輸入的 workflow)
+    # 注意：不要注入到 title 包含 "Trigger" 或 "trigger" 的節點，那些是預設內容
+    if not prompt_injected:
+        string_nodes = find_nodes_by_class(workflow, "StringConstantMultiline")
+        for node_id, node in string_nodes:
+            title = node.get("_meta", {}).get("title", "").lower()
+            # 跳過包含 trigger 的節點（那是預設固定的 prompt）
+            if "trigger" not in title:
+                if "inputs" in node and "string" in node["inputs"]:
+                    node["inputs"]["string"] = prompt
+                    print(f"[Parser] 注入 Prompt 到 StringConstantMultiline 節點 {node_id} (title: {node.get('_meta', {}).get('title', '')})")
+                    prompt_injected = True
+                    break
+    
+    # 3. 嘗試 TextEncodeQwenImageEditPlus (Qwen Image Edit workflow)
     if not prompt_injected:
         qwen_nodes = find_nodes_by_class(workflow, "TextEncodeQwenImageEditPlus")
         for node_id, node in qwen_nodes:
