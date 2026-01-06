@@ -38,7 +38,9 @@ services:
 
   # Backend API 服務
   backend:
-    build: ./backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: studio-backend
     ports:
       - "5000:5000"
@@ -67,7 +69,9 @@ services:
 
   # Worker 服務 (生產環境使用，開發時建議停用)
   worker:
-    build: ./worker
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
     container_name: studio-worker
     environment:
       - REDIS_HOST=redis

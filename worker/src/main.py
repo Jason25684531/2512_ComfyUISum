@@ -12,6 +12,7 @@ import redis
 import base64
 import uuid
 import logging
+import threading
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from datetime import datetime, timedelta
@@ -196,6 +197,25 @@ def cleanup_old_output_files(db_client=None):
         logger.info(f"🗑️ 已清理 {deleted_count} 個超過 30 天的輸出圖片 (釋放 {size_mb:.2f} MB)")
         if db_client and db_synced > 0:
             logger.info(f"📊 已同步軟刪除資料庫記錄: {db_synced} 筆")
+
+
+def worker_heartbeat(redis_client):
+    """
+    Worker 心跳線程 - 每 10 秒向 Redis 發送心跳信號
+    Backend 可通過檢查 'worker:heartbeat' 鍵來判斷 Worker 是否在線
+    
+    Args:
+        redis_client: Redis 客戶端實例
+    """
+    while True:
+        try:
+            # 設置心跳鍵，30 秒過期
+            redis_client.setex('worker:heartbeat', 30, 'alive')
+            logger.debug("💓 Worker 心跳發送成功")
+            time.sleep(10)  # 每 10 秒發送一次
+        except Exception as e:
+            logger.error(f"❌ Worker 心跳發送失敗: {e}")
+            time.sleep(10)
 
 
 def update_job_status(
@@ -453,7 +473,12 @@ def main():
     logger.info("🗑️ 清理超過 30 天的輸出圖片...")
     cleanup_old_output_files(db_client)
     
-    # 7. 開始處理佇列
+    # 7. 啟動 Worker 心跳線程
+    logger.info("💓 啟動 Worker 心跳線程...")
+    heartbeat_thread = threading.Thread(target=worker_heartbeat, args=(r,), daemon=True)
+    heartbeat_thread.start()
+    
+    # 8. 開始處理佇列
     logger.info(f"\n監聽佇列: {JOB_QUEUE}")
     logger.info(f"ComfyUI Input 目錄: {COMFYUI_INPUT_DIR}")
     logger.info("等待任務中...\n")

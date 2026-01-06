@@ -1,25 +1,37 @@
 # ===========================================
-# ComfyUI Studio - 统一依赖管理
+# ComfyUI Studio - 統一依賴管理
 # ===========================================
-# 本地开发用，包含 Backend + Worker 所有依赖
-# Docker 部署时使用各自目录下的 requirements.txt
+# 適用於: Backend + Worker + Local Development
+# 最後更新: 2026-01-06 (Phase 6)
+# ===========================================
 
-# Web Framework
+# ============================================
+# Backend 依賴 (Flask API)
+# ============================================
 Flask==2.3.0
 Werkzeug==2.3.0
 flask-cors==4.0.0
+Flask-Limiter==3.5.0          # Phase 6: Rate Limiting
 
-# Database
-mysql-connector-python==8.2.0
+# ============================================
+# Worker 依賴 (Task Processing)
+# ============================================
+websocket-client==1.7.0       # ComfyUI WebSocket 連接
+requests==2.31.0              # HTTP Client
 
-# Queue / Cache
-redis==5.0.1
+# ============================================
+# 資料庫與快取
+# ============================================
+mysql-connector-python==8.2.0 # MySQL 連接
+redis==5.0.1                  # Redis 客戶端 + Rate Limiter Storage
 
-# HTTP Client
-requests==2.31.0
+# ============================================
+# 工具類
+# ============================================
+python-dotenv==1.0.0          # 環境變數管理
 
-# WebSocket Client
-websocket-client==1.7.0
-
-# Environment Variables
-python-dotenv==1.0.0
+# ============================================
+# 測試依賴 (可選，用於 tests/)
+# ============================================
+# playwright==1.40.0          # E2E 測試 (需要時取消註解)
+# aiohttp==3.9.1              # 異步壓力測試 (需要時取消註解)

@@ -41,14 +41,26 @@ if errorlevel 1 (
 echo 等待 MySQL 就緒...
 timeout /t 5 /nobreak >nul
 
+:: 清空 Redis 佇列 (避免處理殘留測試任務)
+echo 🗑️ 清空 Redis 殘留任務...
+docker exec comfyuisum-redis-1 redis-cli DEL job_queue >nul 2>&1
+echo ✅ Redis 佇列已清空
+
 :: ========================================
-:: 3. 檢查虛擬環境
+::3. 檢查虛擬環境與依賴
 :: ========================================
 echo.
-echo [3/4] 檢查 Python 虛擬環境...
+echo [3/4] 檢查 Python 虛擬環境與依賴...
 if exist "venv\Scripts\activate.bat" (
     echo ✅ 虛擬環境已存在
     call venv\Scripts\activate.bat
+    echo 🔄 檢查並更新依賴...
+    pip install -r requirements.txt --quiet
+    if errorlevel 1 (
+        echo ⚠️ 依賴安裝失敗，請檢查 requirements.txt
+    ) else (
+        echo ✅ 依賴已更新
+    )
 ) else (
     echo ❌ 虛擬環境不存在！
     echo 正在創建虛擬環境...

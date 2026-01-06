@@ -334,6 +334,57 @@
         <!-- ============================================ -->
         <div id="view-dashboard" class="view-section flex flex-col h-full overflow-y-auto p-6 md:p-8 animate-fade-in">
             <div class="max-w-6xl mx-auto w-full">
+                
+                <!-- ============================================ -->
+                <!-- SYSTEM HUD (監控面板) - Cyberpunk Style    -->
+                <!-- ============================================ -->
+                <div id="system-hud" class="mb-8 glass-panel rounded-2xl p-6 border border-white/10 shadow-2xl">
+                    <div class="flex flex-col md:flex-row items-start md:items-center gap-6">
+                        <!-- HUD Header -->
+                        <div class="flex items-center gap-3">
+                            <div class="p-3 rounded-xl bg-gradient-to-r from-cyan-500/20 to-blue-500/20 border border-cyan-500/30">
+                                <i data-lucide="activity" class="w-6 h-6 text-cyan-300"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-sm font-bold text-white uppercase tracking-wider">System Status</h3>
+                                <p class="text-xs text-gray-400 font-mono">Real-time Monitoring</p>
+                            </div>
+                        </div>
+                        
+                        <!-- HUD Indicators -->
+                        <div class="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <!-- Server Status -->
+                            <div class="flex items-center gap-3 bg-black/20 rounded-xl p-3 border border-white/5">
+                                <div id="server-status-indicator" class="w-3 h-3 rounded-full bg-green-500 shadow-lg shadow-green-500/50 animate-pulse"></div>
+                                <div>
+                                    <div class="text-xs text-gray-400 font-mono">Server</div>
+                                    <div id="server-status-text" class="text-sm font-bold text-green-400">ONLINE</div>
+                                </div>
+                            </div>
+                            
+                            <!-- Worker Status -->
+                            <div class="flex items-center gap-3 bg-black/20 rounded-xl p-3 border border-white/5">
+                                <div id="worker-status-indicator" class="w-3 h-3 rounded-full bg-gray-500"></div>
+                                <div>
+                                    <div class="text-xs text-gray-400 font-mono">Worker</div>
+                                    <div id="worker-status-text" class="text-sm font-bold text-gray-400">CHECKING...</div>
+                                </div>
+                            </div>
+                            
+                            <!-- Queue Status -->
+                            <div class="flex items-center gap-3 bg-black/20 rounded-xl p-3 border border-white/5">
+                                <div class="p-2 rounded-lg bg-purple-500/10 border border-purple-500/20">
+                                    <i data-lucide="list-checks" class="w-4 h-4 text-purple-300"></i>
+                                </div>
+                                <div>
+                                    <div class="text-xs text-gray-400 font-mono">Queue</div>
+                                    <div id="queue-count" class="text-sm font-bold text-purple-400 font-mono">0</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
                 <!-- Hero -->
                 <div class="mb-12 text-center">
                     <div class="absolute inset-0 bg-gradient-to-r from-blue-500/5 via-purple-500/5 to-transparent blur-3xl -z-10 rounded-full opacity-50"></div>
@@ -1783,6 +1834,55 @@
         }
 
         // ==========================================
+        // System HUD Monitoring (輪詢 /api/metrics)
+        // ==========================================
+        async function updateSystemMetrics() {
+            try {
+                const response = await fetch(`${API_BASE}/api/metrics`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                // 更新 Server 狀態 (假設能收到回應就是 online)
+                document.getElementById('server-status-indicator').className = 'w-3 h-3 rounded-full bg-green-500 shadow-lg shadow-green-500/50 animate-pulse';
+                document.getElementById('server-status-text').textContent = 'ONLINE';
+                document.getElementById('server-status-text').className = 'text-sm font-bold text-green-400';
+                
+                // 更新 Worker 狀態
+                const workerOnline = data.worker_status === 'online';
+                const workerIndicator = document.getElementById('worker-status-indicator');
+                const workerText = document.getElementById('worker-status-text');
+                
+                if (workerOnline) {
+                    workerIndicator.className = 'w-3 h-3 rounded-full bg-green-500 shadow-lg shadow-green-500/50 animate-pulse';
+                    workerText.textContent = 'ONLINE';
+                    workerText.className = 'text-sm font-bold text-green-400';
+                } else {
+                    workerIndicator.className = 'w-3 h-3 rounded-full bg-red-500 shadow-lg shadow-red-500/50';
+                    workerText.textContent = 'DISCONNECTED';
+                    workerText.className = 'text-sm font-bold text-red-400';
+                }
+                
+                // 更新 Queue 數量
+                document.getElementById('queue-count').textContent = data.queue_length || 0;
+                
+            } catch (error) {
+                console.error('[HUD] 無法獲取系統指標:', error);
+                
+                // 設置為離線狀態
+                document.getElementById('server-status-indicator').className = 'w-3 h-3 rounded-full bg-red-500';
+                document.getElementById('server-status-text').textContent = 'OFFLINE';
+                document.getElementById('server-status-text').className = 'text-sm font-bold text-red-400';
+                
+                document.getElementById('worker-status-indicator').className = 'w-3 h-3 rounded-full bg-red-500';
+                document.getElementById('worker-status-text').textContent = 'DISCONNECTED';
+                document.getElementById('worker-status-text').className = 'text-sm font-bold text-red-400';
+            }
+        }
+
+        // ==========================================
         // 頁面載入完成後初始化
         // ==========================================
         document.addEventListener('DOMContentLoaded', () => {
@@ -1794,6 +1894,11 @@
             
             // 載入模型列表
             fetchModels();
+            
+            // 啟動系統監控輪詢 (每 5 秒更新一次)
+            updateSystemMetrics();  // 立即執行一次
+            setInterval(updateSystemMetrics, 5000);
+            console.log('[HUD] 系統監控已啟動 (5秒輪詢)');
             
             // 防止重複點擊的標記
             let isGenerating = false;

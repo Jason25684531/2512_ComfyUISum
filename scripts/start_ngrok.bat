@@ -53,13 +53,14 @@ if errorlevel 1 (
 )
 
 echo.
-echo ✅ Ngrok 啟動完成！
-echo 📂 配置已更新到:
-echo    - .env (NGROK_URL)
-echo    - frontend/config.js (API_BASE)
+echo ====================================
+echo   Ngrok Tunnel Started Successfully
+echo ====================================
 echo.
-echo 💡 提示:
-echo    - 在瀏覽器開啟 http://localhost:4040 查看 Ngrok 控制台
-echo    - 使用 Ngrok URL 即可從任何裝置存取系統
+echo Config Files Updated:
+echo   - .env (NGROK_URL)
+echo   - frontend/config.js (API_BASE)
+echo.
+echo Ngrok Dashboard: http://localhost:4040
 echo.
 pause

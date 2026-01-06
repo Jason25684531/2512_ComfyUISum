@@ -10,12 +10,24 @@ from logging.handlers import RotatingFileHandler
 from datetime import datetime
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from redis import Redis, RedisError
 
 # ============================================
 # Configuration & Logging Setup
 # ============================================
 app = Flask(__name__)
+
+# 初始化 Rate Limiter (使用 Redis 作為儲存後端)
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    storage_uri=None,  # 將在後續設置
+    default_limits=["100 per hour"],
+    storage_options={"socket_connect_timeout": 30},
+    strategy="fixed-window"
+)
 
 # 設定 CORS - 允許所有來源的跨域請求
 CORS(app, 
@@ -124,6 +136,10 @@ try:
     )
     redis_client.ping()
     logger.info(f"✓ Redis 连接成功: {REDIS_HOST}:{REDIS_PORT}")
+    
+    # 配置 Limiter 使用 Redis
+    limiter.storage_uri = f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/1"
+    
 except RedisError as e:
     logger.error(f"✗ Redis 连接失败: {e}")
     redis_client = None
@@ -133,6 +149,7 @@ except RedisError as e:
 # ============================================
 
 @app.route('/api/generate', methods=['POST', 'OPTIONS'])
+@limiter.limit("10 per minute")
 def generate():
     """
     POST /api/generate
@@ -160,6 +177,11 @@ def generate():
         
         prompt = data.get('prompt', '').strip()
         workflow = data.get('workflow', 'text_to_image')
+        
+        # ===== 安全性驗證：Prompt 長度限制 =====
+        if len(prompt) > 1000:
+            logger.warning(f"Prompt 超過長度限制: {len(prompt)} > 1000")
+            return jsonify({'error': 'Prompt exceeds maximum length of 1000 characters'}), 400
         
         # 只有 text_to_image 需要 prompt
         if workflow == 'text_to_image' and not prompt:
@@ -227,6 +249,7 @@ def generate():
 
 
 @app.route('/api/status/<job_id>', methods=['GET'])
+@limiter.limit("2 per second")  # 每秒 2 次 = 每分鐘 120 次（寬鬆限制，適合輪詢）
 def status(job_id):
     """
     GET /api/status/<job_id>
@@ -399,6 +422,54 @@ def get_history():
         return jsonify({'error': 'Internal server error'}), 500
 
 
+@app.route('/api/metrics', methods=['GET'])
+@limiter.limit("2 per second")  # 每秒 2 次 = 每分鐘 120 次（監控儀表板專用）
+def metrics():
+    """
+    GET /api/metrics
+    系統監控指標端點（Phase 6 - 高頻輪詢專用）
+    
+    Response:
+    {
+        "queue_length": 5,          // Redis 佇列中等待的任務數量
+        "worker_status": "online",  // Worker 狀態 (online/offline)
+        "active_jobs": 2            // 當前正在處理的任務數量
+    }
+    """
+    try:
+        if redis_client is None:
+            logger.error("Redis 客户端未初始化")
+            return jsonify({'error': 'Redis service unavailable'}), 503
+        
+        # 1. 獲取佇列長度
+        queue_length = redis_client.llen(REDIS_QUEUE_NAME)
+        
+        # 2. 檢查 Worker 心跳狀態
+        worker_heartbeat = redis_client.get('worker:heartbeat')
+        worker_status = 'online' if worker_heartbeat else 'offline'
+        
+        # 3. 統計當前正在處理的任務（status='processing'）
+        active_jobs = 0
+        # 掃描所有 job:status:* 鍵
+        status_keys = redis_client.keys('job:status:*')
+        for key in status_keys:
+            job_status = redis_client.hget(key, 'status')
+            if job_status == 'processing':
+                active_jobs += 1
+        
+        logger.info(f"📊 Metrics: queue={queue_length}, worker={worker_status}, active={active_jobs}")
+        
+        return jsonify({
+            'queue_length': queue_length,
+            'worker_status': worker_status,
+            'active_jobs': active_jobs
+        }), 200
+    
+    except Exception as e:
+        logger.error(f"✗ metrics 接口异常: {e}", exc_info=True)
+        return jsonify({'error': 'Internal server error'}), 500
+
+
 @app.route('/health', methods=['GET'])
 def health():
     """健康检查接口 - 檢查 Redis 和 MySQL 狀態"""
@@ -481,6 +552,7 @@ def serve_output(filename):
     """
     GET /outputs/<filename>
     Serve generated images from storage/outputs directory
+    防止路徑穿越攻擊
     """
     import os
     from flask import send_from_directory, abort
@@ -490,10 +562,16 @@ def serve_output(filename):
     outputs_dir = os.path.join(current_dir, '..', '..', 'storage', 'outputs')
     outputs_dir = os.path.abspath(outputs_dir)
     
+    # ===== 安全性：防止路徑穿越攻擊 =====
+    # 確保請求的檔案路徑嚴格位於 outputs_dir 內
+    file_path = os.path.abspath(os.path.join(outputs_dir, filename))
+    if not file_path.startswith(outputs_dir):
+        logger.warning(f"⚠️ 路徑穿越攻擊嘗試: {filename}")
+        return abort(403)  # Forbidden
+    
     logger.info(f"📁 Serving file: {filename} from {outputs_dir}")
     
     # Check if file exists
-    file_path = os.path.join(outputs_dir, filename)
     if not os.path.exists(file_path):
         logger.warning(f"文件不存在: {file_path}")
         return abort(404)
