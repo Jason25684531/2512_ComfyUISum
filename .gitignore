@@ -18,3 +18,5 @@ logs/*.log.*
 
 # Ngrok 自動生成配置 (包含臨時 URL)
 frontend/config.js
+
+ComfyUI/

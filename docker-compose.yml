@@ -1,7 +1,52 @@
 version: '3.8'
 
 services:
-  # Redis 服務
+  # =========================================
+  # 1. ComfyUI Engine (Linux 核心引擎)
+  # =========================================
+  comfyui:
+    # 使用 Pytorch 官方映像檔 (CUDA 12.1)
+    image: pytorch/pytorch:2.3.0-cuda12.1-cudnn8-runtime
+    container_name: studio-engine
+    restart: always
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    
+    # 啟動指令
+    command: python main.py --listen 0.0.0.0 --port 8188 --preview-method auto
+    
+    # 關鍵路徑掛載
+    volumes:
+      # A. 程式碼：掛載你 WSL 下載的 ComfyUI 資料夾
+      - ./ComfyUI:/app
+      
+      # B. 模型：掛載 Windows 的模型資料夾
+      # ⚠️ 請將 /mnt/d/02_software/... 改成你 Windows 實際放模型的路徑
+      - /mnt/d/02_software/ComfyUI_windows_portable/ComfyUI/models:/windows_models
+      
+      # C. 設定檔：掛載模型路徑設定
+      - ./extra_model_paths.yaml:/app/extra_model_paths.yaml
+      
+      # D. 輸入/輸出共享：與 Worker 共用 storage 資料夾
+      - ./storage/outputs:/app/output
+      - ./storage/inputs:/app/input
+
+    ports:
+      - "8188:8188" # 開放給本機瀏覽器預覽
+    networks:
+      - studio-net
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - CLI_ARGS=--listen 0.0.0.0
+
+  # =========================================
+  # 2. Redis 服務
+  # =========================================
   redis:
     image: redis:7.2
     container_name: studio-redis
@@ -14,12 +59,14 @@ services:
     networks:
       - studio-net
 
-  # MySQL 資料庫服務
+  # =========================================
+  # 3. MySQL 資料庫服務
+  # =========================================
   mysql:
     image: mysql:8.0
     container_name: studio-mysql
     ports:
-      - "3307:3306"  # 映射到本地 3307 避免冲突
+      - "3307:3306"
     environment:
       - MYSQL_ROOT_PASSWORD=rootpassword
       - MYSQL_DATABASE=studio_db
@@ -36,7 +83,9 @@ services:
       timeout: 5s
       retries: 5
 
-  # Backend API 服務
+  # =========================================
+  # 4. Backend API 服務
+  # =========================================
   backend:
     build:
       context: .
@@ -65,9 +114,11 @@ services:
       - studio-net
     volumes:
       - ./storage/outputs:/app/storage/outputs
-      - ./logs:/app/logs  # 掛載日誌目錄
+      - ./logs:/app/logs
 
-  # Worker 服務 (生產環境使用，開發時建議停用)
+  # =========================================
+  # 5. Worker 服務
+  # =========================================
   worker:
     build:
       context: .
@@ -77,28 +128,30 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=mysecret
-      - COMFY_HOST=host.docker.internal
+      
+      # [修改點] 改為連接內部的 comfyui 服務
+      - COMFY_HOST=comfyui
       - COMFY_PORT=8188
+      
       - DB_HOST=mysql
       - DB_PORT=3306
       - DB_USER=studio_user
       - DB_PASSWORD=studio_password
       - DB_NAME=studio_db
+      
+      # [修改點] 指定輸入路徑
+      - COMFYUI_INPUT_DIR=/worker/storage/inputs
+      
     depends_on:
       - redis
       - mysql
+      - comfyui
     restart: always
     networks:
       - studio-net
-    profiles:
-      - production  # 添加 profile，預設不啟動
-      - studio-net
     volumes:
       - ./storage:/worker/storage
-      - ./logs:/worker/logs  # 掛載日誌目錄
-      # 掛載 ComfyUI 的 input/output 目錄（需根據實際路徑調整）
-      # - /path/to/ComfyUI/input:/comfyui/input
-      # - /path/to/ComfyUI/output:/comfyui/output
+      - ./logs:/worker/logs
 
 networks:
   studio-net:
