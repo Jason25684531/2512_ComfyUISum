@@ -152,6 +152,7 @@ services:
     volumes:
       - ./storage:/worker/storage
       - ./logs:/worker/logs
+      - ./ComfyUIworkflow:/app/ComfyUIworkflow  # <--- 補上這行
 
 networks:
   studio-net:
