@@ -2,7 +2,6 @@
 venv/
 storage/
 .env
-ComfyUIworkflow/
 redis_data/
 mysql_data/
 __pycache__/

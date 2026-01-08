@@ -1,0 +1,432 @@
+{
+  "501": {
+    "inputs": {
+      "image": "文生圖_00071_.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "頭"
+    }
+  },
+  "502": {
+    "inputs": {
+      "image": "文生圖_00069_.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "身體"
+    }
+  },
+  "503": {
+    "inputs": {
+      "filename_prefix": "集成應用1222/換臉",
+      "images": [
+        "504:336",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "504:335": {
+    "inputs": {
+      "strength": 0.96,
+      "model": [
+        "504:339",
+        0
+      ]
+    },
+    "class_type": "CFGNorm",
+    "_meta": {
+      "title": "CFGNorm"
+    }
+  },
+  "504:375": {
+    "inputs": {
+      "pixels": [
+        "504:405",
+        0
+      ],
+      "vae": [
+        "504:337",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAE Encode"
+    }
+  },
+  "504:392": {
+    "inputs": {
+      "pixels": [
+        "504:406",
+        0
+      ],
+      "vae": [
+        "504:337",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAE Encode"
+    }
+  },
+  "504:345": {
+    "inputs": {
+      "width": [
+        "504:406",
+        1
+      ],
+      "height": [
+        "504:406",
+        2
+      ],
+      "batch_size": 1
+    },
+    "class_type": "EmptySD3LatentImage",
+    "_meta": {
+      "title": "EmptySD3LatentImage"
+    }
+  },
+  "504:401": {
+    "inputs": {
+      "direction": "right",
+      "match_image_size": true,
+      "image1": [
+        "504:400",
+        0
+      ],
+      "image2": [
+        "504:336",
+        0
+      ]
+    },
+    "class_type": "ImageConcanate",
+    "_meta": {
+      "title": "Image Concatenate"
+    }
+  },
+  "504:400": {
+    "inputs": {
+      "direction": "down",
+      "match_image_size": true,
+      "image1": [
+        "504:405",
+        0
+      ],
+      "image2": [
+        "504:406",
+        0
+      ]
+    },
+    "class_type": "ImageConcanate",
+    "_meta": {
+      "title": "Image Concatenate"
+    }
+  },
+  "504:403": {
+    "inputs": {
+      "filename_prefix": "ComfyUI",
+      "images": [
+        "504:401",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "504:406": {
+    "inputs": {
+      "width": 1328,
+      "height": 1328,
+      "upscale_method": "lanczos",
+      "keep_proportion": "resize",
+      "pad_color": "0, 0, 0",
+      "crop_position": "center",
+      "divisible_by": 2,
+      "device": "cpu",
+      "image": [
+        "502",
+        0
+      ]
+    },
+    "class_type": "ImageResizeKJv2",
+    "_meta": {
+      "title": "Resize Image v2"
+    }
+  },
+  "504:339": {
+    "inputs": {
+      "shift": 3,
+      "model": [
+        "504:394",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingAuraFlow",
+    "_meta": {
+      "title": "ModelSamplingAuraFlow"
+    }
+  },
+  "504:405": {
+    "inputs": {
+      "width": 1328,
+      "height": 1328,
+      "upscale_method": "lanczos",
+      "keep_proportion": "resize",
+      "pad_color": "0, 0, 0",
+      "crop_position": "center",
+      "divisible_by": 2,
+      "device": "cpu",
+      "image": [
+        "501",
+        0
+      ]
+    },
+    "class_type": "ImageResizeKJv2",
+    "_meta": {
+      "title": "Resize Image v2"
+    }
+  },
+  "504:404": {
+    "inputs": {
+      "unet_name": "Qwen\\Qwen-Image-Edit-2509-Q4_K_M.gguf"
+    },
+    "class_type": "UnetLoaderGGUF",
+    "_meta": {
+      "title": "Unet Loader (GGUF)"
+    }
+  },
+  "504:394": {
+    "inputs": {
+      "lora_name": "Qwen_Edit\\bfs_head_v3_qwen_image_edit_2509.safetensors",
+      "strength_model": 1,
+      "model": [
+        "504:354",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "LoraLoaderModelOnly"
+    }
+  },
+  "504:338": {
+    "inputs": {
+      "clip_name": "Qwen\\qwen_2.5_vl_7b_fp8_scaled.safetensors",
+      "type": "qwen_image",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "Load CLIP"
+    }
+  },
+  "504:337": {
+    "inputs": {
+      "vae_name": "Qwen\\qwen_image_vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Load VAE"
+    }
+  },
+  "504:354": {
+    "inputs": {
+      "lora_name": "Qwen_Edit\\Lightning\\Qwen-Image-Edit-2509-Lightning-4steps-V1.0-bf16.safetensors",
+      "strength_model": 0.65,
+      "model": [
+        "504:404",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "LoraLoaderModelOnly"
+    }
+  },
+  "504:395": {
+    "inputs": {
+      "add_noise": true,
+      "noise_seed": 120255457090910,
+      "cfg": 1,
+      "model": [
+        "504:335",
+        0
+      ],
+      "positive": [
+        "504:348",
+        0
+      ],
+      "negative": [
+        "504:393",
+        0
+      ],
+      "sampler": [
+        "504:398",
+        0
+      ],
+      "sigmas": [
+        "504:396",
+        0
+      ],
+      "latent_image": [
+        "504:345",
+        0
+      ]
+    },
+    "class_type": "SamplerCustom",
+    "_meta": {
+      "title": "SamplerCustom"
+    }
+  },
+  "504:396": {
+    "inputs": {
+      "power": 1,
+      "sigmas": [
+        "504:397",
+        0
+      ]
+    },
+    "class_type": "Sigmas Power",
+    "_meta": {
+      "title": "Sigmas Power"
+    }
+  },
+  "504:398": {
+    "inputs": {
+      "sampler_name": "res_2s"
+    },
+    "class_type": "KSamplerSelect",
+    "_meta": {
+      "title": "KSamplerSelect"
+    }
+  },
+  "504:397": {
+    "inputs": {
+      "scheduler": "beta57",
+      "steps": 4,
+      "denoise": 1,
+      "model": [
+        "504:335",
+        0
+      ]
+    },
+    "class_type": "BasicScheduler",
+    "_meta": {
+      "title": "BasicScheduler"
+    }
+  },
+  "504:399": {
+    "inputs": {
+      "print_as_list": false,
+      "line_color": "blue",
+      "sigmas": [
+        "504:396",
+        0
+      ]
+    },
+    "class_type": "SigmasPreview",
+    "_meta": {
+      "title": "SigmasPreview"
+    }
+  },
+  "504:393": {
+    "inputs": {
+      "conditioning": [
+        "504:348",
+        0
+      ]
+    },
+    "class_type": "ConditioningZeroOut",
+    "_meta": {
+      "title": "ConditioningZeroOut"
+    }
+  },
+  "504:336": {
+    "inputs": {
+      "samples": [
+        "504:395",
+        0
+      ],
+      "vae": [
+        "504:337",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "504:348": {
+    "inputs": {
+      "prompt": [
+        "504:506",
+        0
+      ],
+      "clip": [
+        "504:338",
+        0
+      ],
+      "vae": [
+        "504:337",
+        0
+      ],
+      "image1": [
+        "502",
+        0
+      ],
+      "image2": [
+        "501",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "TextEncodeQwenImageEditPlus"
+    }
+  },
+  "504:505": {
+    "inputs": {
+      "value": "head_swap: start with Picture 1 as the base image, keeping its lighting, environment, and background. remove the head from Picture 1 completely and replace it with the head from Picture 2. ensure the head and body have correct anatomical proportions, and blend the skin tones, shadows, and lighting naturally so the final result appears as one coherent, realistic person."
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "換臉Trigger Prompt"
+    }
+  },
+  "504:503": {
+    "inputs": {
+      "string": "",
+      "strip_newlines": true
+    },
+    "class_type": "StringConstantMultiline",
+    "_meta": {
+      "title": "String Constant Multiline"
+    }
+  },
+  "504:506": {
+    "inputs": {
+      "separator": "",
+      "prompt1": [
+        "504:505",
+        0
+      ],
+      "prompt2": [
+        "504:503",
+        0
+      ]
+    },
+    "class_type": "easy promptConcat",
+    "_meta": {
+      "title": "PromptConcat"
+    }
+  }
+}

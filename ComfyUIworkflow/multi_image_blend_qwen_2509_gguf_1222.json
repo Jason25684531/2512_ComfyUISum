@@ -1,0 +1,257 @@
+{
+  "119": {
+    "inputs": {
+      "filename_prefix": "集成應用1222/多圖融合",
+      "images": [
+        "123:8",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "120": {
+    "inputs": {
+      "image": "模特.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "圖1"
+    }
+  },
+  "121": {
+    "inputs": {
+      "image": "行李箱.jpg"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "圖2"
+    }
+  },
+  "122": {
+    "inputs": {
+      "image": "場景.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "圖3"
+    }
+  },
+  "123": {
+    "inputs": {
+      "prompt": "",
+      "clip": [
+        "123:38",
+        0
+      ],
+      "vae": [
+        "123:39",
+        0
+      ],
+      "image1": [
+        "120",
+        0
+      ],
+      "image2": [
+        "121",
+        0
+      ],
+      "image3": [
+        "122",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "TextEncodeQwenImageEditPlus"
+    }
+  },
+  "124": {
+    "inputs": {
+      "prompt": "圖1的女生拖著圖2的行李箱，站在圖3的地鐵站入口，逼真的光影",
+      "clip": [
+        "123:38",
+        0
+      ],
+      "vae": [
+        "123:39",
+        0
+      ],
+      "image1": [
+        "120",
+        0
+      ],
+      "image2": [
+        "121",
+        0
+      ],
+      "image3": [
+        "122",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "TextEncodeQwenImageEditPlus"
+    }
+  },
+  "123:38": {
+    "inputs": {
+      "clip_name": "Qwen\\qwen_2.5_vl_7b_fp8_scaled.safetensors",
+      "type": "qwen_image",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "Load CLIP"
+    }
+  },
+  "123:39": {
+    "inputs": {
+      "vae_name": "Qwen\\qwen_image_vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Load VAE"
+    }
+  },
+  "123:112": {
+    "inputs": {
+      "width": 1232,
+      "height": 1904,
+      "batch_size": 1
+    },
+    "class_type": "EmptySD3LatentImage",
+    "_meta": {
+      "title": "EmptySD3LatentImage"
+    }
+  },
+  "123:115": {
+    "inputs": {
+      "unet_name": "Qwen\\Qwen-Image-Edit-2509-Q4_K_M.gguf"
+    },
+    "class_type": "UnetLoaderGGUF",
+    "_meta": {
+      "title": "Unet Loader (GGUF)"
+    }
+  },
+  "123:93": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "megapixels": 1,
+      "resolution_steps": 1,
+      "image": [
+        "120",
+        0
+      ]
+    },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": {
+      "title": "ImageScaleToTotalPixels"
+    }
+  },
+  "123:89": {
+    "inputs": {
+      "lora_name": "Qwen_Edit\\Lightning\\Qwen-Image-Edit-2509-Lightning-4steps-V1.0-bf16.safetensors",
+      "strength_model": 1,
+      "model": [
+        "123:115",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "LoraLoaderModelOnly"
+    }
+  },
+  "123:88": {
+    "inputs": {
+      "pixels": [
+        "123:93",
+        0
+      ],
+      "vae": [
+        "123:39",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAE Encode"
+    }
+  },
+  "123:66": {
+    "inputs": {
+      "shift": 3,
+      "model": [
+        "123:89",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingAuraFlow",
+    "_meta": {
+      "title": "ModelSamplingAuraFlow"
+    }
+  },
+  "123:75": {
+    "inputs": {
+      "strength": 1,
+      "model": [
+        "123:66",
+        0
+      ]
+    },
+    "class_type": "CFGNorm",
+    "_meta": {
+      "title": "CFGNorm"
+    }
+  },
+  "123:3": {
+    "inputs": {
+      "seed": 137291614580609,
+      "steps": 4,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "123:75",
+        0
+      ],
+      "positive": [
+        "124",
+        0
+      ],
+      "negative": [
+        "123",
+        0
+      ],
+      "latent_image": [
+        "123:112",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "KSampler"
+    }
+  },
+  "123:8": {
+    "inputs": {
+      "samples": [
+        "123:3",
+        0
+      ],
+      "vae": [
+        "123:39",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  }
+}

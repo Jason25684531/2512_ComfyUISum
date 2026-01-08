@@ -1,0 +1,223 @@
+{
+  "119": {
+    "inputs": {
+      "filename_prefix": "集成應用1222/草圖轉精稿",
+      "images": [
+        "124:8",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "120": {
+    "inputs": {
+      "image": "æ__ç__å___00059_.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "圖1"
+    }
+  },
+  "124:75": {
+    "inputs": {
+      "strength": 1,
+      "model": [
+        "124:66",
+        0
+      ]
+    },
+    "class_type": "CFGNorm",
+    "_meta": {
+      "title": "CFGNorm"
+    }
+  },
+  "124:66": {
+    "inputs": {
+      "shift": 3,
+      "model": [
+        "124:89",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingAuraFlow",
+    "_meta": {
+      "title": "ModelSamplingAuraFlow"
+    }
+  },
+  "124:38": {
+    "inputs": {
+      "clip_name": "Qwen\\qwen_2.5_vl_7b_fp8_scaled.safetensors",
+      "type": "qwen_image",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "Load CLIP"
+    }
+  },
+  "124:39": {
+    "inputs": {
+      "vae_name": "Qwen\\qwen_image_vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Load VAE"
+    }
+  },
+  "124:3": {
+    "inputs": {
+      "seed": 753371465939905,
+      "steps": 4,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "124:75",
+        0
+      ],
+      "positive": [
+        "124:111",
+        0
+      ],
+      "negative": [
+        "124:110",
+        0
+      ],
+      "latent_image": [
+        "124:88",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "KSampler"
+    }
+  },
+  "124:93": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "megapixels": 1,
+      "resolution_steps": 1,
+      "image": [
+        "120",
+        0
+      ]
+    },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": {
+      "title": "ImageScaleToTotalPixels"
+    }
+  },
+  "124:112": {
+    "inputs": {
+      "width": 1232,
+      "height": 1904,
+      "batch_size": 1
+    },
+    "class_type": "EmptySD3LatentImage",
+    "_meta": {
+      "title": "EmptySD3LatentImage"
+    }
+  },
+  "124:8": {
+    "inputs": {
+      "samples": [
+        "124:3",
+        0
+      ],
+      "vae": [
+        "124:39",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "124:115": {
+    "inputs": {
+      "unet_name": "Qwen\\Qwen-Image-Edit-2509-Q4_K_M.gguf"
+    },
+    "class_type": "UnetLoaderGGUF",
+    "_meta": {
+      "title": "Unet Loader (GGUF)"
+    }
+  },
+  "124:89": {
+    "inputs": {
+      "lora_name": "Qwen_Edit\\Lightning\\Qwen-Image-Edit-2509-Lightning-4steps-V1.0-bf16.safetensors",
+      "strength_model": 1,
+      "model": [
+        "124:115",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "LoraLoaderModelOnly"
+    }
+  },
+  "124:88": {
+    "inputs": {
+      "pixels": [
+        "124:93",
+        0
+      ],
+      "vae": [
+        "124:39",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAE Encode"
+    }
+  },
+  "124:111": {
+    "inputs": {
+      "prompt": "A photorealistic 3D rendered product shot",
+      "clip": [
+        "124:38",
+        0
+      ],
+      "vae": [
+        "124:39",
+        0
+      ],
+      "image1": [
+        "120",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "TextEncodeQwenImageEditPlus"
+    }
+  },
+  "124:110": {
+    "inputs": {
+      "prompt": "",
+      "clip": [
+        "124:38",
+        0
+      ],
+      "vae": [
+        "124:39",
+        0
+      ],
+      "image1": [
+        "120",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "TextEncodeQwenImageEditPlus"
+    }
+  }
+}
