@@ -16,7 +16,7 @@ logs/*.log.*
 # 日誌文件
 *.log
 
-# Ngrok 自動生成配置 (包含臨時 URL)
-frontend/config.js
+# # Ngrok 自動生成配置 (包含臨時 URL)
+# frontend/config.js
 
 ComfyUI/
