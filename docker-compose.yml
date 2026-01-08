@@ -113,6 +113,7 @@ services:
     restart: always
     networks:
       - studio-net
+    working_dir: /app
     volumes:
       - ./storage/outputs:/app/storage/outputs
       - ./logs:/app/logs
