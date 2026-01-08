@@ -17,7 +17,7 @@ services:
               count: all
               capabilities: [gpu]
     
-    # 啟動指令
+    # [關鍵] 啟動指令：必須有 --listen 0.0.0.0 才能讓 Worker 連進來
     command: python main.py --listen 0.0.0.0 --port 8188 --preview-method auto
     
     # 關鍵路徑掛載
@@ -26,7 +26,7 @@ services:
       - ./ComfyUI:/app
       
       # B. 模型：掛載 Windows 的模型資料夾
-      # ⚠️ 請將 /mnt/d/02_software/... 改成你 Windows 實際放模型的路徑
+      # (確保這條路徑與你的 extra_model_paths.yaml 內的 base_path 對應)
       - /mnt/d/02_software/ComfyUI_windows_portable/ComfyUI/models:/windows_models
       
       # C. 設定檔：掛載模型路徑設定
@@ -94,6 +94,7 @@ services:
     ports:
       - "5000:5000"
     environment:
+      # 指向 Service Name
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=mysecret
@@ -130,8 +131,8 @@ services:
       - REDIS_PORT=6379
       - REDIS_PASSWORD=mysecret
       
-      # [修改點] 改為連接內部的 comfyui 服務
-      - COMFY_HOST=comfyui
+      # [修改點] 這裡改為使用 container_name "studio-engine" 確保連線
+      - COMFY_HOST=studio-engine
       - COMFY_PORT=8188
       
       - DB_HOST=mysql
@@ -140,7 +141,7 @@ services:
       - DB_PASSWORD=studio_password
       - DB_NAME=studio_db
       
-      # [修改點] 指定輸入路徑
+      # 指定輸入路徑
       - COMFYUI_INPUT_DIR=/worker/storage/inputs
       
     depends_on:
@@ -153,7 +154,8 @@ services:
     volumes:
       - ./storage:/worker/storage
       - ./logs:/worker/logs
-      - ./ComfyUIworkflow:/app/ComfyUIworkflow  # <--- 補上這行
+      # [確認] 這裡掛載你的工作流資料夾
+      - ./ComfyUIworkflow:/app/ComfyUIworkflow
 
 networks:
   studio-net:
