@@ -69,5 +69,5 @@ echo ========================================
 echo.
 
 REM 啟動 Web 伺服器（進入 frontend 目錄）
-cd /d "%~dp0frontend"
+cd /d "%~dp0..\frontend"
 python -m http.server 8000

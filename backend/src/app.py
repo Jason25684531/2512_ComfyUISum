@@ -12,12 +12,14 @@ from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from flask_cors import CORS
 from redis import Redis, RedisError
 
 # ============================================
 # Configuration & Logging Setup
 # ============================================
 app = Flask(__name__)
+CORS(app)
 
 # 初始化 Rate Limiter (使用 Redis 作為儲存後端)
 limiter = Limiter(
