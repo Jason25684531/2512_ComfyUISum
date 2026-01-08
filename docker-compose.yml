@@ -125,6 +125,7 @@ services:
       dockerfile: worker/Dockerfile
     container_name: studio-worker
     environment:
+      - PYTHONUNBUFFERED=1
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=mysecret

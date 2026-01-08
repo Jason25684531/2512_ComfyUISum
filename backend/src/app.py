@@ -25,7 +25,8 @@ limiter = Limiter(
     app=app,
     key_func=get_remote_address,
     storage_uri=None,  # 將在後續設置
-    default_limits=["100 per hour"],
+    # default_limits=["100 per hour"],
+    default_limits=["10000 per hour"],  # <-- 改成這樣，或者直接拿掉這行
     storage_options={"socket_connect_timeout": 30},
     strategy="fixed-window"
 )
