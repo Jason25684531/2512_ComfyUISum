@@ -1,6 +1,6 @@
 {
   "text_to_image": {
-    "file": "ComfyUIworkflow/text_to_image_z_image_turbo_fp8_1222.json",
+    "file": "text_to_image_z_image_turbo_fp8_1222.json",
     "description": "Z-Image Turbo 快速文生圖",
     "mapping": {
       "prompt_text_node_id": "33:6",
@@ -9,7 +9,7 @@
     }
   },
   "image_edit": {
-    "file": "ComfyUIworkflow/single_image_edit_qwen_2509_gguf_1222.json",
+    "file": "single_image_edit_qwen_2509_gguf_1222.json",
     "description": "Qwen 單圖指令編輯",
     "mapping": {
       "input_image_node_id": "120",
@@ -19,7 +19,7 @@
     }
   },
   "face_swap": {
-    "file": "ComfyUIworkflow/face_swap_qwen_2509_gguf_1222.json",
+    "file": "face_swap_qwen_2509_gguf_1222.json",
     "description": "Qwen 換臉工作流",
     "mapping": {
       "input_image_face_node_id": "501",
@@ -30,7 +30,7 @@
     }
   },
   "sketch_to_image": {
-    "file": "ComfyUIworkflow/sketch_to_image_qwen_2509_gguf_1222.json",
+    "file": "sketch_to_image_qwen_2509_gguf_1222.json",
     "description": "Qwen 線稿轉精緻圖",
     "mapping": {
       "input_image_node_id": "120",
@@ -40,7 +40,7 @@
     }
   },
   "multi_blend": {
-    "file": "ComfyUIworkflow/multi_image_blend_qwen_2509_gguf_1222.json",
+    "file": "multi_image_blend_qwen_2509_gguf_1222.json",
     "description": "Qwen 多圖場景融合",
     "mapping": {
       "input_image_1_node_id": "120",
