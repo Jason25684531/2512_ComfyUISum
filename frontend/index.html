@@ -1485,7 +1485,7 @@
             }
 
             let pollCount = 0;
-            const maxPolls = 300; // 10 分鐘超時 (video generation takes longer)
+            const maxPolls = 450; // 15 分鐘超時 (virtual human video generation takes longer)
 
             avatarPollingInterval = setInterval(async () => {
                 pollCount++;
@@ -1810,7 +1810,7 @@
             }
 
             let pollCount = 0;
-            const maxPolls = 150;
+            const maxPolls = 450; // 15 分鐘超時 (increased for complex workflows)
 
             pollingInterval = setInterval(async () => {
                 pollCount++;
