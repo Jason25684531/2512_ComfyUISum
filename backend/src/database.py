@@ -69,6 +69,7 @@ class Database:
             seed INT DEFAULT -1,
             status VARCHAR(20),
             output_path TEXT,
+            input_audio_path VARCHAR(255) DEFAULT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             is_deleted BOOLEAN DEFAULT FALSE,
@@ -100,7 +101,8 @@ class Database:
         aspect_ratio: str = "1:1",
         batch_size: int = 1,
         seed: int = -1,
-        status: str = "queued"
+        status: str = "queued",
+        input_audio_path: Optional[str] = None
     ) -> bool:
         """
         插入新任務記錄
@@ -114,19 +116,20 @@ class Database:
             batch_size: 批次大小
             seed: 隨機種子
             status: 任務狀態
+            input_audio_path: 輸入音訊檔名 (Phase 7 新增)
         
         Returns:
             是否成功
         """
         sql = """
-        INSERT INTO jobs (id, prompt, workflow, model, aspect_ratio, batch_size, seed, status)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        INSERT INTO jobs (id, prompt, workflow, model, aspect_ratio, batch_size, seed, status, input_audio_path)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         """
         
         try:
             conn = self.pool.get_connection()
             cursor = conn.cursor()
-            cursor.execute(sql, (job_id, prompt, workflow, model, aspect_ratio, batch_size, seed, status))
+            cursor.execute(sql, (job_id, prompt, workflow, model, aspect_ratio, batch_size, seed, status, input_audio_path))
             conn.commit()
             logger.info(f"✓ 任務記錄插入成功: {job_id}")
             return True
@@ -197,7 +200,7 @@ class Database:
         where_clause = "" if include_deleted else "WHERE is_deleted = FALSE"
         sql = f"""
         SELECT id, prompt, workflow, model, aspect_ratio, batch_size, seed,
-               status, output_path, created_at, updated_at
+               status, output_path, input_audio_path, created_at, updated_at
         FROM jobs
         {where_clause}
         ORDER BY created_at DESC

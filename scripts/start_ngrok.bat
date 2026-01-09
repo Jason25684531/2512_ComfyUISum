@@ -5,7 +5,10 @@ echo    🌐 啟動 Ngrok 公網存取服務
 echo ========================================
 echo.
 
-REM 設定 Ngrok 路徑
+:: 1. 確保在腳本目錄執行
+cd /d "%~dp0"
+
+:: 2. 設定 Ngrok 路徑 (根據你的環境)
 set NGROK_PATH=D:\02_software\Ngrok\ngrok-v3-stable-windows-amd64\ngrok.exe
 
 REM 檢查 Ngrok 是否存在
@@ -16,38 +19,35 @@ if not exist "%NGROK_PATH%" (
     exit /b 1
 )
 
-REM 檢查 Backend 是否運行
+:: 3. 檢查 Backend 是否運行 (僅提示，不強制退出)
 echo 🔍 檢查 Backend 服務 (Port 5000)...
 netstat -ano | findstr :5000 >nul
 if errorlevel 1 (
-    echo ⚠️  警告: Backend 服務未運行
-    echo 請先執行 start_all_with_docker.bat 啟動 Backend
+    echo ⚠️  警告: Backend 服務似乎未運行
+    echo    (建議先執行 start_unified_windows.bat 選項 [2] 或 [3])
     echo.
-    choice /C YN /M "是否繼續啟動 Ngrok"
-    if errorlevel 2 exit /b 1
+) else (
+    echo ✅ Backend 服務運作中
 )
 
 echo.
 echo 🚀 啟動 Ngrok (Port 5000)...
 echo 📝 Ngrok URL 將自動更新到 .env 和 config.js
 echo.
-echo ⏳ 正在啟動，請稍候 5 秒讓 Ngrok 初始化...
-echo.
 
-REM 啟動 Ngrok (在背景執行)
+:: 4. 啟動 Ngrok (使用 start 開新視窗，避免卡住)
 start "Ngrok Tunnel" "%NGROK_PATH%" http 5000 --log=stdout
 
-REM 等待 Ngrok 啟動
+echo ⏳ 正在啟動，請稍候 5 秒讓 Ngrok 初始化...
 timeout /t 5 /nobreak >nul
 
-REM 呼叫 PowerShell 腳本更新配置
+:: 5. 呼叫 PowerShell 腳本更新配置
 echo.
 echo [Fetching Ngrok URL...]
-powershell -ExecutionPolicy Bypass -File "%~dp0update_ngrok_config.ps1"
+powershell -NoProfile -ExecutionPolicy Bypass -File "update_ngrok_config.ps1"
 
 if errorlevel 1 (
-    echo ❌ 無法獲取 Ngrok URL
-    echo 請檢查 Ngrok 是否正常運行
+    echo ❌ 配置更新失敗，請檢查 PowerShell 錯誤訊息
     pause
     exit /b 1
 )
@@ -56,10 +56,6 @@ echo.
 echo ====================================
 echo   Ngrok Tunnel Started Successfully
 echo ====================================
-echo.
-echo Config Files Updated:
-echo   - .env (NGROK_URL)
-echo   - frontend/config.js (API_BASE)
 echo.
 echo Ngrok Dashboard: http://localhost:4040
 echo.

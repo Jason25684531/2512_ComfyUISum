@@ -8,11 +8,30 @@ import uuid
 import logging
 from logging.handlers import RotatingFileHandler
 from datetime import datetime
+from pathlib import Path
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from redis import Redis, RedisError
+from werkzeug.utils import secure_filename
+
+# ============================================
+# 載入 .env 環境變數
+# ============================================
+def load_env():
+    """自動載入專案根目錄的 .env 檔案"""
+    env_path = Path(__file__).parent.parent.parent / ".env"
+    if env_path.exists():
+        with open(env_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, value = line.split("=", 1)
+                    os.environ.setdefault(key.strip(), value.strip())
+        print(f"✓ 已載入 .env 檔案: {env_path}")
+
+load_env()
 
 # ============================================
 # Configuration & Logging Setup
@@ -147,8 +166,84 @@ except RedisError as e:
     redis_client = None
 
 # ============================================
+# 音訊上傳設定
+# ============================================
+ALLOWED_AUDIO_EXTENSIONS = {'.wav', '.mp3'}
+UPLOAD_FOLDER = Path(__file__).parent.parent.parent / 'storage' / 'inputs'
+UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
+
+
+# ============================================
 # API Endpoints
 # ============================================
+
+@app.route('/api/upload', methods=['POST'])
+@limiter.limit("30 per minute")
+def upload_audio():
+    """
+    POST /api/upload
+    上傳音訊檔案 (支援 .wav, .mp3)
+    
+    Request: multipart/form-data, Key: 'file'
+    
+    Response:
+    {
+        "filename": "audio_550e8400-e29b.wav",
+        "original_name": "林志玲.wav"
+    }
+    """
+    try:
+        # 1. 驗證檔案是否存在
+        if 'file' not in request.files:
+            logger.warning("上傳請求缺少 'file' 欄位")
+            return jsonify({'error': 'No file provided'}), 400
+        
+        file = request.files['file']
+        
+        if file.filename == '':
+            logger.warning("上傳的檔案名稱為空")
+            return jsonify({'error': 'No file selected'}), 400
+        
+        # 2. 驗證檔案類型
+        original_filename = secure_filename(file.filename)
+        file_ext = os.path.splitext(original_filename)[1].lower()
+        
+        if file_ext not in ALLOWED_AUDIO_EXTENSIONS:
+            logger.warning(f"不支援的音訊格式: {file_ext}")
+            return jsonify({
+                'error': f'Unsupported file type. Allowed: {", ".join(ALLOWED_AUDIO_EXTENSIONS)}'
+            }), 400
+        
+        # 3. 生成唯一檔名 (保留原副檔名)
+        unique_id = str(uuid.uuid4())[:12]
+        new_filename = f"audio_{unique_id}{file_ext}"
+        
+        # 4. 確保安全的檔名
+        safe_filename = secure_filename(new_filename)
+        
+        # 5. 儲存檔案
+        file_path = UPLOAD_FOLDER / safe_filename
+        
+        try:
+            file.save(str(file_path))
+            logger.info(f"✅ 音訊上傳成功: {safe_filename} (原始: {original_filename})")
+        except PermissionError as e:
+            logger.error(f"❌ 儲存檔案權限不足: {e}")
+            return jsonify({'error': 'Permission denied when saving file'}), 500
+        except FileNotFoundError as e:
+            logger.error(f"❌ 儲存路徑不存在: {e}")
+            return jsonify({'error': 'Upload directory not found'}), 500
+        
+        # 6. 回傳結果
+        return jsonify({
+            'filename': safe_filename,
+            'original_name': file.filename  # 使用原始檔名（未經 secure_filename 處理）
+        }), 200
+    
+    except Exception as e:
+        logger.error(f"✗ upload 接口異常: {e}", exc_info=True)
+        return jsonify({'error': 'Internal server error'}), 500
+
 
 @app.route('/api/generate', methods=['POST', 'OPTIONS'])
 @limiter.limit("10 per minute")
@@ -203,6 +298,7 @@ def generate():
             'aspect_ratio': data.get('aspect_ratio', '1:1'),
             'batch_size': data.get('batch_size', 1),
             'images': data.get('images', {}),  # Base64 圖片字典
+            'audio': data.get('audio', ''),  # 音訊檔名 (virtual_human 工作流使用)
             'created_at': datetime.now().isoformat()
         }
         
@@ -236,7 +332,8 @@ def generate():
                 aspect_ratio=job_data.get('aspect_ratio', '1:1'),
                 batch_size=job_data.get('batch_size', 1),
                 seed=job_data.get('seed', -1),
-                status='queued'
+                status='queued',
+                input_audio_path=job_data.get('audio', None)  # Phase 7: 記錄音訊檔名
             )
         
         # 7. 返回成功响应
@@ -547,17 +644,19 @@ def get_models():
 
 
 # ============================================
-# Static File Serving (for generated images)
+# Static File Serving (for generated images/videos)
 # ============================================
 @app.route('/outputs/<path:filename>', methods=['GET'])
 def serve_output(filename):
     """
     GET /outputs/<filename>
-    Serve generated images from storage/outputs directory
+    Serve generated images/videos from storage/outputs directory
+    支援 .png, .jpg, .mp4 等格式
     防止路徑穿越攻擊
     """
     import os
-    from flask import send_from_directory, abort
+    import mimetypes
+    from flask import send_from_directory, abort, Response
     
     # Get the absolute path to storage/outputs
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -578,7 +677,26 @@ def serve_output(filename):
         logger.warning(f"文件不存在: {file_path}")
         return abort(404)
     
-    return send_from_directory(outputs_dir, filename)
+    # 確保正確的 MIME Type (特別是影片檔案)
+    mimetype, _ = mimetypes.guess_type(file_path)
+    if mimetype is None:
+        # 根據副檔名手動設定
+        ext = os.path.splitext(filename)[1].lower()
+        mime_map = {
+            '.mp4': 'video/mp4',
+            '.webm': 'video/webm',
+            '.avi': 'video/x-msvideo',
+            '.mov': 'video/quicktime',
+            '.png': 'image/png',
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.gif': 'image/gif',
+            '.webp': 'image/webp',
+        }
+        mimetype = mime_map.get(ext, 'application/octet-stream')
+    
+    logger.info(f"📹 MIME Type: {mimetype}")
+    return send_from_directory(outputs_dir, filename, mimetype=mimetype)
 
 
 # ============================================
@@ -589,26 +707,74 @@ def serve_output(filename):
 @app.route('/')
 def serve_index():
     """提供前端 index.html"""
-    frontend_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'frontend')
-    return send_from_directory(frontend_dir, 'index.html')
+    try:
+        frontend_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'frontend')
+        frontend_dir = os.path.abspath(frontend_dir)
+        index_path = os.path.join(frontend_dir, 'index.html')
+        
+        logger.info(f"Serving index.html from: {frontend_dir}")
+        logger.info(f"index.html exists: {os.path.exists(index_path)}")
+        
+        if not os.path.exists(index_path):
+            logger.error(f"index.html not found at {index_path}")
+            return jsonify({"error": "Frontend not found"}), 404
+            
+        return send_from_directory(frontend_dir, 'index.html')
+    except Exception as e:
+        logger.error(f"Error serving index: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/<path:path>')
 def serve_static(path):
     """提供前端靜態文件（CSS, JS, 圖片等）"""
-    frontend_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'frontend')
+    # 這些路徑已經有專門的路由處理，跳過
+    # 注意: 不要 raise NotFound()，而是直接 pass through
+    if path.startswith('api/') or path.startswith('health') or path.startswith('outputs/'):
+        # 返回 404，讓其他路由接管
+        return jsonify({"error": "Not found"}), 404
     
-    # 如果是 API 路徑，不處理
-    if path.startswith('api/'):
-        return jsonify({"error": "API endpoint not found"}), 404
-    
-    # 嘗試返回靜態文件
     try:
-        return send_from_directory(frontend_dir, path)
-    except:
-        # 如果文件不存在，返回 index.html（支持 SPA 路由）
-        return send_from_directory(frontend_dir, 'index.html')
+        frontend_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'frontend')
+        frontend_dir = os.path.abspath(frontend_dir)
+        file_path = os.path.join(frontend_dir, path)
+        
+        logger.info(f"Serving static file: {path} from {frontend_dir}")
+        logger.info(f"File exists: {os.path.exists(file_path)}")
+        
+        # 嘗試返回靜態文件
+        if os.path.exists(file_path) and os.path.isfile(file_path):
+            return send_from_directory(frontend_dir, path)
+        else:
+            # 文件不存在，返回 index.html（支持 SPA 路由）
+            logger.warning(f"File not found: {path}, serving index.html instead")
+            return send_from_directory(frontend_dir, 'index.html')
+            
+    except Exception as e:
+        logger.error(f"Error serving static file {path}: {e}")
+        return jsonify({"error": str(e)}), 500
 
+# ==========================================
+# 啟動 Flask 應用
+# ==========================================
 if __name__ == '__main__':
+    import sys
     logger.info("🚀 Backend API 启动中...")
     logger.info("📁 同時提供前端靜態文件服務")
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    
+    # Windows 下 Flask reloader 有時會導致進程立即退出
+    # 使用 threaded=True 確保服務穩定運行
+    # use_reloader=False 避免 Windows 上的 reloader 問題
+    is_windows = sys.platform.startswith('win')
+    
+    if is_windows:
+        # Windows: 禁用 reloader 避免進程退出問題
+        app.run(
+            host='0.0.0.0', 
+            port=5000, 
+            debug=True, 
+            use_reloader=False,
+            threaded=True
+        )
+    else:
+        # Linux/Mac: 正常使用 reloader
+        app.run(host='0.0.0.0', port=5000, debug=True)

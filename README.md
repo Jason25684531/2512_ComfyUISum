@@ -63,6 +63,7 @@ ComfyUI Studio 是一個現代化的 AI 圖像生成平台，提供直觀的 Web
 | **Image Blend** | 多圖混合 | Multiple Images, Blend Mode, Opacity |
 | **Single Edit** | 單圖編輯 | Image, Edit Instructions, Strength |
 | **Sketch to Image** | 草圖轉圖像 | Sketch, Style, Detail Level |
+| **Virtual Human** 🆕 | 虛擬人說話 (InfiniteTalk) | Audio File, Prompt Text, Seed |
 
 ### 2. 核心模塊
 
@@ -269,6 +270,106 @@ https://[your-id].ngrok-free.app/  → 對應 localhost:5000/
 
 ## 🚀 快速開始
 
+> **全新統一部署架構！** 現在支援 Windows/Linux 混合部署，一套配置多環境使用。詳見 [混合部署策略指南](HYBRID_DEPLOYMENT_STRATEGY.md)
+
+### 部署方式選擇
+
+本專案提供兩種部署方式，請根據需求選擇：
+
+#### 方式 1: 統一架構部署 (推薦 ⭐)
+
+使用 Docker Compose Profiles 實現跨平台統一部署。
+
+**Windows 開發環境 (5分鐘)**
+```batch
+# 1. 配置環境
+copy .env.unified.example .env
+# 編輯 .env 設定為 Windows 環境
+
+# 2. 啟動服務
+cd scripts
+start_unified_windows.bat
+┌─────────────────────────────────────────────────────────┐
+│  [1] Infrastructure only (MySQL + Redis)               │
+│  ──────────────────────────────────────────────        │
+│  啟動內容: MySQL (3307) + Redis (6379)                 │
+│  Backend:  需手動啟動 (python backend/src/app.py)      │
+│  Worker:   需手動啟動 (python worker/src/main.py)      │
+│  適用場景: 本地開發除錯、即時代碼修改                   │
+│  Ngrok:    ❌ 無法使用 (Backend 未運行)                │
+├─────────────────────────────────────────────────────────┤
+│  [2] Full stack with Docker Backend                    │
+│  ──────────────────────────────────────────────        │
+│  啟動內容: MySQL + Redis + Backend (Docker)            │
+│  Backend:  容器化運行 (自動啟動)                       │
+│  Worker:   需手動啟動                                   │
+│  適用場景: 完整測試、Ngrok 公網存取                    │
+│  Ngrok:    ✅ 可使用                                   │
+├─────────────────────────────────────────────────────────┤
+│  [3] Full stack with Local Backend + Worker ⭐ 推薦    │
+│  ──────────────────────────────────────────────        │
+│  啟動內容: MySQL + Redis + Backend + Worker (本地)     │
+│  Backend:  本地 Python 運行 (自動開啟新視窗)           │
+│  Worker:   本地 Python 運行 (自動開啟新視窗)           │
+│  適用場景: 完整開發、即時除錯、Ngrok 公網存取          │
+│  Ngrok:    ✅ 可使用                                   │
+├─────────────────────────────────────────────────────────┤
+│  [4] Stop all services                                  │
+│  停止所有 Docker 服務                                   │
+├─────────────────────────────────────────────────────────┤
+│  [5] View logs                                          │
+│  查看容器日誌 (即時輸出，Ctrl+C 退出)                  │
+├─────────────────────────────────────────────────────────┤
+│  [6] Rebuild containers                                 │
+│  重建容器 (清除快取，更新 Dockerfile 後使用)           │
+└─────────────────────────────────────────────────────────┘
+
+---------------------------------------------------------------------------
+### 📌 推薦流程: Windows 開發 + Ngrok 公網存取
+
+# 步驟 1: 啟動 ComfyUI (獨立終端)
+D:\02_software\ComfyUI_windows_portable\run_nvidia_gpu.bat
+
+# 步驟 2: 啟動完整堆疊
+cd D:\01_Project\2512_ComfyUISum\scripts
+start_unified_windows.bat
+選擇 [3] Full stack with Local Backend + Worker ← 推薦！
+
+# 步驟 3: 等待服務啟動 (約 10 秒)
+# 會自動開啟 Backend 和 Worker 視窗
+
+# 步驟 4: 測試本地訪問
+瀏覽器打開: http://localhost:5000/
+
+# 步驟 5: 啟動 Ngrok 公網存取 (可選)
+cd D:\01_Project\2512_ComfyUISum\scripts
+start_ngrok.bat
+
+# 步驟 6: 訪問公網 URL
+複製 Ngrok URL (例如: https://abc123.ngrok-free.app)
+在任何設備訪問該 URL
+---------------------------------------------------------------------------
+```
+
+**Linux 環境 (5分鐘)**
+```bash
+# 1. 配置環境
+cp .env.unified.example .env
+# 編輯 .env 設定為 Linux 環境
+
+# 2. 啟動服務
+cd scripts
+chmod +x start_unified_linux.sh
+./start_unified_linux.sh
+選擇 [1] Development (開發) 或 [2] Production (生產)
+```
+
+📚 **完整指南**: [HYBRID_DEPLOYMENT_STRATEGY.md](HYBRID_DEPLOYMENT_STRATEGY.md)
+
+#### 方式 2: 傳統部署 (向後兼容)
+
+使用原有的啟動腳本。
+
 ### 前置要求
 
 1. **ComfyUI 已安裝並可運行**
@@ -295,17 +396,18 @@ https://[your-id].ngrok-free.app/  → 對應 localhost:5000/
    用途: 公網存取
    ```
 
-### 一鍵啟動
+### 傳統一鍵啟動
 
 ```powershell
 # 1. 啟動 ComfyUI (在獨立終端)
 D:\02_software\ComfyUI_windows_portable\run_nvidia_gpu.bat
 
 # 2. 啟動所有後端服務 (Docker + Backend + Worker)
-.\start_all_with_docker.bat
+cd scripts
+start_all_with_docker.bat
 
 # 3. (可選) 啟動 Ngrok 公網存取
-.\start_ngrok.bat
+start_ngrok.bat
 
 # 4. 訪問應用
 # 本地: http://localhost:5000/
@@ -315,8 +417,12 @@ D:\02_software\ComfyUI_windows_portable\run_nvidia_gpu.bat
 ### 驗證系統狀態
 
 ```powershell
-# 快速驗證所有服務
-.\verify.bat
+# 統一架構 - 查看服務狀態
+docker-compose -f docker-compose.unified.yml ps
+
+# 傳統方式 - 快速驗證所有服務
+cd scripts
+verify.bat
 
 # 手動檢查各服務
 netstat -ano | findstr "5000 6379 3307 8188"
@@ -370,19 +476,27 @@ ComfyUISum/
 ├── mysql_data/                 # MySQL 數據卷
 ├── redis_data/                 # Redis 數據卷
 │
-├── .env                        # 環境變數配置
-├── .env.example                # 環境變數模板
-├── docker-compose.yml          # 生產環境 Docker 配置
-├── docker-compose.dev.yml      # 開發環境 Docker 配置
+├── .env                        # 環境變數配置 (使用中)
+├── .env.example.backup         # 環境變數模板 (舊版備份)
+├── .env.unified.example        # 環境變數模板 (推薦) ⭐
+├── docker-compose.yml          # 生產環境 Docker 配置 (傳統)
+├── docker-compose.dev.yml      # 開發環境 Docker 配置 (傳統)
+├── docker-compose.unified.yml  # 統一 Docker 配置 (推薦) ⭐
 │
-├── start_all_with_docker.bat   # 一鍵啟動腳本
-├── start_ngrok.bat             # Ngrok 啟動腳本
-├── update_ngrok_config.ps1     # Ngrok 配置更新
-├── verify.bat                  # 系統驗證工具
+├── scripts/                    # 啟動腳本目錄
+│   ├── start_unified_windows.bat   # Windows 統一啟動 (推薦) ⭐
+│   ├── start_unified_linux.sh      # Linux 統一啟動 (推薦) ⭐
+│   ├── start_all_with_docker.bat   # 傳統 Windows 啟動
+│   ├── start_ngrok.bat             # Ngrok 啟動腳本
+│   ├── update_ngrok_config.ps1     # Ngrok 配置更新
+│   └── verify.bat                  # 系統驗證工具
 │
 ├── README.md                   # 本文件
-├── UpdateList.md               # 更新日誌
-└── NGROK_SETUP.md              # Ngrok 完整指南
+├── HYBRID_DEPLOYMENT_STRATEGY.md  # 混合部署策略指南 ⭐
+├── DEPLOYMENT_COMPARISON.md    # 新舊方案對比
+└── Update_MD/
+    ├── UpdateList.md           # 詳細更新日誌
+    └── NGROK_SETUP.md          # Ngrok 完整指南
 ```
 
 ---
@@ -403,20 +517,46 @@ GET /api/health
 }
 ```
 
+### 上傳音訊 (Phase 7 新增) 🆕
+```http
+POST /api/upload
+Content-Type: multipart/form-data
+
+file: (音訊檔案，支援 .wav 和 .mp3)
+```
+
+**響應**:
+```json
+{
+  "filename": "audio_550e8400-e29b.wav",
+  "original_name": "my_voice.wav"
+}
+```
+
 ### 提交任務
 ```http
 POST /api/generate
 Content-Type: application/json
 
 {
-  "workflow_type": "text_to_image",
+  "workflow": "text_to_image",
   "prompt": "A beautiful sunset over mountains",
   "negative_prompt": "blurry, low quality",
   "model": "sd_xl_turbo_1.0_fp16.safetensors",
   "aspect_ratio": "16:9",
   "batch_size": 1,
   "seed": -1,
-  "images": []
+  "images": [],
+  "audio": ""
+}
+```
+
+**Virtual Human 工作流範例**:
+```json
+{
+  "workflow": "virtual_human",
+  "prompt": "這是一個測試語音生成",
+  "audio": "audio_550e8400-e29b.wav"
 }
 ```
 
@@ -648,9 +788,75 @@ UPDATE jobs SET is_deleted = 1 WHERE created_at < DATE_SUB(NOW(), INTERVAL 30 DA
 
 ---
 
+## 🧪 測試
+
+### 整合測試腳本
+
+專案包含自動化測試腳本，用於驗證完整的 API 流程：
+
+```bash
+# 進入專案目錄
+cd D:\01_Project\2512_ComfyUISum
+
+# 完整測試 (需要 Backend + Worker + ComfyUI)
+python tests/test_virtual_human_flow.py
+
+# 僅測試上傳功能 (快速驗證)
+python tests/test_virtual_human_flow.py --upload-only
+
+# 跳過生成步驟 (測試 API 但不等待結果)
+python tests/test_virtual_human_flow.py --skip-generation
+
+# 使用自訂 Backend URL
+python tests/test_virtual_human_flow.py --url http://192.168.1.100:5000
+```
+
+### 測試覆蓋範圍
+
+| 測試項目 | 說明 |
+|---------|-----|
+| 健康檢查 | 驗證 Backend、Redis、MySQL 連線 |
+| 音訊上傳 | 驗證 `/api/upload` 支援 .wav/.mp3 |
+| 任務提交 | 驗證 `/api/generate` 支援 audio 參數 |
+| 狀態輪詢 | 驗證狀態從 queued → processing → finished |
+| 輸出驗證 | 驗證生成的檔案可正確存取 |
+
+---
+
 ## 🔧 故障排除
 
 ### 常見問題
+
+#### 0. Backend 啟動後立即退出 (Windows 限定) ⚠️ 新增
+
+**症狀**: 
+```
+ * Running on http://127.0.0.1:5000
+Press CTRL+C to quit
+(進程立即退出，返回 PowerShell 提示符)
+```
+
+**根本原因**:
+Flask 的 `debug=True` 模式在 Windows PowerShell 中與 Werkzeug reloader 機制不兼容。主進程啟動子進程後立即退出。
+
+**解決方案**:
+```powershell
+# 方案 1: 使用啟動腳本 (推薦)
+cd scripts
+.\start_unified_windows.bat
+# 選擇 [3] Full stack with Local Backend + Worker
+
+# 方案 2: 使用 Start-Process
+Start-Process -FilePath ".\venv\Scripts\python.exe" -ArgumentList "backend\src\app.py" -NoNewWindow
+
+# 方案 3: 使用 CMD 而非 PowerShell
+cmd /c "venv\Scripts\activate.bat && cd backend\src && python app.py"
+```
+
+**技術說明**:
+- 代碼已更新: `use_reloader=False, threaded=True` (Windows 自動應用)
+- 這確保 Flask 在單一進程中運行，避免主/子進程分離問題
+- 缺點: 代碼變更需手動重啟服務
 
 #### 1. Backend 無法連接到 Redis
 

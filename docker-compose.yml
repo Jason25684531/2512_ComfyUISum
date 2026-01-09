@@ -27,7 +27,7 @@ services:
       
       # B. 模型：掛載 Windows 的模型資料夾
       # (確保這條路徑與你的 extra_model_paths.yaml 內的 base_path 對應)
-      - /mnt/d/02_software/ComfyUI_windows_portable/ComfyUI/models:/windows_models
+      - ${WSL_MODEL_PATH:-/mnt/d/02_software/ComfyUI_windows_portable/ComfyUI/models}:/windows_models
       
       # C. 設定檔：掛載模型路徑設定
       - ./extra_model_paths.yaml:/app/extra_model_paths.yaml

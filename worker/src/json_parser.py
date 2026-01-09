@@ -44,6 +44,7 @@ WORKFLOW_MAP = {
     "multi_image_blend": "multi_image_blend_qwen_2509_gguf_1222.json",
     "single_image_edit": "single_image_edit_qwen_2509_gguf_1222.json",
     "sketch_to_image": "sketch_to_image_qwen_2509_gguf_1222.json",
+    "virtual_human": "InfiniteTalk_IndexTTS_2.json",
 }
 
 # ==========================================
@@ -69,6 +70,19 @@ IMAGE_NODE_MAP = {
         "120": "input",    # 原圖
     },
     "text_to_image": {},   # 不需要圖片
+    "virtual_human": {
+        "284": "avatar",   # 虛擬人參考圖 (LoadImage)
+    },
+}
+
+# ==========================================
+# 音訊節點映射表 (用於 virtual_human 等工作流)
+# ==========================================
+AUDIO_NODE_MAP = {
+    "virtual_human": {
+        "node_id": "311",    # LoadAudio 節點 ID
+        "input_key": "audio" # 節點 inputs 中的參數名
+    }
 }
 
 
@@ -125,19 +139,21 @@ def parse_workflow(
     model: str = "turbo_fp8",
     batch_size: int = 1,
     image_files: dict = None,
+    audio_file: str = None,
     **kwargs
 ) -> dict:
     """
     解析並注入參數到 workflow
     
     Args:
-        workflow_name: workflow 名稱 (如 "text_to_image")
+        workflow_name: workflow 名稱 (如 "text_to_image", "virtual_human")
         prompt: 正向提示詞
         seed: 隨機種子 (-1 為隨機)
         aspect_ratio: 畫面比例 ("1:1", "16:9", "9:16", "2:3")
         model: 模型名稱
         batch_size: 批次數量
         image_files: 圖片檔名映射 {"source": "xxx.png", "target": "yyy.png"}
+        audio_file: 音訊檔名 (用於 virtual_human 工作流)
     
     Returns:
         修改後的 workflow dict
@@ -291,6 +307,29 @@ def parse_workflow(
                 print(f"[Parser] ⚠️ 缺少圖片欄位: {field_name}")
     elif node_map:
         print(f"[Parser] ⚠️ 此工作流需要圖片但未提供: {list(node_map.values())}")
+    
+    # ==========================================
+    # 注入音訊 (LoadAudio 節點) - Phase 7 新增
+    # ==========================================
+    audio_config = AUDIO_NODE_MAP.get(workflow_name)
+    
+    if audio_config and audio_file:
+        node_id = audio_config.get("node_id")
+        input_key = audio_config.get("input_key", "audio")
+        
+        if node_id and node_id in workflow:
+            node = workflow[node_id]
+            if "inputs" in node:
+                old_audio = node["inputs"].get(input_key, "")
+                node["inputs"][input_key] = audio_file
+                print(f"[Parser] 🎵 Injecting audio file: {audio_file} into node {node_id}")
+                print(f"[Parser] ✅ 音訊節點 {node_id}: {old_audio!r} -> {audio_file!r}")
+            else:
+                print(f"[Parser] ⚠️ 音訊節點 {node_id} 沒有 inputs")
+        elif node_id:
+            print(f"[Parser] ⚠️ 找不到音訊節點 {node_id}")
+    elif audio_config and not audio_file:
+        print(f"[Parser] ℹ️ 工作流 {workflow_name} 支援音訊注入，但未提供音訊檔案，使用預設值")
     
     return workflow
 

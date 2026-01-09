@@ -8,6 +8,17 @@
       "output_node_id": "34"
     }
   },
+  "virtual_human": {
+    "file": "InfiniteTalk_IndexTTS_2.json",
+    "description": "InfiniteTalk 虛擬人說話 (IndexTTS)",
+    "mapping": {
+      "prompt_text_node_id": "312",
+      "seed_node_id": "312",
+      "output_node_id": "320",
+      "input_audio_node_id": "311",
+      "input_image_node_id": "284"
+    }
+  },
   "image_edit": {
     "file": "single_image_edit_qwen_2509_gguf_1222.json",
     "description": "Qwen 單圖指令編輯",

@@ -71,7 +71,7 @@ from comfy_client import ComfyClient
 from config import (
     REDIS_HOST, REDIS_PORT, REDIS_PASSWORD,
     COMFYUI_INPUT_DIR, JOB_QUEUE, TEMP_FILE_MAX_AGE_HOURS,
-    JOB_STATUS_EXPIRE_SECONDS, print_config
+    JOB_STATUS_EXPIRE_SECONDS, STORAGE_INPUT_DIR, print_config
 )
 
 
@@ -122,6 +122,40 @@ def save_base64_image(base64_data: str, job_id: str, field_name: str) -> str:
     
     logger.info(f"💾 已保存圖片: {filename} ({len(image_bytes)} bytes)")
     return filename
+
+
+def copy_audio_to_comfyui(audio_filename: str, job_id: str) -> str:
+    """
+    將音訊檔案從 storage/inputs 複製到 ComfyUI input 目錄
+    
+    Args:
+        audio_filename: 上傳的音訊檔名 (如 audio_1ba6e2ba-e8a.mp3)
+        job_id: 任務 ID (用於生成唯一檔名)
+    
+    Returns:
+        複製後的檔名 (不含路徑)
+    """
+    import shutil
+    
+    # 來源檔案路徑
+    source_path = Path(STORAGE_INPUT_DIR) / audio_filename
+    
+    if not source_path.exists():
+        raise FileNotFoundError(f"找不到音訊檔案: {source_path}")
+    
+    # 保留原副檔名，生成新檔名
+    file_ext = source_path.suffix.lower()
+    new_filename = f"audio_{job_id}{file_ext}"
+    dest_path = Path(COMFYUI_INPUT_DIR) / new_filename
+    
+    # 確保目錄存在
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    # 複製檔案
+    shutil.copy2(source_path, dest_path)
+    
+    logger.info(f"🎵 已複製音訊: {audio_filename} -> {new_filename} ({source_path.stat().st_size} bytes)")
+    return new_filename
 
 
 def cleanup_old_temp_files():
@@ -304,7 +338,19 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict):
                     except Exception as e:
                         logger.warning(f"⚠️ 處理圖片 {field_name} 失敗: {e}")
         
-        # 4. 解析 workflow (包含圖片注入)
+        # 3.5 處理音訊參數 (Phase 7 新增)
+        # 需要將音訊從 storage/inputs 複製到 ComfyUI/input
+        audio_file = job_data.get("audio", "")
+        comfyui_audio_file = ""
+        if audio_file:
+            logger.info(f"🎵 Audio file specified: {audio_file}")
+            try:
+                comfyui_audio_file = copy_audio_to_comfyui(audio_file, job_id)
+            except Exception as e:
+                logger.warning(f"⚠️ 複製音訊檔案失敗: {e}")
+                comfyui_audio_file = ""
+        
+        # 4. 解析 workflow (包含圖片與音訊注入)
         update_job_status(r, job_id, "processing", progress=20)
         
         workflow = parse_workflow(
@@ -314,7 +360,8 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict):
             aspect_ratio=aspect_ratio,
             model=model,
             batch_size=batch_size,
-            image_files=image_files  # 傳入圖片檔名映射
+            image_files=image_files,      # 傳入圖片檔名映射
+            audio_file=comfyui_audio_file # 傳入複製後的音訊檔名 (Phase 7)
         )
         
         logger.info("Workflow 解析完成")

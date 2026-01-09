@@ -18,7 +18,7 @@ cd /d "%~dp0"
 if not exist "venv\Scripts\activate.bat" (
     echo ❌ 虛擬環境不存在！
     echo.
-    echo 請先執行: start_all_with_docker.bat
+    echo 請先執行: start_unified_windows.bat (選項 [3])
     echo.
     pause
     exit /b 1
@@ -62,7 +62,7 @@ if errorlevel 1 (
     echo ❌ Backend 未啟動！
     echo.
     echo 請先執行以下命令啟動服務：
-    echo   start_all_with_docker.bat
+    echo   start_unified_windows.bat (選項 [2] 或 [3])
     echo.
     echo 確認服務正在運行：
     echo   ✓ Backend API (Port 5000)
