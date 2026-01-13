@@ -3,34 +3,30 @@ Backend API for Studio Core
 提供任务提交和状态查询的接口
 """
 import os
+import sys
 import json
 import uuid
 import logging
+import threading
+import time
 from logging.handlers import RotatingFileHandler
 from datetime import datetime
 from pathlib import Path
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, g
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from redis import Redis, RedisError
 from werkzeug.utils import secure_filename
+from rich.logging import RichHandler
+from rich.panel import Panel
+from rich.console import Console
 
 # ============================================
-# 載入 .env 環境變數
+# 添加 shared 模組路徑並載入 .env
 # ============================================
-def load_env():
-    """自動載入專案根目錄的 .env 檔案"""
-    env_path = Path(__file__).parent.parent.parent / ".env"
-    if env_path.exists():
-        with open(env_path, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    key, value = line.split("=", 1)
-                    os.environ.setdefault(key.strip(), value.strip())
-        print(f"✓ 已載入 .env 檔案: {env_path}")
-
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from shared.utils import load_env
 load_env()
 
 # ============================================
@@ -38,6 +34,25 @@ load_env()
 # ============================================
 app = Flask(__name__)
 CORS(app)
+
+# ============================================
+# 自訂日誌過濾器
+# ============================================
+
+class UserIdFilter(logging.Filter):
+    """日誌過濾器，將 g.user_id 注入到日誌記錄中"""
+    def filter(self, record):
+        try:
+            # 從 Flask 上下文中獲取 user_id，如果不存在則使用 'INIT'
+            user_id = getattr(g, 'user_id', 'INIT')
+        except (RuntimeError, AttributeError):
+            # 在應用上下文外或沒有活躍請求時，使用預設值
+            user_id = 'INIT'
+        
+        record.user_id = user_id
+        return True
+
+# ============================================
 
 # 初始化 Rate Limiter (使用 Redis 作為儲存後端)
 limiter = Limiter(
@@ -59,6 +74,36 @@ CORS(app,
 
 # 手動處理 OPTIONS 預檢請求
 @app.before_request
+def before_request_handler():
+    """
+    在每個請求前處理：
+    1. 提取客戶端 IP 地址
+    2. 從資料庫獲取或建立用戶 ID
+    3. 存儲到 Flask g 對象，供日誌使用
+    """
+    # 獲取客戶端 IP 地址（考慮代理）
+    ip_address = request.headers.get('X-Forwarded-For')
+    if ip_address:
+        # 代理情況下，取第一個 IP
+        ip_address = ip_address.split(',')[0].strip()
+    else:
+        ip_address = request.remote_addr or 'unknown'
+    
+    # 從資料庫獲取或建立用戶 ID
+    if db_client:
+        user_id = db_client.get_or_create_user_id(ip_address)
+        if user_id > 0:
+            g.user_id = f"User#{user_id:03d}"
+        else:
+            g.user_id = "User#ERR"
+    else:
+        g.user_id = "User#N/A"
+    
+    # 記錄請求開始
+    logger.debug(f"📨 {request.method} {request.path} - IP: {ip_address}")
+
+# 手動處理 OPTIONS 預檢請求
+@app.before_request
 def handle_preflight():
     if request.method == "OPTIONS":
         response = app.make_default_options_response()
@@ -73,44 +118,55 @@ def after_request(response):
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
     
-    # 記錄請求日誌
-    logger.info(f"{request.method} {request.path} - {response.status_code}")
+    # 記錄請求完成
+    logger.info(f"✓ {request.method} {request.path} - {response.status_code}")
     
     return response
 
-# 配置日志记录器 (使用 RotatingFileHandler)
-log_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# 配置日志记录器
+# 文件日志格式（詳細）
+file_log_formatter = logging.Formatter('[%(user_id)s] %(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 # 確保 logs 目錄存在
 log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'logs')
 os.makedirs(log_dir, exist_ok=True)
 log_file = os.path.join(log_dir, 'backend.log')
 
-# 配置 RotatingFileHandler (5MB, 保留 3 份)
+# 配置 RotatingFileHandler (5MB, 保留 3 份) - 用於文件持久化
 file_handler = RotatingFileHandler(
     log_file,
     maxBytes=5*1024*1024,  # 5MB
     backupCount=3,
     encoding='utf-8'
 )
-file_handler.setFormatter(log_formatter)
+file_handler.setFormatter(file_log_formatter)
 file_handler.setLevel(logging.INFO)
+file_handler.addFilter(UserIdFilter())
 
-# 配置控制台輸出
-console_handler = logging.StreamHandler()
-console_handler.setFormatter(log_formatter)
+# 配置 RichHandler (用於終端顯示，自動着色和格式化)
+console_handler = RichHandler(
+    rich_tracebacks=True,  # 啟用詳細的堆棧跟蹤
+    markup=True,           # 支持 Rich 標記
+    show_time=True,        # 顯示時間
+    show_level=True,       # 顯示日誌級別
+    show_path=False        # 不顯示文件路徑（終端寬度有限）
+)
 console_handler.setLevel(logging.INFO)
+console_handler.addFilter(UserIdFilter())
 
 # 配置 root logger
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 logger.addHandler(file_handler)
 logger.addHandler(console_handler)
 
 # 同時配置 Flask app logger
-app.logger.setLevel(logging.INFO)
+app.logger.setLevel(logging.DEBUG)
 app.logger.addHandler(file_handler)
 app.logger.addHandler(console_handler)
+
+# 全局 console 實例（供底部狀態列使用）
+console = Console()
 
 # 從 config 載入配置
 from config import (
@@ -273,12 +329,23 @@ def generate():
             return jsonify({'error': 'Missing JSON data'}), 400
         
         prompt = data.get('prompt', '').strip()
+        prompts = data.get('prompts', [])  # Veo3 Long Video: 5 段視頻的 prompts
         workflow = data.get('workflow', 'text_to_image')
         
         # ===== 安全性驗證：Prompt 長度限制 =====
         if len(prompt) > 1000:
             logger.warning(f"Prompt 超過長度限制: {len(prompt)} > 1000")
             return jsonify({'error': 'Prompt exceeds maximum length of 1000 characters'}), 400
+        
+        # Veo3 Long Video: 驗證 prompts 列表
+        if prompts:
+            if not isinstance(prompts, list):
+                return jsonify({'error': 'prompts must be a list'}), 400
+            if len(prompts) > 10:  # 最多支持 10 個 segment
+                return jsonify({'error': 'Too many prompts (max 10)'}), 400
+            for p in prompts:
+                if len(str(p)) > 1000:
+                    return jsonify({'error': 'Individual prompt exceeds maximum length'}), 400
         
         # 只有 text_to_image 需要 prompt
         if workflow == 'text_to_image' and not prompt:
@@ -292,6 +359,7 @@ def generate():
         job_data = {
             'job_id': job_id,
             'prompt': prompt,
+            'prompts': prompts,  # Veo3 Long Video: 新增 prompts 列表
             'seed': data.get('seed', -1),  # -1 表示随机
             'workflow': data.get('workflow', 'text_to_image'),
             'model': data.get('model', 'turbo_fp8'),
@@ -486,8 +554,12 @@ def get_history():
         # 限制單次查詢數量
         limit = min(limit, 100)
         
+        logger.info(f"📥 準備查詢資料庫: db_client={db_client is not None}, limit={limit}, offset={offset}")
+        
         # 從資料庫獲取歷史記錄
         jobs = db_client.get_history(limit=limit, offset=offset)
+        
+        logger.info(f"📤 資料庫返回: {len(jobs)} 筆記錄")
         
         # 處理 output_path：轉換為前端可訪問的 URL 格式
         for job in jobs:
@@ -644,6 +716,136 @@ def get_models():
 
 
 # ============================================
+# Statistics & Monitoring Functions (Phase 3)
+# ============================================
+
+def get_redis_stats() -> dict:
+    """
+    獲取 Redis 統計信息
+    
+    Returns:
+        dict: 包含 queue_length, memory_usage, keys_count 等信息
+    """
+    stats = {
+        'queue_length': 0,
+        'memory_mb': 0,
+        'total_keys': 0,
+        'worker_online': False
+    }
+    
+    if not redis_client:
+        return stats
+    
+    try:
+        # 隊列長度
+        stats['queue_length'] = redis_client.llen(REDIS_QUEUE_NAME) or 0
+        
+        # Redis 記憶體使用情況
+        info = redis_client.info('memory')
+        stats['memory_mb'] = round(info.get('used_memory', 0) / (1024 * 1024), 2)
+        
+        # 鍵總數
+        keyspace = redis_client.info('keyspace')
+        db0 = keyspace.get('db0', {})
+        stats['total_keys'] = db0.get('keys', 0)
+        
+        # Worker 線上狀態
+        stats['worker_online'] = bool(redis_client.get('worker:heartbeat'))
+    except Exception as e:
+        logger.warning(f"獲取 Redis 統計資訊失敗: {e}")
+    
+    return stats
+
+def get_task_stats() -> dict:
+    """
+    獲取任務統計信息
+    
+    Returns:
+        dict: 包含 total_tasks, active_jobs, finished, failed 等信息
+    """
+    stats = {
+        'total_jobs': 0,
+        'queued_jobs': 0,
+        'processing_jobs': 0,
+        'finished_jobs': 0,
+        'failed_jobs': 0
+    }
+    
+    if not redis_client:
+        return stats
+    
+    try:
+        # 掃描所有 job:status:* 鍵
+        all_keys = redis_client.keys('job:status:*')
+        stats['total_jobs'] = len(all_keys)
+        
+        # 按狀態統計
+        for key in all_keys:
+            status_info = redis_client.hgetall(key)
+            status = status_info.get('status', 'unknown')
+            
+            if status == 'queued':
+                stats['queued_jobs'] += 1
+            elif status == 'processing':
+                stats['processing_jobs'] += 1
+            elif status == 'finished':
+                stats['finished_jobs'] += 1
+            elif status == 'failed':
+                stats['failed_jobs'] += 1
+    except Exception as e:
+        logger.warning(f"獲取任務統計資訊失敗: {e}")
+    
+    return stats
+
+def get_stats_panel() -> Panel:
+    """
+    生成統計信息面板（Rich Panel）- 用作底部固定狀態列
+    
+    Returns:
+        rich.panel.Panel: 包含所有統計信息的面板
+    """
+    try:
+        from rich.table import Table
+    except ImportError:
+        logger.warning("rich 庫未安裝，無法生成統計面板")
+        return Panel("統計信息不可用", title="📊 系統狀態")
+    
+    # 獲取統計數據
+    redis_stats = get_redis_stats()
+    task_stats = get_task_stats()
+    active_users = db_client.get_active_users_count() if db_client else 0
+    
+    # 建立表格
+    table = Table(show_header=True, header_style="bold magenta", show_lines=False)
+    table.add_column("指標", style="cyan", width=18)
+    table.add_column("數值", style="green", width=15)
+    
+    # Redis 統計
+    table.add_row("🔴 Redis 隊列", str(redis_stats['queue_length']))
+    table.add_row("💾 Redis 記憶體", f"{redis_stats['memory_mb']} MB")
+    table.add_row("🔑 Redis 鍵數", str(redis_stats['total_keys']))
+    table.add_row("⚙️ Worker 狀態", "🟢 在線" if redis_stats['worker_online'] else "🔴 離線")
+    
+    # 任務統計
+    table.add_row("📋 待處理任務", str(task_stats['queued_jobs']))
+    table.add_row("⏳ 處理中任務", str(task_stats['processing_jobs']))
+    table.add_row("✅ 已完成任務", str(task_stats['finished_jobs']))
+    table.add_row("❌ 失敗任務", str(task_stats['failed_jobs']))
+    
+    # 用戶統計
+    table.add_row("👥 活躍用戶", str(active_users))
+    
+    # 包裝為 Panel
+    panel = Panel(
+        table,
+        title="📊 Backend Status Dashboard",
+        border_style="bold blue",
+        padding=(0, 1)
+    )
+    
+    return panel
+
+# ============================================
 # Static File Serving (for generated images/videos)
 # ============================================
 @app.route('/outputs/<path:filename>', methods=['GET'])
@@ -654,9 +856,8 @@ def serve_output(filename):
     支援 .png, .jpg, .mp4 等格式
     防止路徑穿越攻擊
     """
-    import os
     import mimetypes
-    from flask import send_from_directory, abort, Response
+    from flask import abort
     
     # Get the absolute path to storage/outputs
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -697,7 +898,6 @@ def serve_output(filename):
     
     logger.info(f"📹 MIME Type: {mimetype}")
     return send_from_directory(outputs_dir, filename, mimetype=mimetype)
-
 
 # ============================================
 # Application Entry Point
@@ -758,23 +958,75 @@ def serve_static(path):
 # ==========================================
 if __name__ == '__main__':
     import sys
+    from threading import Thread
+    from rich.live import Live
+    
+    def run_flask():
+        """在後台線程中運行 Flask 應用"""
+        is_windows = sys.platform.startswith('win')
+        
+        if is_windows:
+            # Windows: 禁用 reloader 避免進程退出問題
+            app.run(
+                host='0.0.0.0', 
+                port=5000, 
+                debug=True, 
+                use_reloader=False,
+                threaded=True
+            )
+        else:
+            # Linux/Mac: 正常使用 reloader
+            app.run(host='0.0.0.0', port=5000, debug=True)
+    
+    # 啟動 Flask 應用線程（守護線程）
     logger.info("🚀 Backend API 启动中...")
     logger.info("📁 同時提供前端靜態文件服務")
     
-    # Windows 下 Flask reloader 有時會導致進程立即退出
-    # 使用 threaded=True 確保服務穩定運行
-    # use_reloader=False 避免 Windows 上的 reloader 問題
-    is_windows = sys.platform.startswith('win')
+    # 啟動狀態快照線程（監控儀表板將置頂，每 5 秒更新一次）
+    logger.info("✓ 狀態監控已啟動（儀表板置頂）")
     
-    if is_windows:
-        # Windows: 禁用 reloader 避免進程退出問題
-        app.run(
-            host='0.0.0.0', 
-            port=5000, 
-            debug=True, 
-            use_reloader=False,
-            threaded=True
-        )
-    else:
-        # Linux/Mac: 正常使用 reloader
-        app.run(host='0.0.0.0', port=5000, debug=True)
+    def live_status_monitor():
+        """實時監控狀態 - 使用 Live 顯示置頂儀表板，日誌從底部滾動"""
+        from rich.live import Live
+        from rich.console import Group
+        from rich.text import Text
+        
+        try:
+            # Phase 9: 使用 Live 固定顯示在頂部，日誌往下滾動
+            # screen=False 確保不清空終端，transient=False 確保不會消失
+            with Live(
+                get_stats_panel(), 
+                refresh_per_second=0.2,  # 每秒刷新 0.2 次（5 秒一次）
+                screen=False,  # 不全屏，允許日誌在下方滾動
+                transient=False,  # 保留儀表板，不會消失
+                vertical_overflow="visible"  # 允許內容溢出（日誌不會被截斷）
+            ) as live:
+                while True:
+                    time.sleep(5)  # 每 5 秒更新一次狀態面板
+                    live.update(get_stats_panel())
+        except KeyboardInterrupt:
+            pass
+        except Exception as e:
+            logger.error(f"狀態監控異常: {e}")
+    
+    status_thread = Thread(target=live_status_monitor, daemon=True)
+    status_thread.start()
+    
+    flask_thread = Thread(target=run_flask, daemon=True)
+    flask_thread.start()
+    logger.info("✓ Flask 應用線程已啟動\n")
+    
+    # 給 Flask 一些時間初始化
+    time.sleep(2)
+    
+    logger.info("✓ 系統已就緒，監控日誌持續輸出中...")
+    
+    # 保持主線程活躍
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        logger.info("\n⏹️ 正在關閉 Backend...")
+        time.sleep(1)
+        logger.info("✓ Backend 已優雅關閉")
+        sys.exit(0)

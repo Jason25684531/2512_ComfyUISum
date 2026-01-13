@@ -57,8 +57,8 @@ class Database:
             raise
     
     def _init_schema(self):
-        """初始化資料庫 Schema - 建立 jobs 表"""
-        create_table_sql = """
+        """初始化資料庫 Schema - 建立 jobs 和 user_mapping 表"""
+        create_jobs_table_sql = """
         CREATE TABLE IF NOT EXISTS jobs (
             id VARCHAR(36) PRIMARY KEY,
             prompt TEXT,
@@ -79,14 +79,26 @@ class Database:
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
         """
         
+        create_user_mapping_table_sql = """
+        CREATE TABLE IF NOT EXISTS user_mapping (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            ip_address VARCHAR(45) UNIQUE NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_ip (ip_address),
+            INDEX idx_last_active (last_active)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        """
+        
         try:
             conn = self.pool.get_connection()
             cursor = conn.cursor()
-            cursor.execute(create_table_sql)
+            cursor.execute(create_jobs_table_sql)
+            cursor.execute(create_user_mapping_table_sql)
             conn.commit()
-            logger.info("✓ Jobs 表初始化成功")
+            logger.info("✓ Jobs 和 user_mapping 表初始化成功")
         except Error as e:
-            logger.error(f"✗ 建立 Jobs 表失敗: {e}")
+            logger.error(f"✗ 建立表失敗: {e}")
         finally:
             if conn.is_connected():
                 cursor.close()
@@ -200,18 +212,31 @@ class Database:
         where_clause = "" if include_deleted else "WHERE is_deleted = FALSE"
         sql = f"""
         SELECT id, prompt, workflow, model, aspect_ratio, batch_size, seed,
-               status, output_path, input_audio_path, created_at, updated_at
+               status, output_path, created_at, updated_at
         FROM jobs
         {where_clause}
         ORDER BY created_at DESC
         LIMIT %s OFFSET %s
         """
         
+        conn = None
+        cursor = None
         try:
             conn = self.pool.get_connection()
             cursor = conn.cursor(dictionary=True)
+            
+            print(f"[DB DEBUG] 執行 SQL 查詢 (limit={limit}, offset={offset})")
+            print(f"[DB DEBUG] SQL: {sql.strip()[:200]}...")
             cursor.execute(sql, (limit, offset))
             results = cursor.fetchall()
+            
+            print(f"[DB DEBUG] fetchall() 返回 {len(results)} 筆原始記錄")
+            if results:
+                print(f"[DB DEBUG] 第一筆: {results[0].get('id', 'N/A')}, status={results[0].get('status', 'N/A')}")
+            
+            logger.info(f"🔍 執行 SQL 查詢 (limit={limit}, offset={offset})")
+            logger.info(f"📝 SQL: {sql.strip()}")
+            logger.info(f"📊 fetchall() 返回 {len(results)} 筆原始記錄")
             
             # 將 datetime 轉換為 ISO 字串
             for row in results:
@@ -223,11 +248,12 @@ class Database:
             logger.info(f"✓ 查詢歷史記錄: {len(results)} 筆")
             return results
         except Error as e:
-            logger.error(f"✗ 查詢歷史失敗: {e}")
+            logger.error(f"✗ 查詢歷史失敗: {e}", exc_info=True)
             return []
         finally:
-            if conn.is_connected():
+            if cursor:
                 cursor.close()
+            if conn and conn.is_connected():
                 conn.close()
     
     def soft_delete_job(self, job_id: str) -> bool:
@@ -282,6 +308,71 @@ class Database:
         except Error as e:
             logger.error(f"✗ 根據檔名軟刪除失敗: {e}")
             return False
+        finally:
+            if conn.is_connected():
+                cursor.close()
+                conn.close()
+    
+    def get_or_create_user_id(self, ip_address: str) -> int:
+        """
+        根據 IP 地址獲取或建立用戶 ID
+        如果 IP 地址已存在，返回現有的用戶 ID
+        如果 IP 地址不存在，建立新的用戶 ID 並返回
+        
+        Args:
+            ip_address: 用戶的 IP 地址
+        
+        Returns:
+            用戶 ID (INT)
+        """
+        try:
+            conn = self.pool.get_connection()
+            cursor = conn.cursor(dictionary=True)
+            
+            # 查詢現有用戶
+            query_sql = "SELECT id FROM user_mapping WHERE ip_address = %s"
+            cursor.execute(query_sql, (ip_address,))
+            result = cursor.fetchone()
+            
+            if result:
+                # 更新 last_active 時間
+                update_sql = "UPDATE user_mapping SET last_active = CURRENT_TIMESTAMP WHERE ip_address = %s"
+                cursor.execute(update_sql, (ip_address,))
+                conn.commit()
+                return result['id']
+            else:
+                # 建立新用戶
+                insert_sql = "INSERT INTO user_mapping (ip_address) VALUES (%s)"
+                cursor.execute(insert_sql, (ip_address,))
+                conn.commit()
+                user_id = cursor.lastrowid
+                logger.debug(f"✓ 新用戶建立: User #{user_id} ({ip_address})")
+                return user_id
+        except Error as e:
+            logger.error(f"✗ 獲取或建立用戶 ID 失敗: {e}")
+            return -1
+        finally:
+            if conn.is_connected():
+                cursor.close()
+                conn.close()
+    
+    def get_active_users_count(self) -> int:
+        """
+        獲取過去 24 小時內活躍的用戶數
+        
+        Returns:
+            活躍用戶數
+        """
+        try:
+            conn = self.pool.get_connection()
+            cursor = conn.cursor()
+            sql = "SELECT COUNT(*) FROM user_mapping WHERE last_active >= DATE_SUB(NOW(), INTERVAL 24 HOUR)"
+            cursor.execute(sql)
+            result = cursor.fetchone()
+            return result[0] if result else 0
+        except Error as e:
+            logger.error(f"✗ 查詢活躍用戶失敗: {e}")
+            return 0
         finally:
             if conn.is_connected():
                 cursor.close()

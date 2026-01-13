@@ -1,0 +1,337 @@
+{
+  "6": {
+    "inputs": {
+      "image": "1000_F_91330916_oCjR7LGOsHrrVl4tAhrJtSsv5GK463Gl.jpg"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    }
+  },
+  "10": {
+    "inputs": {
+      "prompt": "a lady is talking",
+      "model": "veo-3.1-generate-preview",
+      "aspect_ratio": "9:16",
+      "duration_seconds": 8,
+      "resolution": "720p",
+      "person_generation": "allow_all",
+      "negative_prompt": "",
+      "seed": 1206066523,
+      "image": [
+        "6",
+        0
+      ]
+    },
+    "class_type": "VeoVideoGenerator",
+    "_meta": {
+      "title": "Veo Video Generator"
+    }
+  },
+  "11": {
+    "inputs": {
+      "frame_rate": 24,
+      "loop_count": 0,
+      "filename_prefix": "Veo3.1_Clip01",
+      "format": "video/h265-mp4",
+      "pix_fmt": "yuv420p10le",
+      "crf": 22,
+      "save_metadata": true,
+      "pingpong": false,
+      "save_output": true,
+      "images": [
+        "10",
+        0
+      ]
+    },
+    "class_type": "VHS_VideoCombine",
+    "_meta": {
+      "title": "Video Combine 🎥🅥🅗🅢"
+    }
+  },
+  "20": {
+    "inputs": {
+      "image": "S__12099587.jpg"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    }
+  },
+  "21": {
+    "inputs": {
+      "prompt": "a lady is talking",
+      "model": "veo-3.1-generate-preview",
+      "aspect_ratio": "9:16",
+      "duration_seconds": 8,
+      "resolution": "720p",
+      "person_generation": "allow_all",
+      "negative_prompt": "",
+      "seed": 1206066524,
+      "image": [
+        "20",
+        0
+      ]
+    },
+    "class_type": "VeoVideoGenerator",
+    "_meta": {
+      "title": "Veo Video Generator"
+    }
+  },
+  "22": {
+    "inputs": {
+      "frame_rate": 24,
+      "loop_count": 0,
+      "filename_prefix": "Veo3.1_Clip02",
+      "format": "video/h265-mp4",
+      "pix_fmt": "yuv420p10le",
+      "crf": 22,
+      "save_metadata": true,
+      "pingpong": false,
+      "save_output": true,
+      "images": [
+        "21",
+        0
+      ]
+    },
+    "class_type": "VHS_VideoCombine",
+    "_meta": {
+      "title": "Video Combine 🎥🅥🅗🅢"
+    }
+  },
+  "30": {
+    "inputs": {
+      "image": "messageImage_1767080020452.jpg"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    }
+  },
+  "31": {
+    "inputs": {
+      "prompt": "",
+      "model": "veo-3.1-generate-preview",
+      "aspect_ratio": "9:16",
+      "duration_seconds": 8,
+      "resolution": "720p",
+      "person_generation": "allow_all",
+      "negative_prompt": "",
+      "seed": 1206066525,
+      "image": [
+        "30",
+        0
+      ]
+    },
+    "class_type": "VeoVideoGenerator",
+    "_meta": {
+      "title": "Veo Video Generator"
+    }
+  },
+  "32": {
+    "inputs": {
+      "frame_rate": 24,
+      "loop_count": 0,
+      "filename_prefix": "Veo3.1_Clip03",
+      "format": "video/h265-mp4",
+      "pix_fmt": "yuv420p10le",
+      "crf": 22,
+      "save_metadata": true,
+      "pingpong": false,
+      "save_output": true,
+      "images": [
+        "31",
+        0
+      ]
+    },
+    "class_type": "VHS_VideoCombine",
+    "_meta": {
+      "title": "Video Combine 🎥🅥🅗🅢"
+    }
+  },
+  "40": {
+    "inputs": {
+      "image": "ComfyUI_00070_.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    }
+  },
+  "41": {
+    "inputs": {
+      "prompt": "",
+      "model": "veo-3.1-generate-preview",
+      "aspect_ratio": "9:16",
+      "duration_seconds": 8,
+      "resolution": "720p",
+      "person_generation": "allow_all",
+      "negative_prompt": "",
+      "seed": 1206066526,
+      "image": [
+        "40",
+        0
+      ]
+    },
+    "class_type": "VeoVideoGenerator",
+    "_meta": {
+      "title": "Veo Video Generator"
+    }
+  },
+  "42": {
+    "inputs": {
+      "frame_rate": 24,
+      "loop_count": 0,
+      "filename_prefix": "Veo3.1_Clip04",
+      "format": "video/h265-mp4",
+      "pix_fmt": "yuv420p10le",
+      "crf": 22,
+      "save_metadata": true,
+      "pingpong": false,
+      "save_output": true,
+      "images": [
+        "41",
+        0
+      ]
+    },
+    "class_type": "VHS_VideoCombine",
+    "_meta": {
+      "title": "Video Combine 🎥🅥🅗🅢"
+    }
+  },
+  "50": {
+    "inputs": {
+      "image": "ComfyUI_00061_.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    }
+  },
+  "51": {
+    "inputs": {
+      "prompt": "",
+      "model": "veo-3.1-generate-preview",
+      "aspect_ratio": "9:16",
+      "duration_seconds": 8,
+      "resolution": "720p",
+      "person_generation": "allow_all",
+      "negative_prompt": "",
+      "seed": 1206066527,
+      "image": [
+        "50",
+        0
+      ]
+    },
+    "class_type": "VeoVideoGenerator",
+    "_meta": {
+      "title": "Veo Video Generator"
+    }
+  },
+  "52": {
+    "inputs": {
+      "frame_rate": 24,
+      "loop_count": 0,
+      "filename_prefix": "Veo3.1_Clip05",
+      "format": "video/h265-mp4",
+      "pix_fmt": "yuv420p10le",
+      "crf": 22,
+      "save_metadata": true,
+      "pingpong": false,
+      "save_output": true,
+      "images": [
+        "51",
+        0
+      ]
+    },
+    "class_type": "VHS_VideoCombine",
+    "_meta": {
+      "title": "Video Combine 🎥🅥🅗🅢"
+    }
+  },
+  "100": {
+    "inputs": {
+      "image1": [
+        "10",
+        0
+      ],
+      "image2": [
+        "21",
+        0
+      ]
+    },
+    "class_type": "ImageBatch",
+    "_meta": {
+      "title": "Batch Images"
+    }
+  },
+  "101": {
+    "inputs": {
+      "image1": [
+        "100",
+        0
+      ],
+      "image2": [
+        "31",
+        0
+      ]
+    },
+    "class_type": "ImageBatch",
+    "_meta": {
+      "title": "Batch Images"
+    }
+  },
+  "102": {
+    "inputs": {
+      "image1": [
+        "101",
+        0
+      ],
+      "image2": [
+        "41",
+        0
+      ]
+    },
+    "class_type": "ImageBatch",
+    "_meta": {
+      "title": "Batch Images"
+    }
+  },
+  "103": {
+    "inputs": {
+      "image1": [
+        "102",
+        0
+      ],
+      "image2": [
+        "51",
+        0
+      ]
+    },
+    "class_type": "ImageBatch",
+    "_meta": {
+      "title": "Batch Images"
+    }
+  },
+  "110": {
+    "inputs": {
+      "frame_rate": 24,
+      "loop_count": 0,
+      "filename_prefix": "Veo3.1_Combined_Full",
+      "format": "video/h265-mp4",
+      "pix_fmt": "yuv420p10le",
+      "crf": 22,
+      "save_metadata": true,
+      "pingpong": false,
+      "save_output": true,
+      "images": [
+        "103",
+        0
+      ]
+    },
+    "class_type": "VHS_VideoCombine",
+    "_meta": {
+      "title": "Video Combine 🎥🅥🅗🅢"
+    }
+  }
+}

@@ -1,5 +1,5 @@
 ﻿// Auto-generated config - DO NOT EDIT
-const API_BASE_NGROK = 'https://ea16766ac7e3.ngrok-free.app';
+const API_BASE_NGROK = 'https://0518a3589840.ngrok-free.app';
 const API_BASE_LOCAL = 'http://localhost:5000';
 
 // Logic: Use Local API if on localhost, otherwise use Ngrok

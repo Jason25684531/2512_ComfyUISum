@@ -17,6 +17,11 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from datetime import datetime, timedelta
 
+# ============================================
+# 添加 shared 模組路徑
+# ============================================
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
 # 配置日誌系統 (優先設置)
 log_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
@@ -52,18 +57,8 @@ logger.info("Worker 日誌系統已啟動")
 logger.info(f"日誌檔案位置: {log_file}")
 logger.info("=" * 60)
 
-# 自動載入 .env 檔案
-def load_env():
-    env_path = Path(__file__).parent.parent.parent / ".env"
-    if env_path.exists():
-        with open(env_path, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    key, value = line.split("=", 1)
-                    os.environ.setdefault(key.strip(), value.strip())
-        logger.info(f"已載入 .env 檔案: {env_path}")
-
+# 使用共用的 load_env
+from shared.utils import load_env
 load_env()
 
 from json_parser import parse_workflow
@@ -97,11 +92,14 @@ def save_base64_image(base64_data: str, job_id: str, field_name: str) -> str:
         field_name: 欄位名稱 (source, target, input 等)
     
     Returns:
-        保存的檔名 (不含路徑)
+        保存的檔名 (不含路徑，用於 ComfyUI 相對路徑參考)
     """
-    # 移除 data:image/xxx;base64, 前綴
-    if "," in base64_data:
-        base64_data = base64_data.split(",", 1)[1]
+    import io
+    from PIL import Image
+    
+    # 移除 data:image/xxx;base64, 前綴（更嚴格的處理）
+    if isinstance(base64_data, str) and "," in base64_data:
+        base64_data = base64_data.split(",", 1)[1].strip()
     
     # 解碼 base64
     try:
@@ -109,7 +107,37 @@ def save_base64_image(base64_data: str, job_id: str, field_name: str) -> str:
     except Exception as e:
         raise ValueError(f"Base64 解碼失敗: {e}")
     
-    # 生成唯一檔名
+    # 始終轉換為真正的 PNG 格式（解決格式不匹配問題）
+    # 原因：用戶上傳的圖片可能是 JPEG, AVIF, WebP 等格式，
+    #       如果直接保存為 .png 副檔名但內容是其他格式，
+    #       ComfyUI 的 LoadImage 節點可能無法正確識別
+    try:
+        img = Image.open(io.BytesIO(image_bytes))
+        original_format = img.format
+        logger.info(f"📷 原始圖片格式: {original_format}, 尺寸: {img.size}")
+        
+        # 轉換為 RGB（處理 RGBA 或其他色彩模式）
+        if img.mode in ('RGBA', 'LA', 'P'):
+            # 創建白色背景
+            background = Image.new('RGB', img.size, (255, 255, 255))
+            if img.mode == 'P':
+                img = img.convert('RGBA')
+            background.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
+            img = background
+        elif img.mode != 'RGB':
+            img = img.convert('RGB')
+        
+        # 保存為真正的 PNG 格式
+        img_buffer = io.BytesIO()
+        img.save(img_buffer, format='PNG', optimize=True)
+        image_bytes = img_buffer.getvalue()
+        logger.info(f"✅ 已轉換為 PNG 格式，大小: {len(image_bytes)} bytes")
+        
+    except Exception as e:
+        raise ValueError(f"圖片格式轉換失敗: {e}")
+
+    
+    # 生成唯一檔名（只用檔名，不用絕對路徑）
     filename = f"upload_{job_id}_{field_name}.png"
     filepath = Path(COMFYUI_INPUT_DIR) / filename
     
@@ -117,10 +145,15 @@ def save_base64_image(base64_data: str, job_id: str, field_name: str) -> str:
     filepath.parent.mkdir(parents=True, exist_ok=True)
     
     # 寫入檔案
-    with open(filepath, "wb") as f:
-        f.write(image_bytes)
+    try:
+        with open(filepath, "wb") as f:
+            f.write(image_bytes)
+        logger.info(f"💾 已保存圖片: {filename} ({len(image_bytes)} bytes) 至 {filepath}")
+    except Exception as e:
+        logger.error(f"❌ 檔案寫入失敗: {e}")
+        raise
     
-    logger.info(f"💾 已保存圖片: {filename} ({len(image_bytes)} bytes)")
+    # 返回只有檔名（相對路徑），不返回絕對路徑
     return filename
 
 
@@ -258,11 +291,22 @@ def update_job_status(
     status: str,
     progress: int = 0,
     image_url: str = None,
-    error: str = None
+    error: str = None,
+    db_client=None
 ):
     """
-    更新任務狀態到 Redis
+    更新任務狀態到 Redis 和 MySQL
+    
+    Args:
+        r: Redis 客戶端
+        job_id: 任務 ID
+        status: 狀態 (processing, finished, failed)
+        progress: 進度 (0-100)
+        image_url: 輸出圖片 URL
+        error: 錯誤訊息
+        db_client: Database 客戶端 (可選，用於同步到 MySQL)
     """
+    # 1. 更新 Redis
     status_key = f"job:status:{job_id}"
     data = {
         "status": status,
@@ -276,10 +320,31 @@ def update_job_status(
     
     r.hset(status_key, mapping=data)
     r.expire(status_key, JOB_STATUS_EXPIRE_SECONDS)
-    logger.info(f"更新狀態: {job_id} -> {status}")
+    logger.info(f"✓ Redis 狀態更新: {job_id} -> {status}")
+    
+    # 2. 同步到 MySQL (如果可用且狀態為 finished 或 failed)
+    if db_client and status in ['finished', 'failed']:
+        try:
+            # 轉換 image_url 為 output_path (去除 /outputs/ 前綴)
+            output_path = None
+            if image_url:
+                output_path = image_url.replace('/outputs/', '')
+            
+            success = db_client.update_job_status(
+                job_id=job_id,
+                status=status,
+                output_path=output_path
+            )
+            if success:
+                logger.info(f"✓ MySQL 狀態同步: {job_id} -> {status}")
+            else:
+                logger.warning(f"⚠️ MySQL 狀態同步失敗: {job_id}")
+        except Exception as e:
+            logger.error(f"❌ MySQL 同步錯誤: {e}")
 
 
-def process_job(r: redis.Redis, client: ComfyClient, job_data: dict):
+
+def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=None):
     """
     處理單個任務
     
@@ -306,11 +371,12 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict):
     
     try:
         # 1. 更新狀態為處理中
-        update_job_status(r, job_id, "processing", progress=10)
+        update_job_status(r, job_id, "processing", progress=10, db_client=db_client)
         
         # 2. 提取參數
         workflow_name = job_data.get("workflow", "text_to_image")
         prompt = job_data.get("prompt", "")
+        prompts = job_data.get("prompts", [])  # Veo3 Long Video: 多段 prompts
         seed = job_data.get("seed", -1)
         aspect_ratio = job_data.get("aspect_ratio", "1:1")
         model = job_data.get("model", "turbo_fp8")
@@ -319,13 +385,15 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict):
         
         logger.info(f"Workflow: {workflow_name}")
         logger.info(f"Prompt: {prompt[:50] if prompt else '(empty)'}...")
+        if prompts:
+            logger.info(f"Prompts: {len(prompts)} segments")
         logger.info(f"Aspect Ratio: {aspect_ratio}")
         logger.info(f"Model: {model}")
         logger.info(f"Batch Size: {batch_size}")
         logger.info(f"Images: {list(images.keys()) if images else 'None'}")
         
         # 3. 處理上傳的圖片 (base64 -> 檔案)
-        update_job_status(r, job_id, "processing", progress=15)
+        update_job_status(r, job_id, "processing", progress=15, db_client=db_client)
         
         image_files = {}  # 儲存檔名映射 {"source": "upload_xxx_source.png"}
         if images:
@@ -351,7 +419,7 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict):
                 comfyui_audio_file = ""
         
         # 4. 解析 workflow (包含圖片與音訊注入)
-        update_job_status(r, job_id, "processing", progress=20)
+        update_job_status(r, job_id, "processing", progress=20, db_client=db_client)
         
         workflow = parse_workflow(
             workflow_name=workflow_name,
@@ -361,7 +429,8 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict):
             model=model,
             batch_size=batch_size,
             image_files=image_files,      # 傳入圖片檔名映射
-            audio_file=comfyui_audio_file # 傳入複製後的音訊檔名 (Phase 7)
+            audio_file=comfyui_audio_file, # 傳入複製後的音訊檔名 (Phase 7)
+            prompts=prompts               # Veo3 Long Video: 傳入多段 prompts
         )
         
         logger.info("Workflow 解析完成")
@@ -371,7 +440,7 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict):
             raise Exception("無法連接 ComfyUI，請確認是否已啟動")
         
         # 6. 提交任務到 ComfyUI
-        update_job_status(r, job_id, "processing", progress=30)
+        update_job_status(r, job_id, "processing", progress=30, db_client=db_client)
         
         prompt_id = client.queue_prompt(workflow)
         if not prompt_id:
@@ -391,7 +460,7 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict):
             
             # 將進度從 30% 開始映射到 30-95%
             mapped_progress = 30 + int(progress * 0.65)
-            update_job_status(r, job_id, "processing", progress=mapped_progress)
+            update_job_status(r, job_id, "processing", progress=mapped_progress, db_client=db_client)
 
         # 8. 等待 ComfyUI 執行完成
         result = client.wait_for_completion(
@@ -402,63 +471,101 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict):
 
         # 9. 根據執行結果處理輸出
         if result.get("success"):
+            videos = result.get("videos", [])
+            gifs = result.get("gifs", [])  # VHS_VideoCombine 輸出影片也在這裡
             images = result.get("images", [])
-            if images:
+            
+            # 合併所有視訊類輸出 (videos + gifs)，統一處理
+            all_video_outputs = []
+            for v in videos:
+                v["_source"] = "videos"
+                all_video_outputs.append(v)
+            for g in gifs:
+                g["_source"] = "gifs"
+                all_video_outputs.append(g)
+            
+            logger.info(f"📊 輸出統計: videos={len(videos)}, gifs={len(gifs)}, images={len(images)}")
+            
+            output_list = []
+            output_type = "unknown"
+            
+            # 優先順序: 視訊類 (videos + gifs) > 圖片
+            if all_video_outputs:
+                output_list = all_video_outputs
+                output_type = "video"
+                logger.info(f"🎥 收到 {len(all_video_outputs)} 個視訊輸出")
+            elif images:
+                output_list = images
+                output_type = "image"
                 logger.info(f"📷 收到 {len(images)} 張輸出圖片")
+            
+            if output_list:
+                # 優先選擇完整合併的影片 (filename 包含 Combined 或 Full)
+                selected_file = None
                 
-                # 優先選擇有 subfolder 的圖片（正式輸出），否則使用第一張
-                selected_image = None
-                for img in images:
-                    if img.get("subfolder"):
-                        selected_image = img
-                        logger.info(f"選擇有子目錄的圖片: {img.get('filename')} (subfolder: {img.get('subfolder')})")
+                # 1. 第一輪篩選：找 "Combined" 或 "Full" (Veo3 Long Video 最終輸出)
+                for item in output_list:
+                    filename = item.get("filename", "")
+                    if "Combined" in filename or "Full" in filename:
+                        selected_file = item
+                        logger.info(f"✨ 優先選擇合併影片: {filename}")
                         break
                 
-                if not selected_image:
-                    selected_image = images[0]
-                    logger.info(f"使用第一張圖片: {selected_image.get('filename')}")
+                # 2. 第二輪篩選：如果有 subfolder (備選)
+                if not selected_file:
+                    for item in output_list:
+                        if item.get("subfolder"):
+                            selected_file = item
+                            logger.info(f"選擇有子目錄的檔案: {item.get('filename')} (subfolder: {item.get('subfolder')})")
+                            break
                 
-                # 嘗試複製選中的圖片
-                new_filename = client.copy_output_image(
-                    filename=selected_image.get("filename"),
-                    subfolder=selected_image.get("subfolder", ""),
+                # 3. 最後手段：使用最後一個（通常最終輸出在最後）
+                if not selected_file:
+                    selected_file = output_list[-1]
+                    logger.info(f"使用最後一個檔案: {selected_file.get('filename')}")
+                
+                # 嘗試複製選中的檔案
+                new_filename = client.copy_output_file(
+                    filename=selected_file.get("filename"),
+                    subfolder=selected_file.get("subfolder", ""),
                     job_id=job_id
                 )
                 
-                # 如果選中的圖片複製失敗，嘗試其他圖片
-                if not new_filename and len(images) > 1:
-                    logger.warning("⚠️ 第一選擇失敗，嘗試其他圖片...")
-                    for img in images:
-                        if img == selected_image:
+                # 如果選中的檔案複製失敗，嘗試其他檔案
+                if not new_filename and len(output_list) > 1:
+                    logger.warning("⚠️ 第一選擇失敗，嘗試其他檔案...")
+                    for item in output_list:
+                        if item == selected_file:
                             continue
-                        new_filename = client.copy_output_image(
-                            filename=img.get("filename"),
-                            subfolder=img.get("subfolder", ""),
+                        new_filename = client.copy_output_file(
+                            filename=item.get("filename"),
+                            subfolder=item.get("subfolder", ""),
                             job_id=job_id
                         )
                         if new_filename:
-                            logger.info(f"✓ 成功複製備選圖片: {img.get('filename')}")
+                            logger.info(f"✓ 成功複製備選檔案: {item.get('filename')}")
                             break
                 
                 if new_filename:
-                    image_url = f"/outputs/{new_filename}"
-                    update_job_status(r, job_id, "finished", progress=100, image_url=image_url)
-                    logger.info(f"✅ 任務完成，輸出: {image_url}")
+                    # 無論是圖片還是影片，都通過 image_url 欄位回傳 (前端會根據副檔名判斷)
+                    file_url = f"/outputs/{new_filename}"
+                    update_job_status(r, job_id, "finished", progress=100, image_url=file_url, db_client=db_client)
+                    logger.info(f"✅ 任務完成，輸出 ({output_type}): {file_url}")
                 else:
-                    update_job_status(r, job_id, "finished", progress=100)
-                    logger.warning("⚠️ 任務完成，但所有輸出圖片都無法複製")
+                    update_job_status(r, job_id, "finished", progress=100, db_client=db_client)
+                    logger.warning("⚠️ 任務完成，但所有輸出檔案都無法複製")
             else:
-                update_job_status(r, job_id, "finished", progress=100)
-                logger.info("✅ 任務完成，但沒有輸出圖片")
+                update_job_status(r, job_id, "finished", progress=100, db_client=db_client)
+                logger.info("✅ 任務完成，但沒有輸出檔案")
         else:
             error = result.get("error", "未知錯誤")
-            update_job_status(r, job_id, "failed", error=error)
+            update_job_status(r, job_id, "failed", error=error, db_client=db_client)
             logger.error(f"❌ 任務失敗: {error}")
             
     except Exception as e:
         error_msg = str(e)
         logger.error(f"❌ 處理錯誤: {error_msg}")
-        update_job_status(r, job_id, "failed", progress=0, error=error_msg)
+        update_job_status(r, job_id, "failed", progress=0, error=error_msg, db_client=db_client)
 
 
 def main():
@@ -549,7 +656,7 @@ def main():
                 
                 try:
                     job_data = json.loads(job_json)
-                    process_job(r, client, job_data)
+                    process_job(r, client, job_data, db_client)
                 except json.JSONDecodeError as e:
                     logger.error(f"JSON 解析錯誤: {e}")
             

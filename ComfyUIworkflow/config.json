@@ -61,5 +61,19 @@
       "seed_node_id": "123:3",
       "output_node_id": "119"
     }
+  },
+  "veo3_long_video": {
+    "file": "Veo3_VideoConnection.json",
+    "description": "Veo3 Long Video - 5 段視頻拼接",
+    "mapping": {
+      "output_node_id": "110",
+      "prompt_segments": {
+        "0": "10",
+        "1": "21",
+        "2": "31",
+        "3": "41",
+        "4": "51"
+      }
+    }
   }
 }

@@ -144,6 +144,10 @@ services:
       
       # 指定輸入路徑
       - COMFYUI_INPUT_DIR=/worker/storage/inputs
+
+      # Phase 9: Reliability
+      - WORKER_TIMEOUT=${WORKER_TIMEOUT:-3600}
+      - COMFY_POLLING_INTERVAL=${COMFY_POLLING_INTERVAL:-0.5}
       
     depends_on:
       - redis

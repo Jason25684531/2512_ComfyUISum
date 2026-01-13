@@ -148,6 +148,10 @@ services:
       - DB_PASSWORD=${DB_PASSWORD:-studio_password}
       - DB_NAME=${DB_NAME:-studio_db}
       - COMFYUI_INPUT_DIR=/worker/storage/inputs
+      
+      # Phase 9: Reliability
+      - WORKER_TIMEOUT=${WORKER_TIMEOUT:-3600}
+      - COMFY_POLLING_INTERVAL=${COMFY_POLLING_INTERVAL:-0.5}
     depends_on:
       - redis
       - mysql

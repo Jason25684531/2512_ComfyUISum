@@ -102,7 +102,7 @@ class ComfyClient:
     def wait_for_completion(
         self, 
         prompt_id: str, 
-        timeout: int = 300,
+        timeout: int = None,  # Phase 9: 改為 None，使用 config 預設值
         on_progress: Optional[Callable] = None
     ) -> dict:
         """
@@ -110,35 +110,54 @@ class ComfyClient:
         
         Args:
             prompt_id: 執行 ID
-            timeout: 超時時間 (秒)
+            timeout: 超時時間 (秒)，None 則使用配置預設值
             on_progress: 進度回調函數
         
         Returns:
             {
                 "success": bool,
                 "images": [{"filename": str, "subfolder": str, "type": str}],
+                "videos": [{"filename": str, "subfolder": str, "type": str}],
+                "gifs": [{"filename": str, "subfolder": str, "type": str}],
                 "error": str or None
             }
         """
+        # Phase 9: 使用配置的 WORKER_TIMEOUT
+        from config import WORKER_TIMEOUT, COMFY_POLLING_INTERVAL
+        if timeout is None:
+            timeout = WORKER_TIMEOUT
+        
         ws_url = f"{self.ws_url}?clientId={self.client_id}"
         result = {
             "success": False,
             "images": [],
+            "videos": [],
+            "gifs": [],
             "error": None
         }
         all_images = []  # 收集所有輸出圖片
+        all_videos = []  # 收集所有輸出影片
+        all_gifs = []    # 收集所有輸出 GIF
         
         try:
             ws = websocket.create_connection(ws_url, timeout=timeout)
-            print(f"[ComfyClient] WebSocket 已連接，等待任務完成...")
+            print(f"[ComfyClient] WebSocket 已連接，等待任務完成（超時: {timeout}s）...")
             
             start_time = time.time()
+            last_heartbeat = start_time  # Phase 9: 記錄上次心跳時間
             
             while True:
                 # 檢查超時
-                if time.time() - start_time > timeout:
-                    result["error"] = "執行超時"
+                elapsed = time.time() - start_time
+                if elapsed > timeout:
+                    result["error"] = f"執行超時（已等待 {int(elapsed)}s）"
+                    print(f"[ComfyClient] ❌ 任務超時: {prompt_id} ({int(elapsed)}s)")
                     break
+                
+                # Phase 9: 每 60 秒輸出一次心跳日誌（保持連接存活，證明沒有卡死）
+                if elapsed - last_heartbeat >= 60:
+                    print(f"[ComfyClient] 💓 任務 {prompt_id} 仍在處理中... （已等待: {int(elapsed)}s / {timeout}s）")
+                    last_heartbeat = elapsed
                 
                 try:
                     message = ws.recv()
@@ -185,19 +204,45 @@ class ComfyClient:
                             # node 為 None 表示執行完成
                             print(f"[ComfyClient] 任務執行完成")
                             result["success"] = True
-                            # 使用收集到的所有圖片
+                            # 使用收集到的所有輸出
                             result["images"] = all_images
+                            result["videos"] = all_videos
+                            result["gifs"] = all_gifs
+                            
+                            # 如果 WebSocket 沒有收到輸出，從 History API 獲取
+                            if not all_images and not all_videos and not all_gifs:
+                                print(f"[ComfyClient] WebSocket 未收到輸出，嘗試從 History API 獲取...")
+                                history_outputs = self.get_outputs_from_history(prompt_id)
+                                result["images"] = history_outputs.get("images", [])
+                                result["videos"] = history_outputs.get("videos", [])
+                                result["gifs"] = history_outputs.get("gifs", [])
+                                
+                                if result["images"] or result["videos"] or result["gifs"]:
+                                    print(f"[ComfyClient] ✅ 從 History API 獲取到輸出")
                             break
                     
                     # 執行完成 (獲取輸出)
                     elif msg_type == "executed":
                         if msg_data.get("prompt_id") == prompt_id:
                             output = msg_data.get("output", {})
+                            
+                            # 處理圖片
                             images = output.get("images", [])
                             if images:
-                                # 收集所有圖片，不覆蓋之前的
                                 all_images.extend(images)
                                 print(f"[ComfyClient] 輸出圖片: {images}")
+                                
+                            # 處理影片 (有些節點可能用 videos)
+                            videos = output.get("videos", [])
+                            if videos:
+                                all_videos.extend(videos)
+                                print(f"[ComfyClient] 輸出影片: {videos}")
+                                
+                            # 處理 GIF (有些節點可能用 gifs)
+                            gifs = output.get("gifs", [])
+                            if gifs:
+                                all_gifs.extend(gifs)
+                                print(f"[ComfyClient] 輸出 GIF: {gifs}")
                     
                     # 執行錯誤
                     elif msg_type == "execution_error":
@@ -218,14 +263,79 @@ class ComfyClient:
         
         return result
     
-    def copy_output_image(
+    def get_outputs_from_history(self, prompt_id: str) -> dict:
+        """
+        從 ComfyUI History API 獲取任務輸出
+        
+        這是 WebSocket 的備用方案，用於處理 WebSocket 可能漏掉輸出訊息的情況。
+        VHS_VideoCombine 節點的輸出可能不會通過 WebSocket 正確發送。
+        
+        Args:
+            prompt_id: 執行 ID
+        
+        Returns:
+            {
+                "images": [...],
+                "videos": [...],
+                "gifs": [...]
+            }
+        """
+        result = {"images": [], "videos": [], "gifs": []}
+        
+        try:
+            response = requests.get(
+                f"{self.http_url}/history/{prompt_id}",
+                timeout=30
+            )
+            
+            if response.status_code != 200:
+                print(f"[ComfyClient] History API 返回錯誤: {response.status_code}")
+                return result
+            
+            history = response.json()
+            
+            if prompt_id not in history:
+                print(f"[ComfyClient] History 中找不到 prompt_id: {prompt_id}")
+                return result
+            
+            outputs = history[prompt_id].get("outputs", {})
+            
+            # 遍歷所有節點的輸出
+            for node_id, node_output in outputs.items():
+                # 處理圖片
+                images = node_output.get("images", [])
+                if images:
+                    result["images"].extend(images)
+                    print(f"[ComfyClient] History - 節點 {node_id} 輸出圖片: {len(images)} 張")
+                
+                # 處理影片 (VHS_VideoCombine 使用 gifs 欄位存放影片)
+                videos = node_output.get("videos", [])
+                if videos:
+                    result["videos"].extend(videos)
+                    print(f"[ComfyClient] History - 節點 {node_id} 輸出影片: {len(videos)} 個")
+                
+                # 處理 GIF (VHS_VideoCombine 輸出)
+                gifs = node_output.get("gifs", [])
+                if gifs:
+                    result["gifs"].extend(gifs)
+                    print(f"[ComfyClient] History - 節點 {node_id} 輸出 GIF/影片: {len(gifs)} 個")
+            
+            total = len(result["images"]) + len(result["videos"]) + len(result["gifs"])
+            print(f"[ComfyClient] History API 總共找到 {total} 個輸出檔案")
+            
+        except Exception as e:
+            print(f"[ComfyClient] History API 錯誤: {e}")
+        
+        return result
+    
+    def copy_output_file(
         self, 
         filename: str, 
         subfolder: str = "",
         job_id: str = None
     ) -> Optional[str]:
         """
-        將 ComfyUI 輸出的圖片複製到 storage/outputs
+        將 ComfyUI 輸出的檔案（圖片/影片）複製到 storage/outputs
         
         Args:
             filename: 原始檔名
@@ -256,11 +366,14 @@ class ComfyClient:
         
         try:
             shutil.copy2(source_path, dest_path)
-            print(f"[ComfyClient] 已複製圖片: {dest_path}")
+            print(f"[ComfyClient] 已複製檔案: {dest_path}")
             return new_filename
         except Exception as e:
-            print(f"[ComfyClient] 複製失敗: {e}")
+            print(f"[ComfyClient] 複製檔案失敗: {e}")
             return None
+            
+    # 向後相容別名
+    copy_output_image = copy_output_file
     
     def interrupt(self) -> bool:
         """
@@ -325,12 +438,21 @@ class ComfyClient:
             result["error"] = ws_result.get("error", "執行失敗")
             return result
         
-        # 4. 複製輸出圖片
-        if ws_result["images"]:
-            first_image = ws_result["images"][0]
-            new_filename = self.copy_output_image(
-                filename=first_image.get("filename"),
-                subfolder=first_image.get("subfolder", ""),
+        # 4. 複製輸出
+        output_file = None
+        
+        # 優先檢查影片/GIF
+        if ws_result["videos"]:
+            output_file = ws_result["videos"][0]
+        elif ws_result["gifs"]:
+            output_file = ws_result["gifs"][0]
+        elif ws_result["images"]:
+            output_file = ws_result["images"][0]
+            
+        if output_file:
+            new_filename = self.copy_output_file(
+                filename=output_file.get("filename"),
+                subfolder=output_file.get("subfolder", ""),
                 job_id=job_id
             )
             
@@ -338,7 +460,7 @@ class ComfyClient:
                 result["success"] = True
                 result["image_url"] = f"/outputs/{new_filename}"
         else:
-            result["error"] = "沒有輸出圖片"
+            result["error"] = "沒有輸出檔案"
         
         return result
 

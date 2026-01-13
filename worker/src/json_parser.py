@@ -45,6 +45,8 @@ WORKFLOW_MAP = {
     "single_image_edit": "single_image_edit_qwen_2509_gguf_1222.json",
     "sketch_to_image": "sketch_to_image_qwen_2509_gguf_1222.json",
     "virtual_human": "InfiniteTalk_IndexTTS_2.json",
+    "veo3_long_video": "Veo3_VideoConnection.json",
+    "image_to_video": "Veo3_VideoConnection.json",  # 單段模式也使用 Veo3
 }
 
 # ==========================================
@@ -73,6 +75,17 @@ IMAGE_NODE_MAP = {
     "virtual_human": {
         "284": "avatar",   # 虛擬人參考圖 (LoadImage)
     },
+    "veo3_long_video": {
+        # Veo3 Long Video: 5 個 LoadImage 節點對應 Shot 1-5
+        "6": "shot_0",     # Shot 1 圖片
+        "20": "shot_1",    # Shot 2 圖片
+        "30": "shot_2",    # Shot 3 圖片
+        "40": "shot_3",    # Shot 4 圖片
+        "50": "shot_4",    # Shot 5 圖片
+    },
+    "image_to_video": {
+        "6": "shot_0",     # 單段模式也使用 Shot 1
+    },
 }
 
 # ==========================================
@@ -89,8 +102,26 @@ AUDIO_NODE_MAP = {
 def get_workflow_path(workflow_name: str) -> Path:
     """
     取得 workflow JSON 檔案路徑
+    優先從 config.json 讀取，若不存在則使用 WORKFLOW_MAP
     """
-    from config import WORKFLOW_DIR
+    from config import WORKFLOW_DIR, WORKFLOW_CONFIG_PATH
+    import json
+    
+    # 嘗試從 config.json 讀取文件名
+    if WORKFLOW_CONFIG_PATH.exists():
+        try:
+            with open(WORKFLOW_CONFIG_PATH, 'r', encoding='utf-8') as f:
+                config_data = json.load(f)
+            
+            workflow_config = config_data.get(workflow_name, {})
+            if 'file' in workflow_config:
+                filename = workflow_config['file']
+                print(f"[Parser] 從 config.json 讀取 workflow 文件: {filename}")
+                return WORKFLOW_DIR / filename
+        except Exception as e:
+            print(f"[Parser] ⚠️ 讀取 config.json 失敗: {e}")
+    
+    # Fallback: 使用 WORKFLOW_MAP
     filename = WORKFLOW_MAP.get(workflow_name, f"{workflow_name}.json")
     return WORKFLOW_DIR / filename
 
@@ -131,9 +162,124 @@ def find_nodes_by_class(workflow: dict, class_type: str) -> list:
     return nodes
 
 
+def trim_veo3_workflow(workflow: dict, image_files: dict) -> dict:
+    """
+    根據實際上傳的圖片數量，動態裁剪 Veo3 Long Video 工作流
+    
+    Veo3 工作流結構 (每個 Shot 的節點):
+    - Shot 1: 節點 6 (LoadImage), 10 (VeoVideoGenerator), 11 (VHS_VideoCombine)
+    - Shot 2: 節點 20 (LoadImage), 21 (VeoVideoGenerator), 22 (VHS_VideoCombine)
+    - Shot 3: 節點 30 (LoadImage), 31 (VeoVideoGenerator), 32 (VHS_VideoCombine)
+    - Shot 4: 節點 40 (LoadImage), 41 (VeoVideoGenerator), 42 (VHS_VideoCombine)
+    - Shot 5: 節點 50 (LoadImage), 51 (VeoVideoGenerator), 52 (VHS_VideoCombine)
+    - ImageBatch 鏈: 100 -> 101 -> 102 -> 103 -> 110 (最終輸出)
+    
+    Args:
+        workflow: 原始工作流
+        image_files: 圖片檔案映射 {"shot_0": "xxx.png", "shot_1": "yyy.png", ...}
+    
+    Returns:
+        裁剪後的工作流
+    """
+    # 確定有哪些 shots
+    valid_shots = []
+    for i in range(5):
+        shot_key = f"shot_{i}"
+        if shot_key in image_files and image_files[shot_key]:
+            valid_shots.append(i)
+    
+    shot_count = len(valid_shots)
+    print(f"[Parser] Veo3 動態裁剪: 偵測到 {shot_count} 個有效 shots: {valid_shots}")
+    
+    if shot_count == 0:
+        print("[Parser] ⚠️ 沒有有效的圖片，返回原始工作流")
+        return workflow
+    
+    if shot_count == 5:
+        print("[Parser] 所有 5 個 shots 都有圖片，不需要裁剪")
+        return workflow
+    
+    # Shot 節點映射
+    shot_nodes = {
+        0: {"load": "6", "gen": "10", "save": "11"},
+        1: {"load": "20", "gen": "21", "save": "22"},
+        2: {"load": "30", "gen": "31", "save": "32"},
+        3: {"load": "40", "gen": "41", "save": "42"},
+        4: {"load": "50", "gen": "51", "save": "52"},
+    }
+    
+    # 刪除沒有圖片的 Shot 節點
+    nodes_to_remove = []
+    for i in range(5):
+        if i not in valid_shots:
+            nodes = shot_nodes[i]
+            nodes_to_remove.extend([nodes["load"], nodes["gen"], nodes["save"]])
+            print(f"[Parser] 移除 Shot {i+1} 節點: {nodes}")
+    
+    for node_id in nodes_to_remove:
+        if node_id in workflow:
+            del workflow[node_id]
+    
+    # 重建 ImageBatch 鏈 (只連接有效的 shots)
+    # 原始鏈: 100(10+21) -> 101(100+31) -> 102(101+41) -> 103(102+51) -> 110
+    
+    # 移除原有的 ImageBatch 節點
+    for node_id in ["100", "101", "102", "103"]:
+        if node_id in workflow:
+            del workflow[node_id]
+    
+    # 獲取有效 shots 的 generator 節點 ID (輸出影片幀)
+    valid_gen_nodes = [shot_nodes[i]["gen"] for i in valid_shots]
+    print(f"[Parser] 有效的 generator 節點: {valid_gen_nodes}")
+    
+    if shot_count == 1:
+        # 只有一個 shot，直接連接到最終輸出
+        if "110" in workflow:
+            workflow["110"]["inputs"]["images"] = [valid_gen_nodes[0], 0]
+            print(f"[Parser] 單一 shot 模式: 節點 110 直接連接到 {valid_gen_nodes[0]}")
+    else:
+        # 多個 shots，重建 ImageBatch 鏈
+        # 使用節點 ID 100, 101, 102... 來建立鏈
+        batch_node_id = 100
+        
+        # 第一個 batch: 連接前兩個 generator
+        workflow[str(batch_node_id)] = {
+            "inputs": {
+                "image1": [valid_gen_nodes[0], 0],
+                "image2": [valid_gen_nodes[1], 0]
+            },
+            "class_type": "ImageBatch",
+            "_meta": {"title": "Batch Images (Dynamic)"}
+        }
+        print(f"[Parser] 建立 ImageBatch {batch_node_id}: {valid_gen_nodes[0]} + {valid_gen_nodes[1]}")
+        
+        # 後續的 batch: 連接前一個 batch 和下一個 generator
+        for i in range(2, shot_count):
+            prev_batch_id = str(batch_node_id)
+            batch_node_id += 1
+            
+            workflow[str(batch_node_id)] = {
+                "inputs": {
+                    "image1": [prev_batch_id, 0],
+                    "image2": [valid_gen_nodes[i], 0]
+                },
+                "class_type": "ImageBatch",
+                "_meta": {"title": f"Batch Images (Dynamic {i})"}
+            }
+            print(f"[Parser] 建立 ImageBatch {batch_node_id}: {prev_batch_id} + {valid_gen_nodes[i]}")
+        
+        # 最終輸出節點連接到最後一個 batch
+        if "110" in workflow:
+            workflow["110"]["inputs"]["images"] = [str(batch_node_id), 0]
+            print(f"[Parser] 節點 110 連接到最後的 ImageBatch: {batch_node_id}")
+    
+    return workflow
+
+
 def parse_workflow(
     workflow_name: str,
     prompt: str = "",
+    prompts: list = None,  # Veo3 Long Video: 多段 prompts
     seed: int = -1,
     aspect_ratio: str = "1:1",
     model: str = "turbo_fp8",
@@ -146,8 +292,9 @@ def parse_workflow(
     解析並注入參數到 workflow
     
     Args:
-        workflow_name: workflow 名稱 (如 "text_to_image", "virtual_human")
+        workflow_name: workflow 名稱 (如 "text_to_image", "virtual_human", "veo3_long_video")
         prompt: 正向提示詞
+        prompts: 多段提示詞列表 (用於 veo3_long_video)
         seed: 隨機種子 (-1 為隨機)
         aspect_ratio: 畫面比例 ("1:1", "16:9", "9:16", "2:3")
         model: 模型名稱
@@ -160,9 +307,15 @@ def parse_workflow(
     """
     if image_files is None:
         image_files = {}
+    if prompts is None:
+        prompts = []
     # 載入原始 workflow
     workflow = load_workflow(workflow_name)
     workflow = copy.deepcopy(workflow)  # 避免修改原始資料
+    
+    # Veo3 Long Video 特殊處理：根據圖片數量動態裁剪工作流
+    if workflow_name == "veo3_long_video":
+        workflow = trim_veo3_workflow(workflow, image_files)
     
     # 取得解析度
     resolution = ASPECT_RATIO_MAP.get(aspect_ratio, DEFAULT_RESOLUTION)
@@ -237,6 +390,60 @@ def parse_workflow(
     
     if not prompt_injected:
         print(f"[Parser] ⚠️ 未找到可注入 Prompt 的節點")
+    
+    # ==========================================
+    # Veo3 Long Video: 注入多段 Prompts (Strategy B)
+    # 關鍵：迭代 Config 的 prompt_segments，而非用戶輸入
+    # ==========================================
+    # 檢查 workflow_name 是否有 prompt_segments 配置
+    from config import WORKFLOW_CONFIG_PATH
+    import json
+    
+    config_path = WORKFLOW_CONFIG_PATH
+    if config_path.exists():
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config_data = json.load(f)
+        
+        workflow_config = config_data.get(workflow_name, {})
+        mapping = workflow_config.get('mapping', {})
+        prompt_segments_config = mapping.get('prompt_segments', {})
+        
+        if prompt_segments_config:
+            print(f"[Parser] 檢測到 prompt_segments 配置，開始注入 {len(prompt_segments_config)} 個片段...")
+            
+            # Strategy B: 迭代 Config 定義的 segments
+            for segment_index_str, node_id_str in prompt_segments_config.items():
+                segment_index = int(segment_index_str)
+                
+                # 檢查用戶是否提供了該 segment 的 prompt
+                if segment_index < len(prompts) and prompts[segment_index]:
+                    user_prompt = prompts[segment_index]
+                else:
+                    # 用戶未提供或留空，使用空字串
+                    user_prompt = ""
+                
+                print(f"[Parser] Segment {segment_index}: Node {node_id_str} = '{user_prompt[:40] if user_prompt else '(empty)'}...'")
+                
+                # 注入到對應節點
+                if node_id_str in workflow:
+                    node = workflow[node_id_str]
+                    
+                    # 優先嘗試 inputs.prompt（ComfyUI API 格式）
+                    if 'inputs' in node and isinstance(node['inputs'], dict):
+                        if 'prompt' in node['inputs']:
+                            node['inputs']['prompt'] = user_prompt
+                            print(f"[Parser] ✓ 已注入到 Node {node_id_str}.inputs.prompt")
+                    
+                    # 嘗試 widgets_values (舊版格式)
+                    elif 'widgets_values' in node:
+                        if isinstance(node['widgets_values'], list) and len(node['widgets_values']) > 0:
+                            node['widgets_values'][0] = user_prompt
+                        elif isinstance(node['widgets_values'], dict) and 'prompt' in node['widgets_values']:
+                            node['widgets_values']['prompt'] = user_prompt
+                else:
+                    print(f"[Parser] ⚠️ 找不到節點 {node_id_str}")
+            
+            print(f"[Parser] ✅ 完成 {len(prompt_segments_config)} 個 prompt segments 的注入")
     
     # ==========================================
     # 注入 Seed (KSampler)

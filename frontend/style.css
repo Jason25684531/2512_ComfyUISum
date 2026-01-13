@@ -1,19 +1,37 @@
-body {
-    font-family: Arial, sans-serif;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100vh;
-    background-color: #f4f4f4;
+/**
+ * Frontend Styles
+ * ================
+ * 注意：本專案主要樣式已內嵌在 index.html 的 <style> 標籤中。
+ * 本檔案保留作為未來可能的樣式擴展使用。
+ * 
+ * 如需添加新的全域樣式，請在此處添加。
+ * 現有的 Tailwind CSS 樣式和自定義樣式請參見 index.html。
+ */
+
+/* === 預留的擴展樣式區塊 === */
+
+/* 打印樣式 */
+@media print {
+    .no-print {
+        display: none !important;
+    }
 }
 
-h1 {
-    color: #333;
+/* 高對比度模式支援 */
+@media (prefers-contrast: high) {
+    .glass-panel {
+        background: rgba(30, 30, 40, 0.9);
+        border: 2px solid rgba(255, 255, 255, 0.5);
+    }
 }
 
-form {
-    margin-top: 20px;
+/* 減少動畫模式 */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
 }
