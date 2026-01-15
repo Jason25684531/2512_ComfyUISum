@@ -878,16 +878,184 @@
         <!-- ============================================ -->
         <!-- VIEW: Motion Workspace                      -->
         <!-- ============================================ -->
-        <div id="view-motion" class="view-section hidden h-full">
-            <div class="flex flex-1 h-full overflow-hidden">
-                <!-- Left Panel: Shot Composition -->
+        <div id="view-motion" class="view-section hidden h-full relative">
+
+            <!-- ============================================ -->
+            <!-- FLOATING VIDEO TOOL SELECTOR OVERLAY        -->
+            <!-- ============================================ -->
+            <div id="video-tool-selector-overlay"
+                class="absolute inset-0 z-50 flex items-center justify-center overlay-backdrop"
+                style="background: rgba(0,0,0,0.6); backdrop-filter: blur(8px);">
+                <div class="floating-toolbar glass-panel rounded-3xl p-12 max-w-4xl w-full mx-6 border border-white/10">
+                    <!-- Header -->
+                    <div class="flex items-center justify-between mb-10">
+                        <div class="flex items-center gap-4">
+                            <div
+                                class="p-4 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-600 shadow-lg shadow-amber-500/30">
+                                <i data-lucide="film" class="w-8 h-8"></i>
+                            </div>
+                            <div>
+                                <h2 class="text-3xl font-bold text-white">Video Studio</h2>
+                                <p class="text-base text-gray-400 mt-1">選擇一種影片生成方式</p>
+                            </div>
+                        </div>
+                        <button onclick="hideVideoToolMenu()"
+                            class="p-3 rounded-xl hover:bg-white/10 transition-colors text-gray-400 hover:text-white">
+                            <i data-lucide="x" class="w-8 h-8"></i>
+                        </button>
+                    </div>
+
+                    <!-- Tool Grid (3 Cards) -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <!-- Long Video (Veo3 Long Video) -->
+                        <button onclick="selectVideoTool('veo3_long_video')"
+                            class="tool-card glass-card rounded-3xl p-8 text-center cursor-pointer hover:border-amber-500/50 group">
+                            <div
+                                class="p-5 rounded-2xl bg-amber-500/10 text-amber-300 mx-auto w-fit mb-5 group-hover:bg-amber-500/20 group-hover:scale-110 transition-all border border-amber-500/20">
+                                <i data-lucide="film" class="w-12 h-12"></i>
+                            </div>
+                            <h3 class="text-lg font-bold text-white mb-2">長片生成</h3>
+                            <p class="text-sm text-gray-500">Multi-Shot (1-5)</p>
+                        </button>
+
+                        <!-- Text to Video (T2V) -->
+                        <button onclick="selectVideoTool('t2v_veo3')"
+                            class="tool-card glass-card rounded-3xl p-8 text-center cursor-pointer hover:border-blue-500/50 group">
+                            <div
+                                class="p-5 rounded-2xl bg-blue-500/10 text-blue-300 mx-auto w-fit mb-5 group-hover:bg-blue-500/20 group-hover:scale-110 transition-all border border-blue-500/20">
+                                <i data-lucide="type" class="w-12 h-12"></i>
+                            </div>
+                            <h3 class="text-lg font-bold text-white mb-2">文字轉影片</h3>
+                            <p class="text-sm text-gray-500">Text to Video</p>
+                        </button>
+
+                        <!-- First-Last Frame (FLF) -->
+                        <button onclick="selectVideoTool('flf_veo3')"
+                            class="tool-card glass-card rounded-3xl p-8 text-center cursor-pointer hover:border-purple-500/50 group">
+                            <div
+                                class="p-5 rounded-2xl bg-purple-500/10 text-purple-300 mx-auto w-fit mb-5 group-hover:bg-purple-500/20 group-hover:scale-110 transition-all border border-purple-500/20">
+                                <i data-lucide="image" class="w-12 h-12"></i>
+                            </div>
+                            <h3 class="text-lg font-bold text-white mb-2">首尾禎動畫</h3>
+                            <p class="text-sm text-gray-500">First-Last Frame</p>
+                        </button>
+                    </div>
+
+                    <!-- Footer Hint -->
+                    <p class="text-center text-base text-gray-500 mt-10">按 ESC 或點擊外部區域關閉</p>
+                </div>
+            </div>
+
+            <!-- ============================================ -->
+            <!-- VIDEO WORKSPACE (工具選擇後顯示)             -->
+            <!-- ============================================ -->
+            <div id="video-workspace" class="hidden flex h-full">
+
+                <!-- Left Panel: Dynamic Upload Area -->
                 <div
                     class="w-80 glass-panel border-r border-white/10 p-6 flex flex-col gap-4 overflow-y-auto h-full z-20">
-                    <div>
+
+                    <!-- Current Tool Header -->
+                    <div id="video-tool-header" class="flex items-center gap-3 mb-2">
+                        <button onclick="showVideoToolMenu()"
+                            class="p-2 rounded-lg hover:bg-white/10 transition-colors text-gray-400 hover:text-white"
+                            title="切換工具">
+                            <i data-lucide="grid-3x3" class="w-5 h-5"></i>
+                        </button>
+                        <div class="h-6 w-[1px] bg-white/10"></div>
+                        <div id="video-tool-icon" class="p-2 rounded-lg bg-amber-500/20 text-amber-300">
+                            <i data-lucide="film" class="w-4 h-4"></i>
+                        </div>
+                        <div>
+                            <span id="video-tool-name" class="text-sm font-bold text-white">長片生成</span>
+                            <span id="video-tool-desc" class="text-xs text-gray-500 ml-2">Multi-Shot</span>
+                        </div>
+                    </div>
+
+                    <div class="h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
+
+                    <!-- Panel: Multi-Shot (veo3_long_video) -->
+                    <div id="panel-veo3_long_video">
                         <h3 class="text-sm font-bold text-white mb-2">Multi-Shot Composition</h3>
                         <p class="text-xs text-gray-500 mb-4">Add up to 5 images to create a sequence.</p>
                         <div class="space-y-3" id="motion-shots-upload">
                             <!-- Shot 1-5 將由 initMotionShotsUI() 動態生成 -->
+                        </div>
+                    </div>
+
+                    <!-- Panel: T2V (t2v_veo3) -->
+                    <div id="panel-t2v_veo3" class="hidden">
+                        <h3 class="text-sm font-bold text-white mb-2">文字轉影片</h3>
+                        <p class="text-xs text-gray-500 mb-4">直接輸入描述，無需圖片即可生成影片。</p>
+                        <div class="glass-card rounded-xl p-4 border border-blue-500/20 bg-blue-500/10">
+                            <div class="flex items-center gap-3">
+                                <div class="p-2 rounded-lg bg-blue-500/20">
+                                    <i data-lucide="type" class="w-5 h-5 text-blue-300"></i>
+                                </div>
+                                <div>
+                                    <div class="text-sm font-bold text-white">純文字模式</div>
+                                    <div class="text-xs text-gray-400">在右側輸入 Prompt 即可生成</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Panel: FLF (flf_veo3) -->
+                    <div id="panel-flf_veo3" class="hidden">
+                        <h3 class="text-sm font-bold text-white mb-2">首尾禎動畫</h3>
+                        <p class="text-xs text-gray-500 mb-4">上傳首禎與尾禎圖片，AI 將自動生成過場動畫。</p>
+                        <div class="space-y-4" id="flf-dropzones">
+                            <!-- 首禎 Dropzone -->
+                            <div id="zone-first_frame"
+                                class="upload-zone relative flex flex-col items-center justify-center rounded-xl cursor-pointer bg-black/20 p-4 border-2 border-dashed border-white/10 min-h-[120px] hover:border-purple-500/50 transition-colors"
+                                onclick="triggerFLFUpload('first_frame')"
+                                ondragover="event.preventDefault(); this.classList.add('border-purple-500/70', 'bg-purple-500/10');"
+                                ondragleave="this.classList.remove('border-purple-500/70', 'bg-purple-500/10');"
+                                ondrop="handleFLFDrop(event, 'first_frame')">
+                                <input type="file" id="file-first_frame" class="hidden" accept="image/*"
+                                    onchange="handleFLFSelect(event, 'first_frame')" />
+                                <div id="preview-first_frame" class="hidden absolute inset-0">
+                                    <img src="" alt="Preview" class="w-full h-full object-cover rounded-xl" />
+                                    <button onclick="event.stopPropagation(); clearFLFImage('first_frame')"
+                                        class="absolute top-2 right-2 p-1 bg-black/70 rounded-full hover:bg-red-500/80 transition-colors z-10">
+                                        <i data-lucide="x" class="w-4 h-4 text-white"></i>
+                                    </button>
+                                </div>
+                                <div id="placeholder-first_frame"
+                                    class="flex flex-col items-center pointer-events-none">
+                                    <i data-lucide="image" class="w-8 h-8 text-purple-400 mb-2"></i>
+                                    <span class="text-sm font-bold text-white">首禎 (First Frame)</span>
+                                    <span class="text-[10px] text-gray-500 mt-1">動畫起始畫面</span>
+                                </div>
+                            </div>
+
+                            <!-- 箭頭指示 -->
+                            <div class="flex justify-center">
+                                <i data-lucide="arrow-down" class="w-5 h-5 text-gray-500"></i>
+                            </div>
+
+                            <!-- 尾禎 Dropzone -->
+                            <div id="zone-last_frame"
+                                class="upload-zone relative flex flex-col items-center justify-center rounded-xl cursor-pointer bg-black/20 p-4 border-2 border-dashed border-white/10 min-h-[120px] hover:border-purple-500/50 transition-colors"
+                                onclick="triggerFLFUpload('last_frame')"
+                                ondragover="event.preventDefault(); this.classList.add('border-purple-500/70', 'bg-purple-500/10');"
+                                ondragleave="this.classList.remove('border-purple-500/70', 'bg-purple-500/10');"
+                                ondrop="handleFLFDrop(event, 'last_frame')">
+                                <input type="file" id="file-last_frame" class="hidden" accept="image/*"
+                                    onchange="handleFLFSelect(event, 'last_frame')" />
+                                <div id="preview-last_frame" class="hidden absolute inset-0">
+                                    <img src="" alt="Preview" class="w-full h-full object-cover rounded-xl" />
+                                    <button onclick="event.stopPropagation(); clearFLFImage('last_frame')"
+                                        class="absolute top-2 right-2 p-1 bg-black/70 rounded-full hover:bg-red-500/80 transition-colors z-10">
+                                        <i data-lucide="x" class="w-4 h-4 text-white"></i>
+                                    </button>
+                                </div>
+                                <div id="placeholder-last_frame" class="flex flex-col items-center pointer-events-none">
+                                    <i data-lucide="image" class="w-8 h-8 text-purple-400 mb-2"></i>
+                                    <span class="text-sm font-bold text-white">尾禎 (Last Frame)</span>
+                                    <span class="text-[10px] text-gray-500 mt-1">動畫結束畫面</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -975,6 +1143,7 @@
                 </div>
             </div>
         </div>
+
 
         <!-- ============================================ -->
         <!-- VIEW: Avatar Workspace                      -->

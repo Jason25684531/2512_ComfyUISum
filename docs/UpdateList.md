@@ -1,14 +1,81 @@
 # 專案更新日誌
 
 ## 更新日期
-2026-01-15 (最新更新 - 代碼架構優化與佇列狀態增強)
+2026-01-15 (最新更新 - Video Studio Integration)
 
-## 最新更新摘要 (2026-01-15 - Refactoring)
-本次更新將 Database 模組移至 `shared/` 統一管理，修正 Worker 的 timeout 使用配置值，並新增前端佇列狀態區分（排隊中/生成中）。
+## 最新更新摘要 (2026-01-15 - Video Studio)
+本次更新整合了新的 Video Studio 功能，新增三種影片生成方式：長片生成、文字轉影片 (T2V)、首尾禎動畫 (FLF)。前端採用與 Image Composition 一致的 Floating Card Selector Overlay 設計。
+
+---
+
+## 十五、Video Studio Integration（2026-01-15）
+
+### 功能概述
+整合三種影片生成工作流至 Motion Workspace：
+1. **長片生成** (veo3_long_video) - Multi-Shot 1-5 段視頻拼接
+2. **文字轉影片** (t2v_veo3) - 純文字輸入生成影片
+3. **首尾禎動畫** (flf_veo3) - 雙圖片輸入生成過場動畫
+
+### 主要變更
+
+#### 15.1 後端配置
+- **ComfyUIworkflow/config.json**：新增 `t2v_veo3`、`flf_veo3` 配置，含 `category` 和 `image_map` 欄位
+- **worker/src/json_parser.py**：
+  - 新增 WORKFLOW_MAP 映射 (T2V.json, FLF.json)
+  - 新增 IMAGE_NODE_MAP 映射 (flf_veo3: Node 112/113)
+  - 實作 VeoVideoGenerator Prompt 注入邏輯
+  - 實作 config.json image_map 圖片注入邏輯
+
+#### 15.2 前端 UI
+- **index.html**：
+  - 新增 Floating Video Tool Selector Overlay (3 Cards)
+  - 新增 video-workspace 容器，含工具切換按鈕
+  - FLF 面板含雙 Dropzone (首禎/尾禎)
+- **motion-workspace.js**：
+  - 新增 `showVideoToolMenu()`, `hideVideoToolMenu()`, `selectVideoTool()` 函式
+  - 新增 FLF 圖片處理函式 (`triggerFLFUpload`, `processFLFImage`, `clearFLFImage`)
+  - 重構 `handleMotionGenerate()` 支援三種工作流類型
+
+### 修改檔案清單
+
+| 檔案 | 變更類型 | 說明 |
+|------|----------|------|
+| `ComfyUIworkflow/config.json` | ✏️ 更新 | 新增 t2v_veo3, flf_veo3 配置 |
+| `worker/src/json_parser.py` | ✏️ 更新 | 新增映射與注入邏輯 |
+| `frontend/index.html` | ✏️ 更新 | 新增 Video Tool Selector Overlay |
+| `frontend/motion-workspace.js` | ✏️ 更新 | 新增 Overlay 控制與 FLF 處理函式 |
+
+### 測試驗證
+
+| 測試項目 | 結果 |
+|----------|------|
+| T2V 工作流解析 (Node 10 Prompt 注入) | ✅ 通過 |
+| FLF 工作流解析 (Node 111/112/113 注入) | ✅ 通過 |
+| 瀏覽器 UI - Overlay 3 Cards 顯示 | ✅ 通過 |
+| 瀏覽器 UI - FLF 雙 Dropzone 顯示 | ✅ 通過 |
+| 瀏覽器 UI - Grid 按鈕返回選擇器 | ✅ 通過 |
+
+### 15.3 代碼重構 (2026-01-15)
+為提高可維護性與可擴展性，進行了以下代碼優化：
+
+#### 前端重構 (`motion-workspace.js`)
+- **新增通用函式**：
+  - `processImageUpload(file, slotId, storage, borderColor)` - 統一圖片處理與預覽邏輯
+  - `clearImageUpload(slotId, storage, borderColor)` - 統一圖片清除邏輯
+- **減少重複代碼**：FLF 和 Shot 圖片處理函式改用通用處理器，減少約 50 行重複代碼
+- **改進結構**：增加 JSDoc 註解，提高代碼可讀性
+
+#### 重構效果
+| 指標 | 重構前 | 重構後 |
+|------|--------|--------|
+| 圖片處理重複函式 | 6 個 | 2 個通用 + 4 個包裝 |
+| 代碼行數 | ~780 行 | ~730 行 |
+| 可擴展性 | 低 | 高（新增工作流僅需調用通用函式）|
 
 ---
 
 ## 十四、代碼架構優化與佇列狀態增強（2026-01-15）
+
 
 ### 問題描述
 1. Worker 使用 `sys.path.insert` hack 導入 Database 模組，不穩定

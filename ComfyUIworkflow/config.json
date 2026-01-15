@@ -2,6 +2,7 @@
   "text_to_image": {
     "file": "text_to_image_z_image_turbo_fp8_1222.json",
     "description": "Z-Image Turbo 快速文生圖",
+    "category": "image",
     "mapping": {
       "prompt_text_node_id": "33:6",
       "seed_node_id": "33:3",
@@ -11,6 +12,7 @@
   "virtual_human": {
     "file": "InfiniteTalk_IndexTTS_2.json",
     "description": "InfiniteTalk 虛擬人說話 (IndexTTS)",
+    "category": "avatar",
     "mapping": {
       "prompt_text_node_id": "312",
       "seed_node_id": "312",
@@ -22,6 +24,7 @@
   "image_edit": {
     "file": "single_image_edit_qwen_2509_gguf_1222.json",
     "description": "Qwen 單圖指令編輯",
+    "category": "image",
     "mapping": {
       "input_image_node_id": "120",
       "prompt_text_node_id": "123:111",
@@ -32,6 +35,7 @@
   "face_swap": {
     "file": "face_swap_qwen_2509_gguf_1222.json",
     "description": "Qwen 換臉工作流",
+    "category": "image",
     "mapping": {
       "input_image_face_node_id": "501",
       "input_image_body_node_id": "502",
@@ -43,6 +47,7 @@
   "sketch_to_image": {
     "file": "sketch_to_image_qwen_2509_gguf_1222.json",
     "description": "Qwen 線稿轉精緻圖",
+    "category": "image",
     "mapping": {
       "input_image_node_id": "120",
       "prompt_text_node_id": "124:111",
@@ -53,6 +58,7 @@
   "multi_blend": {
     "file": "multi_image_blend_qwen_2509_gguf_1222.json",
     "description": "Qwen 多圖場景融合",
+    "category": "image",
     "mapping": {
       "input_image_1_node_id": "78",
       "input_image_2_node_id": "436",
@@ -65,6 +71,7 @@
   "veo3_long_video": {
     "file": "Veo3_VideoConnection.json",
     "description": "Veo3 Long Video - 5 段視頻拼接",
+    "category": "video",
     "mapping": {
       "output_node_id": "110",
       "prompt_segments": {
@@ -74,6 +81,28 @@
         "3": "41",
         "4": "51"
       }
+    }
+  },
+  "t2v_veo3": {
+    "file": "T2V.json",
+    "description": "Veo3 文字轉影片",
+    "category": "video",
+    "mapping": {
+      "prompt_node_id": "10",
+      "output_node_id": "110"
+    }
+  },
+  "flf_veo3": {
+    "file": "FLF.json",
+    "description": "Veo3 首尾禎動畫",
+    "category": "video",
+    "mapping": {
+      "prompt_node_id": "111",
+      "output_node_id": "110"
+    },
+    "image_map": {
+      "first_frame": "112",
+      "last_frame": "113"
     }
   }
 }

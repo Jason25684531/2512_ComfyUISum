@@ -47,6 +47,8 @@ WORKFLOW_MAP = {
     "virtual_human": "InfiniteTalk_IndexTTS_2.json",
     "veo3_long_video": "Veo3_VideoConnection.json",
     "image_to_video": "Veo3_VideoConnection.json",  # 單段模式也使用 Veo3
+    "t2v_veo3": "T2V.json",                         # 文字轉影片 (Veo3)
+    "flf_veo3": "FLF.json",                         # 首尾禎動畫 (Veo3)
 }
 
 # ==========================================
@@ -86,6 +88,12 @@ IMAGE_NODE_MAP = {
     },
     "image_to_video": {
         "6": "shot_0",     # 單段模式也使用 Shot 1
+    },
+    "t2v_veo3": {},        # 文字轉影片不需要圖片
+    "flf_veo3": {
+        # 首尾禎動畫：雙圖片注入 (從 config.json 的 image_map 讀取)
+        "112": "first_frame",   # 首禎
+        "113": "last_frame",    # 尾禎
     },
 }
 
@@ -390,6 +398,35 @@ def parse_workflow(
                         prompt_injected = True
                         break
     
+    # 4. 嘗試 VeoVideoGenerator / Veo3StartEndVideoGenerator (Veo3 Video workflows)
+    if not prompt_injected:
+        veo_classes = ["VeoVideoGenerator", "Veo3StartEndVideoGenerator"]
+        for veo_class in veo_classes:
+            veo_nodes = find_nodes_by_class(workflow, veo_class)
+            for node_id, node in veo_nodes:
+                if "inputs" in node and "prompt" in node["inputs"]:
+                    node["inputs"]["prompt"] = prompt
+                    print(f"[Parser] 注入 Prompt 到 {veo_class} 節點 {node_id}")
+                    prompt_injected = True
+                    break
+            if prompt_injected:
+                break
+    
+    # 5. 從 config.json 讀取 prompt_node_id 直接注入 (T2V/FLF 專用)
+    if not prompt_injected and config_path.exists():
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config_data = json.load(f)
+        workflow_config = config_data.get(workflow_name, {})
+        mapping = workflow_config.get('mapping', {})
+        prompt_node_id = mapping.get('prompt_node_id')
+        
+        if prompt_node_id and prompt_node_id in workflow:
+            node = workflow[prompt_node_id]
+            if 'inputs' in node and 'prompt' in node['inputs']:
+                node['inputs']['prompt'] = prompt
+                print(f"[Parser] 從 config 注入 Prompt 到 Node {prompt_node_id}")
+                prompt_injected = True
+    
     if not prompt_injected:
         print(f"[Parser] ⚠️ 未找到可注入 Prompt 的節點")
     
@@ -524,6 +561,34 @@ def parse_workflow(
                 print(f"[Parser] ⚠️ 缺少圖片欄位: {field_name}")
     elif node_map:
         print(f"[Parser] ⚠️ 此工作流需要圖片但未提供: {list(node_map.values())}")
+    
+    # ==========================================
+    # 從 config.json 讀取 image_map 注入圖片 (FLF 專用)
+    # 這是優先級較高的注入方式，覆蓋 IMAGE_NODE_MAP
+    # ==========================================
+    if config_path.exists() and image_files:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config_data = json.load(f)
+        workflow_config = config_data.get(workflow_name, {})
+        image_map_config = workflow_config.get('image_map', {})
+        
+        if image_map_config:
+            print(f"[Parser] 從 config.json 讀取 image_map: {image_map_config}")
+            for field_name, node_id in image_map_config.items():
+                if field_name in image_files:
+                    filename = image_files[field_name]
+                    if node_id in workflow:
+                        node = workflow[node_id]
+                        if "inputs" in node:
+                            old_image = node["inputs"].get("image", "")
+                            node["inputs"]["image"] = filename
+                            print(f"[Parser] ✅ image_map 注入: Node {node_id} ({field_name}): {old_image!r} -> {filename!r}")
+                        else:
+                            print(f"[Parser] ⚠️ Node {node_id} 沒有 inputs")
+                    else:
+                        print(f"[Parser] ⚠️ 找不到 Node {node_id}")
+                else:
+                    print(f"[Parser] ⚠️ image_map 缺少圖片: {field_name}")
     
     # ==========================================
     # 注入音訊 (LoadAudio 節點) - Phase 7 新增
