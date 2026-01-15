@@ -61,7 +61,7 @@ STORAGE_MODELS_DIR.mkdir(parents=True, exist_ok=True)
 TEMP_FILE_MAX_AGE_HOURS = int(os.getenv("TEMP_FILE_MAX_AGE_HOURS", "1"))
 
 # Phase 9: Reliability - 延長超時配置
-WORKER_TIMEOUT = int(os.getenv("WORKER_TIMEOUT", "3600"))  # 預設 1 小時
+WORKER_TIMEOUT = int(os.getenv("WORKER_TIMEOUT", "2400"))  # 預設 40 分鐘
 COMFY_POLLING_INTERVAL = float(os.getenv("COMFY_POLLING_INTERVAL", "0.5"))
 
 # ==========================================

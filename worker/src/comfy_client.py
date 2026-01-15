@@ -225,6 +225,9 @@ class ComfyClient:
                     elif msg_type == "executed":
                         if msg_data.get("prompt_id") == prompt_id:
                             output = msg_data.get("output", {})
+                            # 確保 output 是字典類型（防止 ComfyUI 返回 None）
+                            if output is None or not isinstance(output, dict):
+                                output = {}
                             
                             # 處理圖片
                             images = output.get("images", [])
@@ -243,6 +246,7 @@ class ComfyClient:
                             if gifs:
                                 all_gifs.extend(gifs)
                                 print(f"[ComfyClient] 輸出 GIF: {gifs}")
+
                     
                     # 執行錯誤
                     elif msg_type == "execution_error":

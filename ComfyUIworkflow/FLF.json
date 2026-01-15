@@ -1,0 +1,65 @@
+{
+  "110": {
+    "inputs": {
+      "frame_rate": 24,
+      "loop_count": 0,
+      "filename_prefix": "Veo3.1_首尾禎",
+      "format": "video/h265-mp4",
+      "pix_fmt": "yuv420p10le",
+      "crf": 22,
+      "save_metadata": true,
+      "pingpong": false,
+      "save_output": true,
+      "images": [
+        "111",
+        0
+      ]
+    },
+    "class_type": "VHS_VideoCombine",
+    "_meta": {
+      "title": "Video Combine 🎥🅥🅗🅢"
+    }
+  },
+  "111": {
+    "inputs": {
+      "prompt": "A smooth transition between the first and last frame.",
+      "model": "veo-3.1-generate-preview",
+      "aspect_ratio": "9:16",
+      "duration_seconds": 4,
+      "resolution": "720p",
+      "person_generation": "allow_all",
+      "negative_prompt": "",
+      "seed": 102569337,
+      "first_frame": [
+        "112",
+        0
+      ],
+      "last_frame": [
+        "113",
+        0
+      ]
+    },
+    "class_type": "Veo3StartEndVideoGenerator",
+    "_meta": {
+      "title": "Veo3 First and Last Frame Video Generation"
+    }
+  },
+  "112": {
+    "inputs": {
+      "image": "638974203590430000.jpg"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    }
+  },
+  "113": {
+    "inputs": {
+      "image": "æ__ç__å___00062_.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    }
+  }
+}

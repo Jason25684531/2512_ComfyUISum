@@ -61,9 +61,10 @@ IMAGE_NODE_MAP = {
         "502": "target",   # 身體 (目標圖片)
     },
     "multi_image_blend": {
-        "120": "source",   # 圖1 (對應前端 Image A)
-        "121": "target",   # 圖2 (對應前端 Image B)
-        "122": "extra",    # 圖3 (對應前端 Image C)
+        # 節點 ID 對應 multi_image_blend_qwen_2509_gguf_1222.json
+        "78": "source",    # 模特圖 (對應前端 Image A)
+        "436": "target",   # 行李箱圖 (對應前端 Image B)
+        "437": "extra",    # 場景圖 (對應前端 Image C)
     },
     "sketch_to_image": {
         "120": "input",    # 草稿圖
@@ -199,13 +200,14 @@ def trim_veo3_workflow(workflow: dict, image_files: dict) -> dict:
         print("[Parser] 所有 5 個 shots 都有圖片，不需要裁剪")
         return workflow
     
-    # Shot 節點映射
+    # Shot 節點映射 (對應 Veo3_VideoConnection.json)
+    # 注意：此 workflow 沒有獨立的 VHS_VideoCombine 節點，只有最終輸出節點 110
     shot_nodes = {
-        0: {"load": "6", "gen": "10", "save": "11"},
-        1: {"load": "20", "gen": "21", "save": "22"},
-        2: {"load": "30", "gen": "31", "save": "32"},
-        3: {"load": "40", "gen": "41", "save": "42"},
-        4: {"load": "50", "gen": "51", "save": "52"},
+        0: {"load": "6", "gen": "10"},   # Shot 1
+        1: {"load": "20", "gen": "21"},  # Shot 2
+        2: {"load": "30", "gen": "31"},  # Shot 3
+        3: {"load": "40", "gen": "41"},  # Shot 4
+        4: {"load": "50", "gen": "51"},  # Shot 5
     }
     
     # 刪除沒有圖片的 Shot 節點
@@ -213,7 +215,7 @@ def trim_veo3_workflow(workflow: dict, image_files: dict) -> dict:
     for i in range(5):
         if i not in valid_shots:
             nodes = shot_nodes[i]
-            nodes_to_remove.extend([nodes["load"], nodes["gen"], nodes["save"]])
+            nodes_to_remove.extend([nodes["load"], nodes["gen"]])
             print(f"[Parser] 移除 Shot {i+1} 節點: {nodes}")
     
     for node_id in nodes_to_remove:
@@ -412,8 +414,16 @@ def parse_workflow(
             print(f"[Parser] 檢測到 prompt_segments 配置，開始注入 {len(prompt_segments_config)} 個片段...")
             
             # Strategy B: 迭代 Config 定義的 segments
+            injected_count = 0
+            skipped_count = 0
             for segment_index_str, node_id_str in prompt_segments_config.items():
                 segment_index = int(segment_index_str)
+                
+                # 優先檢查節點是否仍存在於工作流中（可能已被動態裁剪刪除）
+                if node_id_str not in workflow:
+                    print(f"[Parser] ⏭️ 跳過已刪除的節點 {node_id_str} (segment {segment_index})")
+                    skipped_count += 1
+                    continue
                 
                 # 檢查用戶是否提供了該 segment 的 prompt
                 if segment_index < len(prompts) and prompts[segment_index]:
@@ -425,25 +435,25 @@ def parse_workflow(
                 print(f"[Parser] Segment {segment_index}: Node {node_id_str} = '{user_prompt[:40] if user_prompt else '(empty)'}...'")
                 
                 # 注入到對應節點
-                if node_id_str in workflow:
-                    node = workflow[node_id_str]
-                    
-                    # 優先嘗試 inputs.prompt（ComfyUI API 格式）
-                    if 'inputs' in node and isinstance(node['inputs'], dict):
-                        if 'prompt' in node['inputs']:
-                            node['inputs']['prompt'] = user_prompt
-                            print(f"[Parser] ✓ 已注入到 Node {node_id_str}.inputs.prompt")
-                    
-                    # 嘗試 widgets_values (舊版格式)
-                    elif 'widgets_values' in node:
-                        if isinstance(node['widgets_values'], list) and len(node['widgets_values']) > 0:
-                            node['widgets_values'][0] = user_prompt
-                        elif isinstance(node['widgets_values'], dict) and 'prompt' in node['widgets_values']:
-                            node['widgets_values']['prompt'] = user_prompt
-                else:
-                    print(f"[Parser] ⚠️ 找不到節點 {node_id_str}")
+                node = workflow[node_id_str]
+                
+                # 優先嘗試 inputs.prompt（ComfyUI API 格式）
+                if 'inputs' in node and isinstance(node['inputs'], dict):
+                    if 'prompt' in node['inputs']:
+                        node['inputs']['prompt'] = user_prompt
+                        print(f"[Parser] ✓ 已注入到 Node {node_id_str}.inputs.prompt")
+                        injected_count += 1
+                
+                # 嘗試 widgets_values (舊版格式)
+                elif 'widgets_values' in node:
+                    if isinstance(node['widgets_values'], list) and len(node['widgets_values']) > 0:
+                        node['widgets_values'][0] = user_prompt
+                        injected_count += 1
+                    elif isinstance(node['widgets_values'], dict) and 'prompt' in node['widgets_values']:
+                        node['widgets_values']['prompt'] = user_prompt
+                        injected_count += 1
             
-            print(f"[Parser] ✅ 完成 {len(prompt_segments_config)} 個 prompt segments 的注入")
+            print(f"[Parser] ✅ 完成 prompt segments 注入: {injected_count} 個成功, {skipped_count} 個跳過")
     
     # ==========================================
     # 注入 Seed (KSampler)

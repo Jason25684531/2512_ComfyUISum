@@ -178,7 +178,7 @@ REDIS_QUEUE_NAME = JOB_QUEUE
 # ============================================
 # Database Connection Setup
 # ============================================
-from database import Database
+from shared.database import Database
 
 # 載入資料庫配置
 DB_HOST = os.getenv("DB_HOST", "localhost")

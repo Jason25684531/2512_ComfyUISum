@@ -66,7 +66,8 @@ from comfy_client import ComfyClient
 from config import (
     REDIS_HOST, REDIS_PORT, REDIS_PASSWORD,
     COMFYUI_INPUT_DIR, JOB_QUEUE, TEMP_FILE_MAX_AGE_HOURS,
-    JOB_STATUS_EXPIRE_SECONDS, STORAGE_INPUT_DIR, print_config
+    JOB_STATUS_EXPIRE_SECONDS, STORAGE_INPUT_DIR, print_config,
+    WORKER_TIMEOUT
 )
 
 
@@ -465,7 +466,7 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
         # 8. 等待 ComfyUI 執行完成
         result = client.wait_for_completion(
             prompt_id=prompt_id,
-            timeout=600,
+            timeout=WORKER_TIMEOUT,  # 使用配置值 (預設 2400 秒 = 40 分鐘)
             on_progress=on_progress
         )
 
@@ -559,6 +560,28 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
                 logger.info("✅ 任務完成，但沒有輸出檔案")
         else:
             error = result.get("error", "未知錯誤")
+            
+            # 超時情況特殊處理：嘗試從 History API 獲取部分結果
+            if "超時" in error or "timeout" in error.lower():
+                logger.warning("⚠️ 任務超時，嘗試獲取已完成的輸出...")
+                try:
+                    partial_outputs = client.get_outputs_from_history(prompt_id)
+                    all_partial = partial_outputs.get("videos", []) + partial_outputs.get("gifs", []) + partial_outputs.get("images", [])
+                    if all_partial:
+                        # 有部分輸出，也複製到 Gallery
+                        new_filename = client.copy_output_file(
+                            filename=all_partial[-1].get("filename"),
+                            subfolder=all_partial[-1].get("subfolder", ""),
+                            job_id=job_id
+                        )
+                        if new_filename:
+                            file_url = f"/outputs/{new_filename}"
+                            update_job_status(r, job_id, "failed", error=f"{error} (partial output saved)", image_url=file_url, db_client=db_client)
+                            logger.info(f"⚠️ 任務超時但已保存部分輸出: {file_url}")
+                            return
+                except Exception as partial_err:
+                    logger.warning(f"⚠️ 獲取部分輸出失敗: {partial_err}")
+            
             update_job_status(r, job_id, "failed", error=error, db_client=db_client)
             logger.error(f"❌ 任務失敗: {error}")
             
@@ -595,9 +618,8 @@ def main():
         db_password = os.getenv("DB_PASSWORD", "studio_password")
         db_name = os.getenv("DB_NAME", "studio_db")
         
-        # 動態導入 Database 類
-        sys.path.insert(0, str(Path(__file__).parent.parent.parent / "backend" / "src"))
-        from database import Database
+        # 從 shared 模組導入 Database 類
+        from shared.database import Database
         
         db_client = Database(
             host=db_host,

@@ -1,0 +1,39 @@
+{
+  "10": {
+    "inputs": {
+      "prompt": "a lady is talking",
+      "model": "veo-3.1-generate-preview",
+      "aspect_ratio": "9:16",
+      "duration_seconds": 4,
+      "resolution": "720p",
+      "person_generation": "allow_all",
+      "negative_prompt": "",
+      "seed": 658055576
+    },
+    "class_type": "VeoVideoGenerator",
+    "_meta": {
+      "title": "Veo Video Generator"
+    }
+  },
+  "110": {
+    "inputs": {
+      "frame_rate": 24,
+      "loop_count": 0,
+      "filename_prefix": "Veo3.1_文生影片",
+      "format": "video/h265-mp4",
+      "pix_fmt": "yuv420p10le",
+      "crf": 22,
+      "save_metadata": true,
+      "pingpong": false,
+      "save_output": true,
+      "images": [
+        "10",
+        0
+      ]
+    },
+    "class_type": "VHS_VideoCombine",
+    "_meta": {
+      "title": "Video Combine 🎥🅥🅗🅢"
+    }
+  }
+}

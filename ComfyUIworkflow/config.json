@@ -54,12 +54,12 @@
     "file": "multi_image_blend_qwen_2509_gguf_1222.json",
     "description": "Qwen 多圖場景融合",
     "mapping": {
-      "input_image_1_node_id": "120",
-      "input_image_2_node_id": "121",
-      "input_image_3_node_id": "122",
-      "prompt_text_node_id": "123:111",
-      "seed_node_id": "123:3",
-      "output_node_id": "119"
+      "input_image_1_node_id": "78",
+      "input_image_2_node_id": "436",
+      "input_image_3_node_id": "437",
+      "prompt_text_node_id": "433:111",
+      "seed_node_id": "433:3",
+      "output_node_id": "60"
     }
   },
   "veo3_long_video": {

@@ -364,7 +364,7 @@ function pollMotionJobStatus(jobId, apiBase) {
                                 // 建立影片播放器容器
                                 var videoContainer = document.createElement('div');
                                 videoContainer.className = 'relative w-full';
-                                
+
                                 // 建立影片播放器
                                 var video = document.createElement('video');
                                 video.src = fullVideoUrl;
@@ -390,16 +390,16 @@ function pollMotionJobStatus(jobId, apiBase) {
                             var downloadBtn = document.createElement('button');
                             downloadBtn.className = 'flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl font-bold transition-all shadow-lg hover:shadow-purple-500/30 hover:scale-105';
                             downloadBtn.innerHTML = '<i data-lucide="download" class="w-5 h-5"></i> Download Video';
-                            downloadBtn.onclick = function() {
+                            downloadBtn.onclick = function () {
                                 downloadBtn.disabled = true;
                                 downloadBtn.innerHTML = '<i data-lucide="loader" class="w-5 h-5 animate-spin"></i> Downloading...';
-                                
+
                                 fetch(fullVideoUrl)
-                                    .then(function(response) {
+                                    .then(function (response) {
                                         if (!response.ok) throw new Error('Download failed');
                                         return response.blob();
                                     })
-                                    .then(function(blob) {
+                                    .then(function (blob) {
                                         var url = window.URL.createObjectURL(blob);
                                         var a = document.createElement('a');
                                         a.href = url;
@@ -408,17 +408,17 @@ function pollMotionJobStatus(jobId, apiBase) {
                                         a.click();
                                         document.body.removeChild(a);
                                         window.URL.revokeObjectURL(url);
-                                        
+
                                         downloadBtn.disabled = false;
                                         downloadBtn.innerHTML = '<i data-lucide="check" class="w-5 h-5"></i> Downloaded!';
                                         if (typeof lucide !== 'undefined') lucide.createIcons();
-                                        
-                                        setTimeout(function() {
+
+                                        setTimeout(function () {
                                             downloadBtn.innerHTML = '<i data-lucide="download" class="w-5 h-5"></i> Download Video';
                                             if (typeof lucide !== 'undefined') lucide.createIcons();
                                         }, 2000);
                                     })
-                                    .catch(function(error) {
+                                    .catch(function (error) {
                                         console.error('[Motion] Download error:', error);
                                         // Fallback: 直接開啟連結
                                         window.open(fullVideoUrl, '_blank');
@@ -466,9 +466,11 @@ function pollMotionJobStatus(jobId, apiBase) {
                 } else if (data.status === 'failed') {
                     clearInterval(interval);
                     showMotionStatus('Generation failed: ' + (data.error || 'Unknown error'), 'error');
+                } else if (data.status === 'queued') {
+                    showMotionStatus('🟡 排隊中，等待 Worker 處理...', 'info');
                 } else if (data.status === 'processing') {
                     var progress = data.progress || 0;
-                    showMotionStatus('Processing... ' + progress + '%', 'info');
+                    showMotionStatus('🟢 生成中... ' + progress + '%', 'info');
                 }
             })
             .catch(function (error) {
