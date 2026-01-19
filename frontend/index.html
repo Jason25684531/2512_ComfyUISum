@@ -1332,6 +1332,49 @@
         let uploadedImages = { source: null, target: null, input: null, extra: null };
         let pollingInterval = null;
 
+        // 為每個工具維護獨立的輪詢 interval（支持多工具並行生成）
+        const toolPollingIntervals = {};
+
+        // 工具狀態管理 (每個工具的獨立狀態)
+        window.toolStates = {
+            text_to_image: {
+                prompt: '',
+                images: {},
+                canvasHtml: '',
+                canvasHidden: true,
+                isGenerating: false  // 是否正在生成
+            },
+            face_swap: {
+                prompt: '',
+                images: {},
+                canvasHtml: '',
+                canvasHidden: true,
+                isGenerating: false
+            },
+            multi_image_blend: {
+                prompt: '',
+                images: {},
+                canvasHtml: '',
+                canvasHidden: true,
+                isGenerating: false
+            },
+            sketch_to_image: {
+                prompt: '',
+                images: {},
+                canvasHtml: '',
+                canvasHidden: true,
+                isGenerating: false
+            },
+            single_image_edit: {
+                prompt: '',
+                images: {},
+                canvasHtml: '',
+                canvasHidden: true,
+                isGenerating: false
+            }
+        };
+
+
         // ==========================================
         // 移動端導航控制 (RWD)
         // ==========================================
@@ -1512,15 +1555,134 @@
             'single_image_edit': { name: 'Single Image Edit', desc: '單圖編輯', icon: 'image', color: 'pink' }
         };
 
+        /**
+         * 保存當前工具的狀態
+         */
+        function saveToolState(toolName) {
+            if (!toolName || !window.toolStates[toolName]) return;
+
+            const promptInput = document.getElementById('prompt-input');
+            const canvasResults = document.getElementById('canvas-results');
+            const resultsGrid = document.getElementById('results-grid');
+
+            // 保存 prompt
+            window.toolStates[toolName].prompt = promptInput ? promptInput.value : '';
+
+            // 保存上傳的圖片（深拷貝避免引用污染）
+            window.toolStates[toolName].images = JSON.parse(JSON.stringify(uploadedImages));
+
+            // 保存 canvas 結果
+            if (resultsGrid) {
+                window.toolStates[toolName].canvasHtml = resultsGrid.innerHTML;
+                window.toolStates[toolName].canvasHidden = canvasResults ? canvasResults.classList.contains('hidden') : true;
+            }
+
+            // isGenerating 狀態在 handleGenerate 和 pollStatus 中直接更新，這裡只需保存當前值
+            // window.toolStates[toolName].isGenerating = window.toolStates[toolName].isGenerating;
+
+            console.log(`[State] 已保存 ${toolName} 的狀態`, window.toolStates[toolName]);
+        }
+
+        /**
+         * 載入工具的保存狀態
+         */
+        function loadToolState(toolName) {
+            if (!toolName || !window.toolStates[toolName]) return;
+
+            const state = window.toolStates[toolName];
+            const promptInput = document.getElementById('prompt-input');
+            const canvasResults = document.getElementById('canvas-results');
+            const canvasPlaceholder = document.getElementById('canvas-placeholder');
+            const resultsGrid = document.getElementById('results-grid');
+            const btn = document.getElementById('btn-generate');
+
+            // 恢復 prompt
+            if (promptInput) {
+                promptInput.value = state.prompt || '';
+            }
+
+            // 恢復上傳圖片（深拷貝）
+            uploadedImages = JSON.parse(JSON.stringify(state.images || {}));
+
+            // 恢復上傳圖片的 UI 顯示
+            Object.keys(uploadedImages).forEach(uploadId => {
+                if (uploadedImages[uploadId]) {
+                    const preview = document.getElementById(`preview-${uploadId}`);
+                    const placeholder = document.getElementById(`placeholder-${uploadId}`);
+                    const zone = document.getElementById(`zone-${uploadId}`);
+
+                    if (preview && placeholder && zone) {
+                        const img = preview.querySelector('img');
+                        if (img) img.src = uploadedImages[uploadId];
+                        preview.classList.remove('hidden');
+                        placeholder.classList.add('hidden');
+                        zone.classList.add('has-image');
+                    }
+                }
+            });
+
+            // 恢復 canvas 結果
+            if (state.canvasHtml && resultsGrid) {
+                resultsGrid.innerHTML = state.canvasHtml;
+
+                if (state.canvasHidden) {
+                    canvasPlaceholder.classList.remove('hidden');
+                    canvasResults.classList.add('hidden');
+                } else {
+                    canvasPlaceholder.classList.add('hidden');
+                    canvasResults.classList.remove('hidden');
+                }
+
+                // 重新初始化圖標
+                lucide.createIcons();
+            }
+
+            // ✅ 關鍵修復：恢復按鈕狀態（根據該工具是否正在生成）
+            if (btn) {
+                if (state.isGenerating) {
+                    // 該工具正在生成，禁用按鈕
+                    btn.disabled = true;
+                    btn.classList.add('opacity-70', 'cursor-not-allowed');
+                    btn.innerHTML = `
+                        <div class="flex gap-1 items-center">
+                            <div class="w-2 h-2 bg-white rounded-full animate-bounce"></div>
+                            <div class="w-2 h-2 bg-white rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
+                            <div class="w-2 h-2 bg-white rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+                        </div>
+                        <span>Processing...</span>
+                    `;
+                } else {
+                    // 該工具未在生成，啟用按鈕
+                    btn.disabled = false;
+                    btn.classList.remove('opacity-70', 'cursor-not-allowed');
+                    btn.innerHTML = `
+                        <i data-lucide="sparkles" class="w-5 h-5"></i>
+                        <span>Generate</span>
+                    `;
+                    lucide.createIcons();
+                }
+            }
+
+            console.log(`[State] 已載入 ${toolName} 的狀態，isGenerating: ${state.isGenerating}`);
+        }
+
         function selectTool(toolId) {
+            console.log(`[Tool] 切換工具: ${currentTool} -> ${toolId}`);
+
+            // 1. 保存當前工具的狀態（如果有的話）
+            if (currentTool && currentTool !== toolId) {
+                saveToolState(currentTool);
+            }
+
+            // 2. 更新當前工具
             currentTool = toolId;
 
-            // 隱藏工具選單，顯示工作區
+            // 3. 隱藏工具選單，顯示工作區
             document.getElementById('tool-selector-overlay').classList.add('hidden');
             document.getElementById('studio-workspace').classList.remove('hidden');
             document.getElementById('studio-workspace').classList.add('flex');
 
-            // 更新當前工具標題
+            // 4. 更新當前工具標題
             const info = toolInfo[toolId];
             if (info) {
                 document.getElementById('current-tool-name').textContent = info.name;
@@ -1531,10 +1693,15 @@
                 iconContainer.innerHTML = `<i data-lucide="${info.icon}" class="w-4 h-4"></i>`;
             }
 
-            // 重新渲染工作區
+            // 5. 重新渲染工作區（清空並初始化）
             renderWorkspace(toolId);
 
-            // 保存當前視圖到 localStorage（防止刷新後跳轉）
+            // 6. 載入該工具的保存狀態
+            setTimeout(() => {
+                loadToolState(toolId);
+            }, 100); // 延遲載入確保 DOM 已渲染
+
+            // 7. 保存當前視圖到 localStorage（防止刷新後跳轉）
             localStorage.setItem('currentView', 'canvas');
 
             lucide.createIcons();
@@ -1579,7 +1746,7 @@
                 container.classList.add('h-28');
 
                 container.innerHTML = uploads.map(upload => `
-                    <div id="zone-${upload.id}" 
+                    <div id="zone-${upload.id}"
                          class="upload-zone flex-1 rounded-xl flex flex-col items-center justify-center bg-black/20 relative overflow-hidden"
                          onclick="triggerUpload('${upload.id}')"
                          ondragover="event.preventDefault(); this.classList.add('border-${color}-500/70', 'bg-${color}-500/10')"
@@ -1957,12 +2124,12 @@
                 card.className = 'relative group flex flex-col items-center';
                 card.innerHTML = `
                     <div class="relative overflow-hidden rounded-2xl border border-white/10 shadow-2xl">
-                        <img src="${url}" alt="Generated Image ${index + 1}" 
-                             class="max-w-full max-h-[60vh] object-contain" 
+                        <img src="${url}" alt="Generated Image ${index + 1}"
+                             class="max-w-full max-h-[60vh] object-contain"
                              onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22200%22><text x=%2250%%22 y=%2250%%22 text-anchor=%22middle%22 fill=%22gray%22>載入失敗</text></svg>'" />
                         <!-- 懸停時顯示下載按鈕 -->
                         <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                            <button onclick="downloadImage('${url}', ${index + 1})" 
+                            <button onclick="downloadImage('${url}', ${index + 1})"
                                     class="px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-xl font-bold text-white flex items-center gap-2 hover:brightness-110 transition-all shadow-lg">
                                 <i data-lucide="download" class="w-5 h-5"></i>
                                 <span>下載圖片</span>
@@ -2137,6 +2304,12 @@
             showStatus('📤 Sending request...', 'info');
 
             try {
+                // ✅ 標記當前工具正在生成
+                window.toolStates[currentTool].isGenerating = true;
+
+                // 在發起生成前，先保存當前工具的狀態（包含最新的 prompt）
+                saveToolState(currentTool);
+
                 // 構建 payload
                 let payload = {
                     workflow: currentTool,
@@ -2164,8 +2337,8 @@
 
                 showStatus(`⏳ Job queued: ${jobId.substring(0, 8)}...`, 'info');
 
-                // 開始輪詢狀態
-                pollStatus(jobId, btn, originalHTML);
+                // 開始輪詢狀態（傳入當前工具名稱，以便更新正確的狀態）
+                pollStatus(jobId, btn, originalHTML, currentTool);
 
             } catch (error) {
                 console.error('Generate error:', error);
@@ -2180,21 +2353,29 @@
         // ==========================================
         // 狀態輪詢
         // ==========================================
-        function pollStatus(jobId, btn, originalHTML) {
-            if (pollingInterval) {
-                clearInterval(pollingInterval);
+        function pollStatus(jobId, btn, originalHTML, toolName) {
+            // 清除該工具之前的輪詢（如果有的話）
+            if (toolPollingIntervals[toolName]) {
+                clearInterval(toolPollingIntervals[toolName]);
             }
 
             let pollCount = 0;
             const maxPolls = 1200; // 40 分鐘超時 (2400秒 ÷ 2秒輪詢間隔 = 1200次)
 
-            pollingInterval = setInterval(async () => {
+            console.log(`[Poll] 開始輪詢 ${toolName} 的任務: ${jobId}`);
+
+            toolPollingIntervals[toolName] = setInterval(async () => {
                 pollCount++;
 
                 if (pollCount > maxPolls) {
-                    clearInterval(pollingInterval);
-                    showStatus('⏰ 超時: 生成時間超過30分鐘', 'warning');
-                    restoreButton(btn, originalHTML);
+                    clearInterval(toolPollingIntervals[toolName]);
+                    delete toolPollingIntervals[toolName];
+
+                    // 只有當前工具才顯示超時訊息
+                    if (currentTool === toolName) {
+                        showStatus('⏰ 超時: 生成時間超過30分鐘', 'warning');
+                        restoreButton(btn, originalHTML);
+                    }
                     return;
                 }
 
@@ -2209,23 +2390,72 @@
                     } else if (data.status === 'queued') {
                         showStatus('⏳ Waiting in queue...', 'info');
                     } else if (data.status === 'finished') {
-                        clearInterval(pollingInterval);
+                        clearInterval(toolPollingIntervals[toolName]);
+                        delete toolPollingIntervals[toolName];
 
                         const outputPath = data.image_url || data.output_path;
                         if (outputPath) {
                             const filename = outputPath.split('/').pop().split('\\').pop();
-                            showResult(`${API_BASE}/outputs/${filename}`);
-                            showStatus('✅ Generation complete!', 'success');
+                            const imageUrl = `${API_BASE}/outputs/${filename}`;
+
+                            // 如果當前工具就是生成的工具，直接顯示結果
+                            if (currentTool === toolName) {
+                                showResult(imageUrl);
+                                showStatus('✅ Generation complete!', 'success');
+                            } else {
+                                // 如果用戶已切換到其他工具，將結果保存到該工具的狀態中
+                                console.log(`[Poll] ${toolName} 生成完成，但用戶已切換到 ${currentTool}，保存結果到狀態`);
+
+                                // 創建臨時的 canvas HTML（簡化版，只保存圖片 URL）
+                                const tempCanvasHtml = `
+                                    <div class="relative group flex flex-col items-center">
+                                        <div class="relative overflow-hidden rounded-2xl border border-white/10 shadow-2xl">
+                                            <img src="${imageUrl}" alt="Generated Image" 
+                                                 class="max-w-full max-h-[60vh] object-contain" />
+                                            <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                <button onclick="downloadImage('${imageUrl}', 1)" 
+                                                        class="px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-xl font-bold text-white flex items-center gap-2 hover:brightness-110 transition-all shadow-lg">
+                                                    <i data-lucide="download" class="w-5 h-5"></i>
+                                                    <span>下載圖片</span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <span class="text-xs text-gray-500 mt-2">Image 1</span>
+                                    </div>
+                                `;
+
+                                window.toolStates[toolName].canvasHtml = tempCanvasHtml;
+                                window.toolStates[toolName].canvasHidden = false;
+                            }
                         } else {
-                            showStatus('⚠️ Finished but no image path returned', 'warning');
+                            if (currentTool === toolName) {
+                                showStatus('⚠️ Finished but no image path returned', 'warning');
+                            }
                         }
 
-                        restoreButton(btn, originalHTML);
+                        // ✅ 標記該工具生成完成
+                        window.toolStates[toolName].isGenerating = false;
+
+                        // ✅ 關鍵修復：無論用戶是否切換工具，都要恢復按鈕狀態（如果當前還在該工具）
+                        if (currentTool === toolName) {
+                            restoreButton(btn, originalHTML);
+                        }
 
                     } else if (data.status === 'failed') {
-                        clearInterval(pollingInterval);
-                        showStatus(`❌ Failed: ${data.error || 'Unknown error'}`, 'error');
-                        restoreButton(btn, originalHTML);
+                        clearInterval(toolPollingIntervals[toolName]);
+                        delete toolPollingIntervals[toolName];
+
+                        if (currentTool === toolName) {
+                            showStatus(`❌ Failed: ${data.error || 'Unknown error'}`, 'error');
+                        }
+
+                        // ✅ 標記該工具生成失敗（結束）
+                        window.toolStates[toolName].isGenerating = false;
+
+                        // ✅ 關鍵修復：失敗時也要恢復按鈕狀態（如果當前還在該工具）
+                        if (currentTool === toolName) {
+                            restoreButton(btn, originalHTML);
+                        }
                     }
 
                 } catch (error) {
@@ -2241,9 +2471,13 @@
         // ==========================================
         function showStatus(message, type = 'info') {
             const statusDiv = document.getElementById('status-message');
-            statusDiv.textContent = message;
-            statusDiv.classList.remove('hidden', 'text-gray-400', 'text-amber-400', 'text-red-400', 'text-green-400');
+            if (!statusDiv) return;
 
+            // 先設置內容，再改變可見性（避免閃爍）
+            statusDiv.textContent = message;
+            statusDiv.className = 'text-sm text-center transition-opacity'; // 重置 class
+
+            // 根據類型添加顏色
             switch (type) {
                 case 'warning':
                     statusDiv.classList.add('text-amber-400');
@@ -2257,7 +2491,22 @@
                 default:
                     statusDiv.classList.add('text-gray-400');
             }
+
+            // 使用 opacity 而非 hidden（保持空間）
+            statusDiv.style.opacity = '1';
+            statusDiv.style.visibility = 'visible';
+
+            // 自動隱藏（除了錯誤訊息）
+            if (type !== 'error') {
+                setTimeout(() => {
+                    statusDiv.style.opacity = '0';
+                    setTimeout(() => {
+                        statusDiv.style.visibility = 'hidden';
+                    }, 200);
+                }, 5000);
+            }
         }
+
 
         function restoreButton(btn, originalHTML) {
             btn.disabled = false;

@@ -437,27 +437,38 @@ curl http://localhost:5000/api/health
 
 ```
 ComfyUISum/
+├── shared/                     # 共用模組 (2026-01 優化)
+│   ├── __init__.py            # 模組導出
+│   ├── utils.py               # load_env(), get_project_root()
+│   ├── config_base.py         # 共用配置 (Redis, DB, Storage)
+│   └── database.py            # Database 類 (MySQL 連接池)
+│
 ├── backend/                    # Flask 後端服務
 │   ├── src/
 │   │   ├── app.py             # 主應用 (API + 靜態服務)
-│   │   ├── config.py          # 配置管理
-│   │   └── database.py        # 數據庫操作
+│   │   └── config.py          # 配置管理 (繼承 shared.config_base)
 │   ├── Dockerfile             # Backend 容器定義
 │   └── requirements.txt       # Python 依賴
 │
 ├── worker/                     # 任務處理器
 │   ├── src/
-│   │   └── main.py            # Worker 主邏輯
+│   │   ├── main.py            # Worker 主邏輯
+│   │   ├── json_parser.py     # Workflow 解析
+│   │   ├── comfy_client.py    # ComfyUI 客戶端
+│   │   └── config.py          # 配置管理 (繼承 shared.config_base)
 │   ├── Dockerfile             # Worker 容器定義
 │   └── requirements.txt       # Python 依賴
 │
 ├── frontend/                   # Web 前端
 │   ├── index.html             # 主頁面 (SPA)
+│   ├── motion-workspace.js    # Video Studio 邏輯
 │   ├── style.css              # 樣式文件
 │   └── config.js              # API 配置 (自動生成)
 │
 ├── ComfyUIworkflow/           # Workflow 模板
 │   ├── config.json            # Workflow 配置映射
+│   ├── T2V.json, FLF.json     # Video Studio 工作流
+│   ├── Veo3_VideoConnection.json  # 長片生成
 │   ├── text_to_image_*.json   # 文字轉圖像
 │   ├── face_swap_*.json       # 人臉替換
 │   ├── multi_image_blend_*.json  # 圖片混合
@@ -473,11 +484,15 @@ ComfyUISum/
 │   ├── backend.log            # Backend 日誌 (5MB × 3)
 │   └── worker.log             # Worker 日誌 (5MB × 3)
 │
+├── docs/                       # 文檔目錄
+│   ├── UpdateList.md          # 詳細更新日誌
+│   ├── Veo3_LongVideo_Guide.md    # Veo3 指南
+│   └── Phase8C_Monitoring_Guide.md # 監控指南
+│
 ├── mysql_data/                 # MySQL 數據卷
 ├── redis_data/                 # Redis 數據卷
 │
 ├── .env                        # 環境變數配置 (使用中)
-├── .env.example.backup         # 環境變數模板 (舊版備份)
 ├── .env.unified.example        # 環境變數模板 (推薦) ⭐
 ├── docker-compose.yml          # 生產環境 Docker 配置 (傳統)
 ├── docker-compose.dev.yml      # 開發環境 Docker 配置 (傳統)
@@ -489,14 +504,11 @@ ComfyUISum/
 │   ├── start_all_with_docker.bat   # 傳統 Windows 啟動
 │   ├── start_ngrok.bat             # Ngrok 啟動腳本
 │   ├── update_ngrok_config.ps1     # Ngrok 配置更新
+│   ├── setup_comfy_bridge.bat      # ComfyUI 目錄連結腳本 🆕
+│   ├── verify_infra.py             # 環境驗證腳本 🆕
 │   └── verify.bat                  # 系統驗證工具
 │
-├── README.md                   # 本文件
-├── HYBRID_DEPLOYMENT_STRATEGY.md  # 混合部署策略指南 ⭐
-├── DEPLOYMENT_COMPARISON.md    # 新舊方案對比
-└── Update_MD/
-    ├── UpdateList.md           # 詳細更新日誌
-    └── NGROK_SETUP.md          # Ngrok 完整指南
+└── README.md                   # 本文件
 ```
 
 ---

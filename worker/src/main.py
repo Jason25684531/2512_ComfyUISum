@@ -149,7 +149,31 @@ def save_base64_image(base64_data: str, job_id: str, field_name: str) -> str:
     try:
         with open(filepath, "wb") as f:
             f.write(image_bytes)
+            f.flush()  # 確保寫入磁碟
+            os.fsync(f.fileno())  # 強制同步到磁碟
+        
         logger.info(f"💾 已保存圖片: {filename} ({len(image_bytes)} bytes) 至 {filepath}")
+        
+        # 驗證檔案是否可讀（確保 ComfyUI 能讀取）
+        if not filepath.exists():
+            raise FileNotFoundError(f"檔案寫入後無法找到: {filepath}")
+        
+        file_size = filepath.stat().st_size
+        if file_size != len(image_bytes):
+            raise IOError(f"檔案大小不符，預期 {len(image_bytes)} bytes，實際 {file_size} bytes")
+        
+        # 嘗試重新開啟檔案驗證可讀性
+        try:
+            from PIL import Image
+            with Image.open(filepath) as test_img:
+                test_img.verify()
+            logger.info(f"✅ 檔案驗證成功: {filename}")
+        except Exception as verify_err:
+            logger.warning(f"⚠️ 檔案驗證警告: {verify_err}")
+        
+        # 添加短暫延遲，確保檔案系統完成所有 I/O 操作
+        time.sleep(0.1)
+        
     except Exception as e:
         logger.error(f"❌ 檔案寫入失敗: {e}")
         raise
@@ -501,11 +525,24 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
                 logger.info(f"📷 收到 {len(images)} 張輸出圖片")
             
             if output_list:
+                # 過濾掉臨時預覽圖（type: 'temp'），只保留真實輸出
+                real_outputs = [item for item in output_list if item.get("type") != "temp"]
+                
+                if not real_outputs:
+                    logger.warning("⚠️ 只有臨時預覽圖，沒有真實輸出")
+                    logger.info("📋 臨時預覽圖列表:")
+                    for item in output_list:
+                        logger.info(f"   - {item.get('filename')} (type: {item.get('type')})")
+                    # 如果完全沒有輸出，使用臨時預覽圖作為後備
+                    real_outputs = output_list
+                else:
+                    logger.info(f"✓ 過濾後剩餘 {len(real_outputs)} 個真實輸出")
+                
                 # 優先選擇完整合併的影片 (filename 包含 Combined 或 Full)
                 selected_file = None
                 
                 # 1. 第一輪篩選：找 "Combined" 或 "Full" (Veo3 Long Video 最終輸出)
-                for item in output_list:
+                for item in real_outputs:
                     filename = item.get("filename", "")
                     if "Combined" in filename or "Full" in filename:
                         selected_file = item
@@ -514,7 +551,7 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
                 
                 # 2. 第二輪篩選：如果有 subfolder (備選)
                 if not selected_file:
-                    for item in output_list:
+                    for item in real_outputs:
                         if item.get("subfolder"):
                             selected_file = item
                             logger.info(f"選擇有子目錄的檔案: {item.get('filename')} (subfolder: {item.get('subfolder')})")
@@ -522,25 +559,29 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
                 
                 # 3. 最後手段：使用最後一個（通常最終輸出在最後）
                 if not selected_file:
-                    selected_file = output_list[-1]
+                    selected_file = real_outputs[-1]
                     logger.info(f"使用最後一個檔案: {selected_file.get('filename')}")
                 
-                # 嘗試複製選中的檔案
+                # 嘗試複製選中的檔案（傳遞 file_type）
+                file_type = selected_file.get("type", "output")
                 new_filename = client.copy_output_file(
                     filename=selected_file.get("filename"),
                     subfolder=selected_file.get("subfolder", ""),
+                    file_type=file_type,
                     job_id=job_id
                 )
                 
                 # 如果選中的檔案複製失敗，嘗試其他檔案
-                if not new_filename and len(output_list) > 1:
+                if not new_filename and len(real_outputs) > 1:
                     logger.warning("⚠️ 第一選擇失敗，嘗試其他檔案...")
-                    for item in output_list:
+                    for item in real_outputs:
                         if item == selected_file:
                             continue
+                        file_type = item.get("type", "output")
                         new_filename = client.copy_output_file(
                             filename=item.get("filename"),
                             subfolder=item.get("subfolder", ""),
+                            file_type=file_type,
                             job_id=job_id
                         )
                         if new_filename:

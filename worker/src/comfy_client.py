@@ -336,6 +336,7 @@ class ComfyClient:
         self, 
         filename: str, 
         subfolder: str = "",
+        file_type: str = "output",  # 新增：'output' 或 'temp'
         job_id: str = None
     ) -> Optional[str]:
         """
@@ -344,20 +345,62 @@ class ComfyClient:
         Args:
             filename: 原始檔名
             subfolder: 子資料夾
+            file_type: 檔案類型，'output' 或 'temp' (預設 'output')
             job_id: 任務 ID (用於重命名)
         
         Returns:
             新的檔名，失敗時返回 None
         """
+        # 根據 file_type 決定來源根目錄
+        if file_type == "temp":
+            base_dir = COMFY_OUTPUT_DIR.parent / "temp"
+        else:
+            base_dir = COMFY_OUTPUT_DIR
+        
         # 來源路徑
         if subfolder:
-            source_path = COMFY_OUTPUT_DIR / subfolder / filename
+            source_path = base_dir / subfolder / filename
         else:
-            source_path = COMFY_OUTPUT_DIR / filename
+            source_path = base_dir / filename
+        
+        print(f"[ComfyClient] 檢查檔案路徑: {source_path}")
         
         if not source_path.exists():
             print(f"[ComfyClient] 找不到輸出檔案: {source_path}")
-            return None
+            
+            # 嘗試備用路徑（有時 ComfyUI 的輸出可能在不同位置）
+            alternative_paths = []
+            
+            # 1. 嘗試直接在 output 根目錄
+            if subfolder:
+                alternative_paths.append(COMFY_OUTPUT_DIR / filename)
+            
+            # 2. 如果是 temp 類型，嘗試 output 目錄
+            if file_type == "temp":
+                if subfolder:
+                    alternative_paths.append(COMFY_OUTPUT_DIR / subfolder / filename)
+                else:
+                    alternative_paths.append(COMFY_OUTPUT_DIR / filename)
+            
+            # 3. 嘗試 temp 目錄（即使 file_type 不是 temp）
+            if file_type != "temp":
+                temp_dir = COMFY_OUTPUT_DIR.parent / "temp"
+                if subfolder:
+                    alternative_paths.append(temp_dir / subfolder / filename)
+                else:
+                    alternative_paths.append(temp_dir / filename)
+            
+            # 檢查所有備用路徑
+            for alt_path in alternative_paths:
+                print(f"[ComfyClient] 嘗試備用路徑: {alt_path}")
+                if alt_path.exists():
+                    print(f"[ComfyClient] ✓ 在備用路徑找到檔案！")
+                    source_path = alt_path
+                    break
+            else:
+                # 所有路徑都找不到
+                print(f"[ComfyClient] ✗ 所有可能路徑都找不到檔案")
+                return None
         
         # 目標檔名
         ext = source_path.suffix
@@ -370,10 +413,10 @@ class ComfyClient:
         
         try:
             shutil.copy2(source_path, dest_path)
-            print(f"[ComfyClient] 已複製檔案: {dest_path}")
+            print(f"[ComfyClient] ✓ 已複製檔案: {source_path} -> {dest_path}")
             return new_filename
         except Exception as e:
-            print(f"[ComfyClient] 複製檔案失敗: {e}")
+            print(f"[ComfyClient] ✗ 複製檔案失敗: {e}")
             return None
             
     # 向後相容別名

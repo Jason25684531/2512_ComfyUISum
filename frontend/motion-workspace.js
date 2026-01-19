@@ -263,9 +263,11 @@ function showMotionStatus(message, type) {
     var statusEl = document.getElementById('motion-status-message');
     if (!statusEl) return;
 
+    // 先設置內容，再改變可見性（避免閃爍）
     statusEl.textContent = message;
-    statusEl.classList.remove('hidden', 'text-blue-400', 'text-green-400', 'text-red-400', 'text-yellow-400');
+    statusEl.className = 'text-sm text-center transition-opacity'; // 重置 class
 
+    // 根據類型添加顏色
     if (type === 'success') {
         statusEl.classList.add('text-green-400');
     } else if (type === 'error') {
@@ -276,9 +278,17 @@ function showMotionStatus(message, type) {
         statusEl.classList.add('text-blue-400');
     }
 
+    // 使用 opacity 而非 hidden（保持空間）
+    statusEl.style.opacity = '1';
+    statusEl.style.visibility = 'visible';
+
+    // 自動隱藏（除了錯誤訊息）
     if (type !== 'error') {
         setTimeout(function () {
-            statusEl.classList.add('hidden');
+            statusEl.style.opacity = '0';
+            setTimeout(function () {
+                statusEl.style.visibility = 'hidden';
+            }, 200);
         }, 5000);
     }
 }

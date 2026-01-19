@@ -52,9 +52,11 @@ WORKFLOW_MAP = {
 }
 
 # ==========================================
-# 圖片節點映射表
-# 定義每個工作流的 LoadImage 節點對應哪個前端上傳欄位
-# ⚠️ 欄位名稱必須與前端 toolConfig 中的 uploads.id 一致！
+# 圖片節點映射表 (Fallback / Deprecated)
+# ==========================================
+# ⚠️ DEPRECATED: 請優先使用 config.json 中的 image_map 欄位
+# 此映射僅作為 config.json 未定義時的備用方案
+# 新增 workflow 時應直接在 config.json 中定義 image_map
 # ==========================================
 IMAGE_NODE_MAP = {
     "face_swap": {

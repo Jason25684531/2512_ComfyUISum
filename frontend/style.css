@@ -10,6 +10,13 @@
 
 /* === 預留的擴展樣式區塊 === */
 
+/* 修復狀態訊息閃爍問題 - 2026-01-19 */
+#status-message,
+#motion-status-message {
+    min-height: 24px;
+    transition: opacity 0.2s ease;
+}
+
 /* 打印樣式 */
 @media print {
     .no-print {
