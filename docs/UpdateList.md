@@ -1,14 +1,245 @@
 # 專案更新日誌
 
 ## 更新日期
-2026-01-19 (最新更新 - 全端架構審查與瀏覽器驗證)
+2026-01-20 (最新更新 - 架構審查與代碼優化)
 
-## 最新更新摘要 (2026-01-19 - 全端驗證)
-本次更新完成全端系統架構審查與瀏覽器測試驗證：
-- ✅ 全端邏輯驗證通過：Backend、Worker、Redis、MySQL 正常運行
-- ✅ 瀏覽器 UI/UX 測試通過：所有功能頁面正常載入
-- ✅ 代碼重複檢查：確認無重複代碼，架構清晰
-- ✅ 系統狀態正常：Server/Worker 均 ONLINE，Queue 為 0
+## 最新更新摘要 (2026-01-20 - 架構審查與代碼優化)
+
+### 二十二、架構審查與代碼優化 (2026-01-20)
+
+#### 目標
+全面審查專案架構，消除重複代碼，確保易讀性、程式邏輯性與可擴展性。
+
+#### 審查範圍
+- 所有 Python 程式檔案 (backend, worker, shared)
+- 所有 Markdown 說明檔案
+- 前端程式碼結構
+- 配置檔案與環境變數
+
+#### 發現問題與修復
+
+| 問題類型 | 檔案 | 說明 | 狀態 |
+|----------|------|------|------|
+| **重複配置** | `worker/src/main.py` | 資料庫連接參數重複定義 (`DB_HOST`, `DB_PORT` 等) | ✅ 已修復 |
+| **目錄命名** | `backend/Readmd/` | 拼寫錯誤 (Readmd → Readme) | ✅ 已修復 |
+
+#### 修改內容
+
+##### 22.1 worker/src/main.py 優化
+**問題**: `main()` 函式中重複定義資料庫連接參數，這些已在 `shared/config_base.py` 中定義。
+
+**修復前**:
+```python
+# main() 函式內，第 654-672 行
+db_host = os.getenv("DB_HOST", "localhost")
+db_port = int(os.getenv("DB_PORT", 3306))
+db_user = os.getenv("DB_USER", "studio_user")
+db_password = os.getenv("DB_PASSWORD", "studio_password")
+db_name = os.getenv("DB_NAME", "studio_db")
+```
+
+**修復後**:
+```python
+# 在檔案頂部增加導入
+from shared.config_base import (
+    DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
+)
+
+# main() 函式內直接使用共用配置
+db_client = Database(
+    host=DB_HOST,
+    port=DB_PORT,
+    user=DB_USER,
+    password=DB_PASSWORD,
+    database=DB_NAME
+)
+```
+
+##### 22.2 目錄重命名
+- `backend/Readmd/` → `backend/Readme/`
+
+#### 架構確認清單
+
+| 項目 | 狀態 | 說明 |
+|------|------|------|
+| 共用配置模組 | ✅ | `shared/config_base.py` 統一管理 Redis/DB/Storage 配置 |
+| 配置繼承 | ✅ | `backend/config.py` 和 `worker/config.py` 正確繼承 |
+| 資料庫模組 | ✅ | `shared/database.py` 是唯一來源 |
+| 工具函式 | ✅ | `shared/utils.py` 提供 `load_env()`, `setup_logger()` |
+| 日誌系統 | ✅ | Backend/Worker 各自配置 RotatingFileHandler |
+| 前端結構 | ✅ | 清晰的 HTML/JS/CSS 分離 |
+
+#### 當前專案結構
+
+```
+ComfyUISum/
+├── shared/                     # 共用模組 (核心)
+│   ├── __init__.py            # 模組導出
+│   ├── config_base.py         # 共用配置 (Redis, DB, Storage, ComfyUI)
+│   ├── database.py            # Database 類 + ORM 模型 (User, Job)
+│   └── utils.py               # load_env(), setup_logger(), JobLogAdapter
+│
+├── backend/                    # Flask 後端服務
+│   ├── src/
+│   │   ├── app.py             # 主應用 (API + 靜態服務 + 會員系統)
+│   │   └── config.py          # 繼承 shared.config_base + Flask 專用配置
+│   ├── Readme/                # ← 已修正拼寫
+│   │   ├── README.md          # Backend 使用指南
+│   │   └── API_TESTING.md     # API 測試集合
+│   └── Dockerfile
+│
+├── worker/                     # 任務處理器
+│   ├── src/
+│   │   ├── main.py            # Worker 主邏輯 (已優化配置導入)
+│   │   ├── json_parser.py     # Workflow 解析
+│   │   ├── comfy_client.py    # ComfyUI 客戶端
+│   │   └── config.py          # 繼承 shared.config_base + Worker 專用配置
+│   └── Dockerfile
+│
+├── frontend/                   # Web 前端
+│   ├── index.html             # 主頁面 (含會員狀態切換)
+│   ├── login.html             # 登入/註冊頁面
+│   ├── profile.html           # 會員中心
+│   ├── dashboard.html         # 儀表板
+│   ├── motion-workspace.js    # Video Studio 邏輯
+│   ├── style.css              # 樣式文件
+│   └── config.js              # API 配置 (自動生成)
+│
+├── docs/                       # 文檔目錄
+│   ├── UpdateList.md          # 詳細更新日誌 (本文件)
+│   ├── HYBRID_DEPLOYMENT_STRATEGY.md  # 混合部署策略
+│   └── *.md                   # 其他指南文檔
+│
+└── ComfyUIworkflow/           # Workflow 模板
+    ├── config.json            # Workflow 配置映射
+    └── *.json                 # 各種工作流模板
+```
+
+#### 結論
+
+| 評估項目 | 結果 |
+|----------|------|
+| 代碼重複 | ✅ 已消除 |
+| 配置統一 | ✅ 已確認 |
+| 架構清晰度 | ✅ 良好 |
+| 可擴展性 | ✅ 良好 |
+| 程式邏輯性 | ✅ 良好 |
+
+---
+
+## 之前更新 (2026-01-20 - Member System Beta 全部完成)
+本次更新完成會員系統 Beta 版 **全部三個階段**：
+
+### Phase 1 & 2 (後端)
+- ✅ 新增依賴：`flask-login`、`flask-bcrypt`、`Flask-SQLAlchemy`
+- ✅ 資料庫重構：新增 `User` ORM 模型、改造 `Job` 模型
+- ✅ Auth API：`/api/register`、`/api/login`、`/api/logout`、`/api/me`
+- ✅ Member API：`/api/user/profile`、`/api/user/password`、`/api/user/delete`
+
+### Phase 3 (前端)
+- ✅ 新建 `frontend/login.html`：登入/註冊雙模式表單
+- ✅ 新建 `frontend/profile.html`：會員中心、密碼修改、歷史作品
+- ✅ 修改 `frontend/index.html`：側邊欄動態登入狀態切換
+
+---
+
+## 二十一、Member System Beta 會員系統整合（2026-01-20）
+
+### 目標
+將現有的單機算圖系統升級為支援 **多用戶登入** 與 **資料隔離** 的架構。
+
+### Phase 1: 基礎建設 & 資料庫
+
+#### 21.1 依賴更新
+| 套件 | 版本 | 用途 |
+|------|------|------|
+| `flask-login` | 0.6.3 | 會員登入管理 |
+| `flask-bcrypt` | 1.0.1 | 密碼加密 (Bcrypt) |
+| `Flask-SQLAlchemy` | 3.1.1 | ORM 框架 |
+
+#### 21.2 資料庫重構 (`shared/database.py`)
+**新增內容**：
+- SQLAlchemy `Base` 和 `Engine` 初始化
+- `User` 模型 (繼承 `UserMixin`)
+  - 欄位：`id`, `email`, `password_hash`, `name`, `role`, `created_at`
+- `Job` 模型更新
+  - 新增：`user_id` (FK), `workflow_data` (JSON), `deleted_at`
+  - 移除：`output_path`（改用 ID 推導檔名）
+- Relationship 設定：`User.jobs` ↔ `Job.user`
+
+**SQL Schema 更新**：
+```sql
+CREATE TABLE users (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    name VARCHAR(50) NOT NULL,
+    role VARCHAR(20) DEFAULT 'member',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE jobs ADD COLUMN user_id INT;
+ALTER TABLE jobs ADD COLUMN workflow_data JSON;
+ALTER TABLE jobs ADD COLUMN deleted_at TIMESTAMP NULL;
+```
+
+### Phase 2: 後端 API 開發 (`backend/src/app.py`)
+
+#### 21.3 Flask 設定新增
+```python
+from flask_login import LoginManager, login_user, logout_user, login_required, current_user
+from flask_bcrypt import Bcrypt
+
+bcrypt = Bcrypt(app)
+login_manager = LoginManager(app)
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key')
+```
+
+#### 21.4 Auth API 端點
+| 端點 | 方法 | 說明 |
+|------|------|------|
+| `/api/register` | POST | 會員註冊 (Bcrypt 加密密碼) |
+| `/api/login` | POST | 會員登入 (Session 維持) |
+| `/api/logout` | POST | 會員登出 |
+| `/api/me` | GET | 檢查登入狀態 |
+
+#### 21.5 Member API 端點
+| 端點 | 方法 | 說明 |
+|------|------|------|
+| `/api/user/profile` | PUT | 修改個人資料 |
+| `/api/user/password` | PUT | 修改密碼 (驗證舊密碼) |
+| `/api/user/delete` | DELETE | 刪除帳號 |
+
+#### 21.6 Core Logic 更新
+- **Create Job**：已登入用戶的任務自動寫入 `user_id`
+- **Get History**：按 `user_id` 過濾，僅顯示當前用戶的任務
+
+### 修改檔案清單
+
+| 檔案 | 變更類型 | 說明 |
+|------|----------|------|
+| `requirements.txt` | ✏️ 更新 | 新增 flask-login, flask-bcrypt, Flask-SQLAlchemy |
+| `shared/database.py` | 🔄 重構 | 新增 User/Job ORM 模型, SQLAlchemy 設定 |
+| `backend/src/app.py` | ✏️ 更新 | 新增 Auth/Member API, 更新 generate/history |
+| `openspec/changes/MemberSystem/OPENSPEC_MEMBER_BETA.md` | ✏️ 更新 | 標記 Phase 1 & 2 完成 |
+
+### 驗證結果
+
+| 測試項目 | 結果 |
+|----------|------|
+| Python 語法檢查 (database.py) | ✅ 通過 |
+| Python 語法檢查 (app.py) | ✅ 通過 |
+| 依賴安裝 | ✅ 成功 |
+| MySQL 暫存清除 | ✅ 完成 |
+
+### 待進行項目 (Phase 3)
+- [ ] 新建 `frontend/login.html` 頁面
+- [ ] 新建 `frontend/profile.html` 頁面
+- [ ] 修改 `frontend/index.html` 導覽列登入狀態切換
+
+---
+
+## 之前的更新記錄 (2026-01-19)
 
 ---
 

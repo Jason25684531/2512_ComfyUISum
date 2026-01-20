@@ -69,6 +69,9 @@ from config import (
     JOB_STATUS_EXPIRE_SECONDS, STORAGE_INPUT_DIR, print_config,
     WORKER_TIMEOUT
 )
+from shared.config_base import (
+    DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
+)
 
 
 def get_redis_client() -> redis.Redis:
@@ -649,27 +652,20 @@ def main():
         logger.error(f"❌ Redis 連接失敗: {e}")
         sys.exit(1)
     
-    # 2. 連接資料庫 (可選)
+    # 2. 連接資料庫 (可選) - 使用共用配置 (shared.config_base)
     db_client = None
     try:
-        # 嘗試從環境變數載入資料庫配置
-        db_host = os.getenv("DB_HOST", "localhost")
-        db_port = int(os.getenv("DB_PORT", 3306))
-        db_user = os.getenv("DB_USER", "studio_user")
-        db_password = os.getenv("DB_PASSWORD", "studio_password")
-        db_name = os.getenv("DB_NAME", "studio_db")
-        
         # 從 shared 模組導入 Database 類
         from shared.database import Database
         
         db_client = Database(
-            host=db_host,
-            port=db_port,
-            user=db_user,
-            password=db_password,
-            database=db_name
+            host=DB_HOST,
+            port=DB_PORT,
+            user=DB_USER,
+            password=DB_PASSWORD,
+            database=DB_NAME
         )
-        logger.info(f"✅ 資料庫連接成功 ({db_host}:{db_port}/{db_name})")
+        logger.info(f"✅ 資料庫連接成功 ({DB_HOST}:{DB_PORT}/{DB_NAME})")
     except Exception as e:
         logger.warning(f"⚠️ 資料庫連接失敗 (功能降級): {e}")
     

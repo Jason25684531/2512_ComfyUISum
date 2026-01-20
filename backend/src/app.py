@@ -16,6 +16,8 @@ from flask import Flask, request, jsonify, send_from_directory, g
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from flask_login import LoginManager, login_user, logout_user, login_required, current_user
+from flask_bcrypt import Bcrypt
 from redis import Redis, RedisError
 from werkzeug.utils import secure_filename
 from rich.logging import RichHandler
@@ -33,7 +35,23 @@ load_env()
 # Configuration & Logging Setup
 # ============================================
 app = Flask(__name__)
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
+
+# Session Cookie 配置 - 確保跨域請求能正確處理 cookies
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # 允許同站導航攜帶 cookie
+app.config['SESSION_COOKIE_SECURE'] = False     # 開發環境用 HTTP，正式環境改為 True
+app.config['SESSION_COOKIE_HTTPONLY'] = True    # 防止 JS 讀取 cookie
+app.config['REMEMBER_COOKIE_SAMESITE'] = 'Lax'
+app.config['REMEMBER_COOKIE_SECURE'] = False
+
 CORS(app)
+
+# ============================================
+# Flask-Login 和 Flask-Bcrypt 設定
+# ============================================
+bcrypt = Bcrypt(app)
+login_manager = LoginManager(app)
+login_manager.login_view = 'api_login'  # 未登入時重定向的端點
 
 # ============================================
 # 自訂日誌過濾器
@@ -66,11 +84,12 @@ limiter = Limiter(
 )
 
 # 設定 CORS - 允許所有來源的跨域請求
+# 使用 supports_credentials=True 以支援會話 Cookie
 CORS(app, 
      origins=["*"],
      allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
      methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-     supports_credentials=False)
+     supports_credentials=True)
 
 # 手動處理 OPTIONS 預檢請求
 @app.before_request
@@ -107,16 +126,22 @@ def before_request_handler():
 def handle_preflight():
     if request.method == "OPTIONS":
         response = app.make_default_options_response()
-        response.headers["Access-Control-Allow-Origin"] = "*"
+        # 使用請求的 Origin 而非 *，因為 credentials=True 時不能用 *
+        origin = request.headers.get('Origin', 'http://localhost:5000')
+        response.headers["Access-Control-Allow-Origin"] = origin
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
         response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
+        response.headers["Access-Control-Allow-Credentials"] = "true"
         return response
 
 @app.after_request
 def after_request(response):
-    response.headers["Access-Control-Allow-Origin"] = "*"
+    # 使用請求的 Origin 而非 *，因為 credentials=True 時不能用 *
+    origin = request.headers.get('Origin', 'http://localhost:5000')
+    response.headers["Access-Control-Allow-Origin"] = origin
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
     
     # 記錄請求完成
     logger.info(f"✓ {request.method} {request.path} - {response.status_code}")
@@ -178,7 +203,7 @@ REDIS_QUEUE_NAME = JOB_QUEUE
 # ============================================
 # Database Connection Setup
 # ============================================
-from shared.database import Database
+from shared.database import Database, User, get_db_session, init_db
 
 # 載入資料庫配置
 DB_HOST = os.getenv("DB_HOST", "localhost")
@@ -200,6 +225,19 @@ try:
     logger.info(f"✓ 資料庫連接成功: {DB_HOST}:{DB_PORT}/{DB_NAME}")
 except Exception as e:
     logger.warning(f"⚠️ 資料庫連接失敗 (功能降級): {e}")
+
+# ============================================
+# Flask-Login user_loader callback
+# ============================================
+@login_manager.user_loader
+def load_user(user_id):
+    """載入用戶（Flask-Login 回調）"""
+    try:
+        session = get_db_session()
+        return session.query(User).get(int(user_id))
+    except Exception as e:
+        logger.error(f"載入用戶失敗: {e}")
+        return None
 
 # ============================================
 # Redis Connection Setup
@@ -231,6 +269,354 @@ UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
 
 # ============================================
 # API Endpoints
+# ============================================
+
+# ============================================
+# Auth API - 會員認證
+# ============================================
+
+@app.route('/api/register', methods=['POST'])
+@limiter.limit("5 per minute")
+def api_register():
+    """
+    POST /api/register
+    會員註冊
+    
+    Request Body:
+    {
+        "email": "user@example.com",
+        "password": "password123",
+        "name": "用戶名稱"
+    }
+    
+    Response:
+    {
+        "success": true,
+        "user": {...}
+    }
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Missing JSON data'}), 400
+        
+        email = data.get('email', '').strip().lower()
+        password = data.get('password', '')
+        name = data.get('name', '').strip()
+        
+        # 驗證必填欄位
+        if not email or not password or not name:
+            return jsonify({'error': 'Email, password and name are required'}), 400
+        
+        # 驗證 Email 格式
+        if '@' not in email or '.' not in email:
+            return jsonify({'error': 'Invalid email format'}), 400
+        
+        # 驗證密碼長度
+        if len(password) < 6:
+            return jsonify({'error': 'Password must be at least 6 characters'}), 400
+        
+        session = get_db_session()
+        
+        # 檢查 Email 是否已存在
+        existing_user = session.query(User).filter_by(email=email).first()
+        if existing_user:
+            return jsonify({'error': 'Email already registered'}), 409
+        
+        # 建立新用戶
+        password_hash = bcrypt.generate_password_hash(password).decode('utf-8')
+        new_user = User(
+            email=email,
+            password_hash=password_hash,
+            name=name,
+            role='member'
+        )
+        
+        session.add(new_user)
+        session.commit()
+        
+        logger.info(f"✓ 新用戶註冊: {email}")
+        
+        return jsonify({
+            'success': True,
+            'user': new_user.to_dict()
+        }), 201
+    
+    except Exception as e:
+        logger.error(f"✗ 註冊失敗: {e}", exc_info=True)
+        return jsonify({'error': 'Internal server error'}), 500
+
+
+@app.route('/api/login', methods=['POST'])
+@limiter.limit("10 per minute")
+def api_login():
+    """
+    POST /api/login
+    會員登入
+    
+    Request Body:
+    {
+        "email": "user@example.com",
+        "password": "password123"
+    }
+    
+    Response:
+    {
+        "success": true,
+        "user": {...}
+    }
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Missing JSON data'}), 400
+        
+        email = data.get('email', '').strip().lower()
+        password = data.get('password', '')
+        
+        if not email or not password:
+            return jsonify({'error': 'Email and password are required'}), 400
+        
+        session = get_db_session()
+        user = session.query(User).filter_by(email=email).first()
+        
+        if not user:
+            return jsonify({'error': 'Invalid email or password'}), 401
+        
+        if not bcrypt.check_password_hash(user.password_hash, password):
+            return jsonify({'error': 'Invalid email or password'}), 401
+        
+        login_user(user, remember=True)
+        logger.info(f"✓ 用戶登入: {email}")
+        
+        return jsonify({
+            'success': True,
+            'user': user.to_dict()
+        }), 200
+    
+    except Exception as e:
+        logger.error(f"✗ 登入失敗: {e}", exc_info=True)
+        return jsonify({'error': 'Internal server error'}), 500
+
+
+@app.route('/api/logout', methods=['POST'])
+def api_logout():
+    """
+    POST /api/logout
+    會員登出
+    
+    Response:
+    {
+        "success": true,
+        "message": "Logged out successfully"
+    }
+    """
+    try:
+        if current_user.is_authenticated:
+            logger.info(f"✓ 用戶登出: {current_user.email}")
+        logout_user()
+        return jsonify({
+            'success': True,
+            'message': 'Logged out successfully'
+        }), 200
+    except Exception as e:
+        logger.error(f"✗ 登出失敗: {e}", exc_info=True)
+        return jsonify({'error': 'Internal server error'}), 500
+
+
+@app.route('/api/me', methods=['GET'])
+def api_me():
+    """
+    GET /api/me
+    檢查登入狀態
+    
+    Response:
+    {
+        "logged_in": true,
+        "user": {...}
+    }
+    """
+    try:
+        if current_user.is_authenticated:
+            return jsonify({
+                'logged_in': True,
+                'user': current_user.to_dict()
+            }), 200
+        else:
+            return jsonify({
+                'logged_in': False,
+                'user': None
+            }), 200
+    except Exception as e:
+        logger.error(f"✗ 檢查登入狀態失敗: {e}", exc_info=True)
+        return jsonify({
+            'logged_in': False,
+            'user': None
+        }), 200
+
+
+# ============================================
+# Member API - 會員管理
+# ============================================
+
+@app.route('/api/user/profile', methods=['PUT'])
+@login_required
+def api_update_profile():
+    """
+    PUT /api/user/profile
+    修改個人資料
+    
+    Request Body:
+    {
+        "name": "新名稱",
+        "email": "new@example.com"  // 可選
+    }
+    
+    Response:
+    {
+        "success": true,
+        "user": {...}
+    }
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Missing JSON data'}), 400
+        
+        session = get_db_session()
+        user = session.query(User).get(current_user.id)
+        
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # 更新名稱
+        if 'name' in data:
+            name = data['name'].strip()
+            if name:
+                user.name = name
+        
+        # 更新 Email（需要檢查唯一性）
+        if 'email' in data:
+            new_email = data['email'].strip().lower()
+            if new_email and new_email != user.email:
+                existing = session.query(User).filter_by(email=new_email).first()
+                if existing:
+                    return jsonify({'error': 'Email already in use'}), 409
+                user.email = new_email
+        
+        session.commit()
+        logger.info(f"✓ 用戶資料更新: {user.email}")
+        
+        return jsonify({
+            'success': True,
+            'user': user.to_dict()
+        }), 200
+    
+    except Exception as e:
+        logger.error(f"✗ 更新資料失敗: {e}", exc_info=True)
+        return jsonify({'error': 'Internal server error'}), 500
+
+
+@app.route('/api/user/password', methods=['PUT'])
+@login_required
+def api_update_password():
+    """
+    PUT /api/user/password
+    修改密碼
+    
+    Request Body:
+    {
+        "old_password": "舊密碼",
+        "new_password": "新密碼"
+    }
+    
+    Response:
+    {
+        "success": true,
+        "message": "Password updated successfully"
+    }
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Missing JSON data'}), 400
+        
+        old_password = data.get('old_password', '')
+        new_password = data.get('new_password', '')
+        
+        if not old_password or not new_password:
+            return jsonify({'error': 'Old password and new password are required'}), 400
+        
+        if len(new_password) < 6:
+            return jsonify({'error': 'New password must be at least 6 characters'}), 400
+        
+        session = get_db_session()
+        user = session.query(User).get(current_user.id)
+        
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # 驗證舊密碼
+        if not bcrypt.check_password_hash(user.password_hash, old_password):
+            return jsonify({'error': 'Old password is incorrect'}), 401
+        
+        # 更新密碼
+        user.password_hash = bcrypt.generate_password_hash(new_password).decode('utf-8')
+        session.commit()
+        
+        logger.info(f"✓ 用戶密碼更新: {user.email}")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Password updated successfully'
+        }), 200
+    
+    except Exception as e:
+        logger.error(f"✗ 更新密碼失敗: {e}", exc_info=True)
+        return jsonify({'error': 'Internal server error'}), 500
+
+
+@app.route('/api/user/delete', methods=['DELETE'])
+@login_required
+def api_delete_user():
+    """
+    DELETE /api/user/delete
+    刪除帳號
+    
+    Response:
+    {
+        "success": true,
+        "message": "Account deleted successfully"
+    }
+    """
+    try:
+        session = get_db_session()
+        user = session.query(User).get(current_user.id)
+        
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        email = user.email
+        
+        # 刪除用戶（CASCADE 會處理相關的 jobs）
+        session.delete(user)
+        session.commit()
+        
+        logout_user()
+        logger.info(f"✓ 用戶帳號刪除: {email}")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Account deleted successfully'
+        }), 200
+    
+    except Exception as e:
+        logger.error(f"✗ 刪除帳號失敗: {e}", exc_info=True)
+        return jsonify({'error': 'Internal server error'}), 500
+
+
+# ============================================
+# File Upload API
 # ============================================
 
 @app.route('/api/upload', methods=['POST'])
@@ -392,6 +778,11 @@ def generate():
         
         # 6. 寫入資料庫 (如果資料庫可用)
         if db_client:
+            # Member System: 獲取當前用戶 ID（如已登入）
+            user_id_for_job = None
+            if current_user.is_authenticated:
+                user_id_for_job = current_user.id
+            
             db_client.insert_job(
                 job_id=job_id,
                 prompt=prompt,
@@ -401,7 +792,9 @@ def generate():
                 batch_size=job_data.get('batch_size', 1),
                 seed=job_data.get('seed', -1),
                 status='queued',
-                input_audio_path=job_data.get('audio', None)  # Phase 7: 記錄音訊檔名
+                input_audio_path=job_data.get('audio', None),
+                user_id=user_id_for_job,
+                workflow_data=job_data  # 保存完整任務資料
             )
         
         # 7. 返回成功响应
@@ -556,8 +949,14 @@ def get_history():
         
         logger.info(f"📥 準備查詢資料庫: db_client={db_client is not None}, limit={limit}, offset={offset}")
         
+        # Member System: 按登入用戶過濾
+        user_id_filter = None
+        if current_user.is_authenticated:
+            user_id_filter = current_user.id
+            logger.info(f"🔒 會員模式: 過濾 user_id={user_id_filter}")
+        
         # 從資料庫獲取歷史記錄
-        jobs = db_client.get_history(limit=limit, offset=offset)
+        jobs = db_client.get_history(limit=limit, offset=offset, user_id=user_id_filter)
         
         logger.info(f"📤 資料庫返回: {len(jobs)} 筆記錄")
         
@@ -906,22 +1305,38 @@ def serve_output(filename):
 # Serve frontend static files
 @app.route('/')
 def serve_index():
-    """提供前端 index.html"""
+    """
+    根據登入狀態提供不同頁面：
+    - 未登入：返回 login.html
+    - 已登入：返回 dashboard.html (主應用)
+    """
     try:
         frontend_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'frontend')
         frontend_dir = os.path.abspath(frontend_dir)
-        index_path = os.path.join(frontend_dir, 'index.html')
         
-        logger.info(f"Serving index.html from: {frontend_dir}")
-        logger.info(f"index.html exists: {os.path.exists(index_path)}")
-        
-        if not os.path.exists(index_path):
-            logger.error(f"index.html not found at {index_path}")
-            return jsonify({"error": "Frontend not found"}), 404
-            
-        return send_from_directory(frontend_dir, 'index.html')
+        # 檢查登入狀態
+        if current_user.is_authenticated:
+            # 已登入：返回主應用頁面
+            dashboard_path = os.path.join(frontend_dir, 'dashboard.html')
+            if os.path.exists(dashboard_path):
+                logger.info(f"✓ 已登入用戶 {current_user.email}，返回 dashboard.html")
+                return send_from_directory(frontend_dir, 'dashboard.html')
+            else:
+                # 向後兼容：如果沒有 dashboard.html，使用 index.html
+                logger.warning(f"dashboard.html 不存在，使用 index.html")
+                return send_from_directory(frontend_dir, 'index.html')
+        else:
+            # 未登入：返回登入頁面
+            login_path = os.path.join(frontend_dir, 'login.html')
+            if os.path.exists(login_path):
+                logger.info("訪客訪問 /，返回 login.html")
+                return send_from_directory(frontend_dir, 'login.html')
+            else:
+                logger.error(f"login.html not found at {login_path}")
+                return jsonify({"error": "Login page not found"}), 404
+                
     except Exception as e:
-        logger.error(f"Error serving index: {e}")
+        logger.error(f"Error serving page: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
 @app.route('/<path:path>')

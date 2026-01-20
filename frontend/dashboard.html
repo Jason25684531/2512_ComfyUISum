@@ -1362,8 +1362,10 @@
         // ==========================================
         // 全域狀態
         // ==========================================
-        // API_BASE 已在 config.js 中定義 (支援 Ngrok 自動更新)
-        // const API_BASE = 'http://127.0.0.1:5000'; // 舊版硬編碼配置
+        // API_BASE - 使用 config.js 設定的 window.API_URL
+        const API_BASE = (typeof window.API_URL !== 'undefined') ? window.API_URL : '';
+        console.log('[Dashboard] API_BASE:', API_BASE || '(relative path)');
+        
         let currentTool = 'text_to_image';
         let currentRatio = '1:1';
         let currentBatchSize = 1;
@@ -2964,7 +2966,11 @@
          * Member System: 檢查登入狀態並更新側邊欄 UI
          */
         async function checkLoginStatus() {
-            const API_BASE = window.API_URL || '';
+            // API_BASE 已在全域定義
+            console.log('[Auth] API_BASE:', API_BASE);
+            console.log('[Auth] 完整請求 URL:', `${API_BASE}/api/me`);
+            console.log('[Auth] document.cookie:', document.cookie);
+            
             const authGuest = document.getElementById('auth-guest');
             const authUser = document.getElementById('auth-user');
 
@@ -2972,7 +2978,9 @@
                 const response = await fetch(`${API_BASE}/api/me`, {
                     credentials: 'include'
                 });
+                console.log('[Auth] Response status:', response.status);
                 const data = await response.json();
+                console.log('[Auth] Response data:', JSON.stringify(data));
 
                 // 右上角區塊元素
                 const topbarGuest = document.getElementById('topbar-guest');
@@ -2995,19 +3003,19 @@
 
                     console.log('[Auth] 已登入:', data.user.email);
                 } else {
-                    // 未登入：跳轉到登入頁面
+                    // 未登入：跳轉到根路徑（會顯示登入頁）
                     console.log('[Auth] 未登入，跳轉到登入頁');
-                    window.location.href = '/login.html';
+                    window.location.href = '/';
                     return;
                 }
 
                 // 重新初始化 Lucide Icons
                 lucide.createIcons();
             } catch (error) {
-                // API 檢查失敗，跳轉到登入頁
+                // API 檢查失敗，跳轉到根路徑（會顯示登入頁）
                 console.error('[Auth] 檢查失敗:', error);
                 console.log('[Auth] 跳轉到登入頁');
-                window.location.href = '/login.html';
+                window.location.href = '/';
             }
         }
     </script>

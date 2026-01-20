@@ -26,6 +26,13 @@ mysql-connector-python==8.2.0 # MySQL 連接
 redis==5.0.1                  # Redis 客戶端 + Rate Limiter Storage
 
 # ============================================
+# Member System (Phase: Member Beta)
+# ============================================
+flask-login==0.6.3            # 會員登入管理
+flask-bcrypt==1.0.1           # 密碼加密 (Bcrypt)
+Flask-SQLAlchemy==3.1.1       # ORM 框架
+
+# ============================================
 # 工具類
 # ============================================
 python-dotenv==1.0.0          # 環境變數管理

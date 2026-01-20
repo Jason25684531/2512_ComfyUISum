@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登入 - AIGEN.IO</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- API Configuration -->
+    <script src="config.js"></script>
+
+    <style>
+        /* 隱藏滾動條 */
+        ::-webkit-scrollbar {
+            display: none;
+        }
+
+        * {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        /* 動畫 */
+        @keyframes flow {
+            0% {
+                transform: translate(0, 0) scale(1);
+            }
+
+            33% {
+                transform: translate(30px, -50px) scale(1.1);
+            }
+
+            66% {
+                transform: translate(-20px, 20px) scale(0.9);
+            }
+
+            100% {
+                transform: translate(0, 0) scale(1);
+            }
+        }
+
+        @keyframes fade-in {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .animate-fade-in {
+            animation: fade-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        /* Liquid Background Blobs */
+        .liquid-blob {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(100px);
+            opacity: 0.6;
+            mix-blend-mode: hard-light;
+            animation: flow 10s infinite ease-in-out alternate;
+        }
+
+        /* Glass Card */
+        .glass-card {
+            background: linear-gradient(145deg, rgba(30, 30, 40, 0.8) 0%, rgba(20, 20, 30, 0.6) 100%);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-top-color: rgba(255, 255, 255, 0.2);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
+        }
+
+        /* Custom Input */
+        .custom-input {
+            background: rgba(10, 10, 15, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: white;
+            outline: none;
+            transition: all 0.3s;
+            backdrop-filter: blur(10px);
+        }
+
+        .custom-input:focus {
+            background: rgba(20, 20, 30, 0.8);
+            border-color: rgba(168, 85, 247, 0.5);
+            box-shadow: 0 0 20px rgba(168, 85, 247, 0.2);
+        }
+
+        .custom-input::placeholder {
+            color: rgba(156, 163, 175, 0.6);
+        }
+
+        /* Tab Button */
+        .tab-btn {
+            transition: all 0.3s ease;
+            border-bottom: 2px solid transparent;
+        }
+
+        .tab-btn:hover {
+            color: white;
+        }
+
+        .tab-btn.active {
+            color: white;
+            border-bottom-color: #a78bfa;
+        }
+
+        /* Primary Button */
+        .btn-primary {
+            background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%);
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary:hover {
+            box-shadow: 0 0 30px rgba(124, 58, 237, 0.5);
+            transform: translateY(-2px);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        /* Error Message */
+        .error-message {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #fca5a5;
+        }
+
+        /* Success Message */
+        .success-message {
+            background: rgba(34, 197, 94, 0.1);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            color: #86efac;
+        }
+    </style>
+</head>
+
+<body
+    class="min-h-screen bg-[#020205] text-white font-sans selection:bg-purple-500/30 overflow-hidden relative flex items-center justify-center">
+
+    <!-- Background Ambience -->
+    <div class="fixed inset-0 z-0 overflow-hidden pointer-events-none">
+        <div class="liquid-blob bg-[#1e3a8a] w-[500px] h-[500px] top-[5%] -left-[100px]"
+            style="animation-duration: 15s;"></div>
+        <div class="liquid-blob bg-[#581c87] w-[600px] h-[600px] -bottom-[10%] -right-[100px]"
+            style="animation-duration: 18s;"></div>
+        <div class="liquid-blob bg-[#3b0764] w-[300px] h-[300px] top-[40%] right-[20%]"
+            style="animation-duration: 20s; animation-delay: 5s;"></div>
+        <div
+            class="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-30 mix-blend-overlay">
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="relative z-10 w-full max-w-md mx-4 animate-fade-in">
+
+        <!-- Logo -->
+        <div class="text-center mb-8">
+            <a href="/" class="inline-flex items-center gap-3 group">
+                <div
+                    class="w-12 h-12 rounded-xl bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center shadow-lg border border-white/20 relative overflow-hidden group-hover:border-purple-500/50 transition-colors">
+                    <div class="absolute inset-0 bg-gradient-to-tr from-transparent via-white/20 to-transparent"></div>
+                    <i data-lucide="sparkles" class="text-white w-6 h-6 z-10"></i>
+                </div>
+                <span
+                    class="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white via-gray-200 to-gray-500 drop-shadow-sm tracking-tight">
+                    AIGEN.IO
+                </span>
+            </a>
+        </div>
+
+        <!-- Login/Register Card -->
+        <div class="glass-card rounded-2xl overflow-hidden">
+
+            <!-- Tabs -->
+            <div class="flex border-b border-white/10">
+                <button id="tab-login" class="tab-btn flex-1 py-4 px-6 text-sm font-medium text-gray-400 active"
+                    onclick="switchTab('login')">
+                    <i data-lucide="log-in" class="w-4 h-4 inline mr-2"></i>
+                    登入
+                </button>
+                <button id="tab-register" class="tab-btn flex-1 py-4 px-6 text-sm font-medium text-gray-400"
+                    onclick="switchTab('register')">
+                    <i data-lucide="user-plus" class="w-4 h-4 inline mr-2"></i>
+                    註冊
+                </button>
+            </div>
+
+            <!-- Forms Container -->
+            <div class="p-8">
+
+                <!-- Error/Success Message -->
+                <div id="message-box" class="hidden rounded-lg px-4 py-3 mb-6 text-sm"></div>
+
+                <!-- Login Form -->
+                <form id="login-form" class="space-y-5">
+                    <div>
+                        <label
+                            class="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">Email</label>
+                        <input type="email" id="login-email" required
+                            class="custom-input w-full px-4 py-3 rounded-xl text-sm" placeholder="your@email.com">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">密碼</label>
+                        <input type="password" id="login-password" required
+                            class="custom-input w-full px-4 py-3 rounded-xl text-sm" placeholder="••••••••">
+                    </div>
+                    <button type="submit" id="login-btn"
+                        class="btn-primary w-full py-3 rounded-xl font-medium text-white flex items-center justify-center gap-2">
+                        <i data-lucide="log-in" class="w-4 h-4"></i>
+                        <span>登入</span>
+                    </button>
+                </form>
+
+                <!-- Register Form -->
+                <form id="register-form" class="space-y-5 hidden">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">名稱</label>
+                        <input type="text" id="register-name" required
+                            class="custom-input w-full px-4 py-3 rounded-xl text-sm" placeholder="您的名稱">
+                    </div>
+                    <div>
+                        <label
+                            class="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">Email</label>
+                        <input type="email" id="register-email" required
+                            class="custom-input w-full px-4 py-3 rounded-xl text-sm" placeholder="your@email.com">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">密碼</label>
+                        <input type="password" id="register-password" required minlength="6"
+                            class="custom-input w-full px-4 py-3 rounded-xl text-sm" placeholder="至少 6 個字元">
+                    </div>
+                    <button type="submit" id="register-btn"
+                        class="btn-primary w-full py-3 rounded-xl font-medium text-white flex items-center justify-center gap-2">
+                        <i data-lucide="user-plus" class="w-4 h-4"></i>
+                        <span>建立帳號</span>
+                    </button>
+                </form>
+
+                <!-- Divider -->
+                <div class="mt-6 pt-6 border-t border-white/10 text-center">
+                    <p class="text-sm text-gray-500">
+                        還沒有帳號嗎？立即註冊開始創作！
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <p class="text-center text-xs text-gray-600 mt-6">
+            &copy; 2026 AIGEN.IO. All rights reserved.
+        </p>
+    </div>
+
+    <script>
+        // ==========================================
+        // 初始化
+        // ==========================================
+        
+        // Initialize Lucide icons
+        try {
+            lucide.createIcons();
+            console.log('[Login] Lucide icons initialized');
+        } catch (e) {
+            console.error('[Login] Lucide init error:', e);
+        }
+
+        // API Base URL - 使用 window.API_URL（由 config.js 設定）
+        // 注意：空字串 '' 是有效值（表示使用相對路徑）
+        const API_URL = (typeof window.API_URL !== 'undefined') ? window.API_URL : '';
+        console.log('[Login] API URL:', API_URL || '(relative path)');
+
+        // DOM Elements
+        const loginForm = document.getElementById('login-form');
+        const registerForm = document.getElementById('register-form');
+        const tabLogin = document.getElementById('tab-login');
+        const tabRegister = document.getElementById('tab-register');
+        const messageBox = document.getElementById('message-box');
+
+        // ==========================================
+        // 工具函數
+        // ==========================================
+
+        /**
+         * 切換 Tab (登入/註冊) - 綁定到 window 以便 onclick 使用
+         */
+        window.switchTab = function(tab) {
+            hideMessage();
+
+            if (tab === 'login') {
+                loginForm.classList.remove('hidden');
+                registerForm.classList.add('hidden');
+                tabLogin.classList.add('active');
+                tabRegister.classList.remove('active');
+            } else {
+                loginForm.classList.add('hidden');
+                registerForm.classList.remove('hidden');
+                tabLogin.classList.remove('active');
+                tabRegister.classList.add('active');
+            }
+        };
+
+        /**
+         * 顯示訊息
+         */
+        function showMessage(text, type) {
+            type = type || 'error';
+            messageBox.textContent = text;
+            messageBox.className = 'rounded-lg px-4 py-3 mb-6 text-sm ' + (type === 'error' ? 'error-message' : 'success-message');
+            messageBox.classList.remove('hidden');
+        }
+
+        /**
+         * 隱藏訊息
+         */
+        function hideMessage() {
+            messageBox.classList.add('hidden');
+        }
+
+        /**
+         * 設定按鈕 Loading 狀態
+         */
+        function setLoading(btn, loading) {
+            var span = btn.querySelector('span');
+            if (loading) {
+                btn.disabled = true;
+                span.textContent = '處理中...';
+            } else {
+                btn.disabled = false;
+                span.textContent = btn.id === 'login-btn' ? '登入' : '建立帳號';
+            }
+        }
+
+        // ==========================================
+        // 表單事件處理
+        // ==========================================
+
+        /**
+         * 登入表單提交
+         */
+        loginForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            console.log('[Login] 登入表單提交');
+            hideMessage();
+
+            var email = document.getElementById('login-email').value.trim();
+            var password = document.getElementById('login-password').value;
+            var btn = document.getElementById('login-btn');
+
+            console.log('[Login] Email:', email);
+
+            setLoading(btn, true);
+
+            fetch(API_URL + '/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ email: email, password: password })
+            })
+            .then(function(response) {
+                console.log('[Login] Response status:', response.status);
+                return response.json().then(function(data) {
+                    return { ok: response.ok, data: data };
+                });
+            })
+            .then(function(result) {
+                console.log('[Login] Response data:', result.data);
+                if (result.ok && result.data.success) {
+                    showMessage('登入成功！正在跳轉...', 'success');
+                    setTimeout(function() {
+                        window.location.href = '/dashboard.html';
+                    }, 1000);
+                } else {
+                    showMessage(result.data.error || '登入失敗，請檢查帳號密碼');
+                }
+            })
+            .catch(function(error) {
+                console.error('[Login] Error:', error);
+                showMessage('網路錯誤，請稍後再試');
+            })
+            .finally(function() {
+                setLoading(btn, false);
+            });
+        });
+
+        /**
+         * 註冊表單提交
+         */
+        registerForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            console.log('[Register] 註冊表單提交');
+            hideMessage();
+
+            var name = document.getElementById('register-name').value.trim();
+            var email = document.getElementById('register-email').value.trim();
+            var password = document.getElementById('register-password').value;
+            var btn = document.getElementById('register-btn');
+
+            console.log('[Register] Name:', name, 'Email:', email);
+
+            if (password.length < 6) {
+                showMessage('密碼至少需要 6 個字元');
+                return;
+            }
+
+            setLoading(btn, true);
+
+            fetch(API_URL + '/api/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ email: email, password: password, name: name })
+            })
+            .then(function(response) {
+                console.log('[Register] Response status:', response.status);
+                return response.json().then(function(data) {
+                    return { ok: response.ok, data: data };
+                });
+            })
+            .then(function(result) {
+                console.log('[Register] Response data:', result.data);
+                if (result.ok && result.data.success) {
+                    showMessage('註冊成功！請登入您的帳號', 'success');
+                    setTimeout(function() {
+                        switchTab('login');
+                        document.getElementById('login-email').value = email;
+                    }, 1500);
+                } else {
+                    showMessage(result.data.error || '註冊失敗，請稍後再試');
+                }
+            })
+            .catch(function(error) {
+                console.error('[Register] Error:', error);
+                showMessage('網路錯誤，請稍後再試');
+            })
+            .finally(function() {
+                setLoading(btn, false);
+            });
+        });
+
+        console.log('[Login] Event listeners added');
+
+        /**
+         * 頁面載入時檢查登入狀態
+         */
+        (function checkAuthStatus() {
+            fetch(API_URL + '/api/me', {
+                credentials: 'include'
+            })
+            .then(function(response) {
+                return response.json();
+            })
+            .then(function(data) {
+                if (data.logged_in) {
+                    // 已登入，跳轉到主應用
+                    console.log('[Login] Already logged in, redirecting...');
+                    window.location.href = '/dashboard.html';
+                }
+            })
+            .catch(function(error) {
+                console.log('[Login] Not logged in');
+            });
+        })();
+    </script>
+
+</body>
+
+</html>

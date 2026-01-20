@@ -439,9 +439,9 @@ curl http://localhost:5000/api/health
 ComfyUISum/
 ├── shared/                     # 共用模組 (2026-01 優化)
 │   ├── __init__.py            # 模組導出
-│   ├── utils.py               # load_env(), get_project_root()
-│   ├── config_base.py         # 共用配置 (Redis, DB, Storage)
-│   └── database.py            # Database 類 (MySQL 連接池)
+│   ├── utils.py               # load_env(), get_project_root(), setup_logger()
+│   ├── config_base.py         # 共用配置 (Redis, DB, Storage, ComfyUI)
+│   └── database.py            # Database 類 + ORM 模型 (User, Job)
 │
 ├── backend/                    # Flask 後端服務
 │   ├── src/
@@ -460,7 +460,10 @@ ComfyUISum/
 │   └── requirements.txt       # Python 依賴
 │
 ├── frontend/                   # Web 前端
-│   ├── index.html             # 主頁面 (SPA)
+│   ├── index.html             # 主頁面 (SPA + 會員狀態切換)
+│   ├── login.html             # 登入/註冊頁面 (會員系統)
+│   ├── profile.html           # 會員中心
+│   ├── dashboard.html         # 儀表板
 │   ├── motion-workspace.js    # Video Studio 邏輯
 │   ├── style.css              # 樣式文件
 │   └── config.js              # API 配置 (自動生成)
@@ -1187,7 +1190,7 @@ curl http://localhost:5000/api/metrics
 - [README.md](README.md) - 項目完整文檔（本文件）
 - [NGROK_SETUP.md](NGROK_SETUP.md) - Ngrok 詳細指南
 - [UpdateList.md](UpdateList.md) - 更新日誌
-- [API_TESTING.md](backend/Readmd/API_TESTING.md) - API 測試指南
+- [API_TESTING.md](backend/Readme/API_TESTING.md) - API 測試指南
 
 ### 獲取幫助
 1. 查看 [故障排除](#-故障排除) 章節
