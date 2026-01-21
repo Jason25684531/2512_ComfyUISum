@@ -302,21 +302,13 @@ def parse_workflow(
 ) -> dict:
     """
     解析並注入參數到 workflow
-    
-    Args:
-        workflow_name: workflow 名稱 (如 "text_to_image", "virtual_human", "veo3_long_video")
-        prompt: 正向提示詞
-        prompts: 多段提示詞列表 (用於 veo3_long_video)
-        seed: 隨機種子 (-1 為隨機)
-        aspect_ratio: 畫面比例 ("1:1", "16:9", "9:16", "2:3")
-        model: 模型名稱
-        batch_size: 批次數量
-        image_files: 圖片檔名映射 {"source": "xxx.png", "target": "yyy.png"}
-        audio_file: 音訊檔名 (用於 virtual_human 工作流)
-    
-    Returns:
-        修改後的 workflow dict
     """
+    # ==========================================
+    # 1. 初始化變數與引入 Config (修正點)
+    # ==========================================
+    from config import WORKFLOW_CONFIG_PATH # 引入 Config 路徑
+    config_path = WORKFLOW_CONFIG_PATH      # 確保變數在最開始就被定義
+
     if image_files is None:
         image_files = {}
     if prompts is None:
@@ -437,10 +429,10 @@ def parse_workflow(
     # 關鍵：迭代 Config 的 prompt_segments，而非用戶輸入
     # ==========================================
     # 檢查 workflow_name 是否有 prompt_segments 配置
-    from config import WORKFLOW_CONFIG_PATH
-    import json
+    # from config import WORKFLOW_CONFIG_PATH
+    # import json
     
-    config_path = WORKFLOW_CONFIG_PATH
+    # config_path = WORKFLOW_CONFIG_PATH
     if config_path.exists():
         with open(config_path, 'r', encoding='utf-8') as f:
             config_data = json.load(f)

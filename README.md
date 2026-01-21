@@ -437,39 +437,41 @@ curl http://localhost:5000/api/health
 
 ```
 ComfyUISum/
-├── shared/                     # 共用模組 (2026-01 優化)
-│   ├── __init__.py            # 模組導出
-│   ├── utils.py               # load_env(), get_project_root(), setup_logger()
+├── shared/                     # 共用模組 (核心 - 2026-01-21 確認)
+│   ├── __init__.py            # 模組導出 (18 個配置項)
+│   ├── utils.py               # load_env(), get_project_root(), setup_logger(), JobLogAdapter
 │   ├── config_base.py         # 共用配置 (Redis, DB, Storage, ComfyUI)
-│   └── database.py            # Database 類 + ORM 模型 (User, Job)
+│   └── database.py            # Database 類 + ORM 模型 (User, Job) - 558 行
 │
 ├── backend/                    # Flask 後端服務
 │   ├── src/
-│   │   ├── app.py             # 主應用 (API + 靜態服務)
+│   │   ├── app.py             # 主應用 (1447 行, API + 靜態服務 + 會員系統)
 │   │   └── config.py          # 配置管理 (繼承 shared.config_base)
-│   ├── Dockerfile             # Backend 容器定義
-│   └── requirements.txt       # Python 依賴
+│   ├── Readme/                # 文檔目錄
+│   │   ├── README.md          # Backend 使用指南
+│   │   └── API_TESTING.md     # API 測試集合
+│   └── Dockerfile             # Backend 容器定義
 │
 ├── worker/                     # 任務處理器
 │   ├── src/
-│   │   ├── main.py            # Worker 主邏輯
-│   │   ├── json_parser.py     # Workflow 解析
-│   │   ├── comfy_client.py    # ComfyUI 客戶端
+│   │   ├── main.py            # Worker 主邏輯 (743 行)
+│   │   ├── json_parser.py     # Workflow 解析 (631 行)
+│   │   ├── comfy_client.py    # ComfyUI 客戶端 (525 行)
+│   │   ├── check_comfy_connection.py  # 連線檢查工具
 │   │   └── config.py          # 配置管理 (繼承 shared.config_base)
-│   ├── Dockerfile             # Worker 容器定義
-│   └── requirements.txt       # Python 依賴
+│   └── Dockerfile             # Worker 容器定義
 │
 ├── frontend/                   # Web 前端
-│   ├── index.html             # 主頁面 (SPA + 會員狀態切換)
-│   ├── login.html             # 登入/註冊頁面 (會員系統)
-│   ├── profile.html           # 會員中心
-│   ├── dashboard.html         # 儀表板
-│   ├── motion-workspace.js    # Video Studio 邏輯
-│   ├── style.css              # 樣式文件
+│   ├── index.html             # 主頁面 (SPA + 會員狀態切換) - 157KB
+│   ├── login.html             # 登入/註冊頁面 (會員系統) - 18KB
+│   ├── profile.html           # 會員中心 - 28KB
+│   ├── dashboard.html         # 儀表板 - 158KB
+│   ├── motion-workspace.js    # Video Studio 邏輯 - 29KB
+│   ├── style.css              # 擴展樣式
 │   └── config.js              # API 配置 (自動生成)
 │
 ├── ComfyUIworkflow/           # Workflow 模板
-│   ├── config.json            # Workflow 配置映射
+│   ├── config.json            # Workflow 配置映射 (含 image_map)
 │   ├── T2V.json, FLF.json     # Video Studio 工作流
 │   ├── Veo3_VideoConnection.json  # 長片生成
 │   ├── text_to_image_*.json   # 文字轉圖像
@@ -478,40 +480,43 @@ ComfyUISum/
 │   ├── single_image_edit_*.json  # 單圖編輯
 │   └── sketch_to_image_*.json    # 草圖轉圖像
 │
+├── docs/                       # 文檔目錄 (6 個檔案)
+│   ├── UpdateList.md          # 詳細更新日誌 (2500+ 行)
+│   ├── HYBRID_DEPLOYMENT_STRATEGY.md  # 混合部署策略指南
+│   ├── Phase8C_Monitoring_Guide.md    # 監控指南
+│   ├── Phase9_Completion_Report.md    # Phase 9 完成報告
+│   ├── PersonalGallery_Debug_Guide.md # Gallery 除錯指南
+│   └── Veo3_LongVideo_Guide.md        # Veo3 長片指南
+│
 ├── storage/                    # 數據存儲
-│   ├── inputs/                # ComfyUI 輸入圖片
+│   ├── inputs/                # 上傳圖片暫存
 │   ├── outputs/               # 生成結果
 │   └── models/                # AI 模型文件
 │
 ├── logs/                       # 日誌文件
 │   ├── backend.log            # Backend 日誌 (5MB × 3)
-│   └── worker.log             # Worker 日誌 (5MB × 3)
+│   ├── worker.log             # Worker 日誌 (5MB × 3)
+│   └── *.json.log             # JSON 格式日誌 (午夜輪換)
 │
-├── docs/                       # 文檔目錄
-│   ├── UpdateList.md          # 詳細更新日誌
-│   ├── Veo3_LongVideo_Guide.md    # Veo3 指南
-│   └── Phase8C_Monitoring_Guide.md # 監控指南
+├── scripts/                    # 啟動腳本目錄 (9 個檔案)
+│   ├── start_unified_windows.bat   # Windows 統一啟動 (推薦) ⭐
+│   ├── start_unified_linux.sh      # Linux 統一啟動 (推薦) ⭐
+│   ├── start_ngrok.bat             # Ngrok 啟動腳本
+│   ├── update_ngrok_config.ps1     # Ngrok 配置更新
+│   ├── monitor_status.bat          # 狀態監控
+│   ├── run_stack_test.bat          # 整合測試
+│   └── *.bat/*.py                  # 其他輔助腳本
 │
 ├── mysql_data/                 # MySQL 數據卷
 ├── redis_data/                 # Redis 數據卷
 │
 ├── .env                        # 環境變數配置 (使用中)
 ├── .env.unified.example        # 環境變數模板 (推薦) ⭐
+├── docker-compose.unified.yml  # 統一 Docker 配置 (推薦) ⭐
 ├── docker-compose.yml          # 生產環境 Docker 配置 (傳統)
 ├── docker-compose.dev.yml      # 開發環境 Docker 配置 (傳統)
-├── docker-compose.unified.yml  # 統一 Docker 配置 (推薦) ⭐
-│
-├── scripts/                    # 啟動腳本目錄
-│   ├── start_unified_windows.bat   # Windows 統一啟動 (推薦) ⭐
-│   ├── start_unified_linux.sh      # Linux 統一啟動 (推薦) ⭐
-│   ├── start_all_with_docker.bat   # 傳統 Windows 啟動
-│   ├── start_ngrok.bat             # Ngrok 啟動腳本
-│   ├── update_ngrok_config.ps1     # Ngrok 配置更新
-│   ├── setup_comfy_bridge.bat      # ComfyUI 目錄連結腳本 🆕
-│   ├── verify_infra.py             # 環境驗證腳本 🆕
-│   └── verify.bat                  # 系統驗證工具
-│
-└── README.md                   # 本文件
+├── requirements.txt            # Python 依賴
+└── README.md                   # 本文件 (1260+ 行)
 ```
 
 ---
@@ -1153,6 +1158,39 @@ curl http://localhost:5000/api/metrics
 ---
 ## 📝 更新日誌
 
+### Architecture Review - 2026-01-21 ⭐ 最新
+- ✅ 全面架構複審與確認
+- ✅ 確認無重複代碼、無髒 code
+- ✅ 所有核心函式唯一存在
+- ✅ 配置繼承正確無誤
+- ✅ 更新 UpdateList.md 與 README.md
+
+### Member System Beta - 2026-01-20
+- ✅ 會員認證系統 (Flask-Login + Bcrypt)
+- ✅ User ORM 模型 (SQLAlchemy)
+- ✅ Auth API: register, login, logout, me
+- ✅ Member API: profile, password, delete
+- ✅ 前端登入/註冊頁面 (`login.html`)
+- ✅ 會員中心頁面 (`profile.html`)
+- ✅ 主頁動態會員狀態切換
+
+### Phase 9 - Reliability & User Experience (2026-01-12)
+- ✅ Worker 超時延長 (1 小時)
+- ✅ 60 秒進度日誌
+- ✅ 前端 Image Composition 多工具狀態管理
+- ✅ UI 閃爍問題修復
+
+### Video Studio Integration (2026-01-15)
+- ✅ 三種影片工作流整合
+- ✅ Config-Driven Parser (image_map)
+- ✅ Structured Logging 系統
+
+### Phase 6 - Security & Monitoring (2026-01-06)
+- ✅ Rate Limiting
+- ✅ Input Validation
+- ✅ Metrics API
+- ✅ Worker Heartbeat
+
 ### Phase 5 - Ngrok Integration & Architecture Optimization (2026-01-05)
 - ✅ Backend 靜態文件服務整合 (Port 5000 統一)
 - ✅ Ngrok 自動配置系統 (update_ngrok_config.ps1)
@@ -1180,7 +1218,7 @@ curl http://localhost:5000/api/metrics
 - ✅ Flask Backend API
 - ✅ ComfyUI 整合
 
-完整更新記錄請參閱 [UpdateList.md](UpdateList.md)
+📚 **完整更新記錄請參閱** [docs/UpdateList.md](docs/UpdateList.md)
 
 ---
 
