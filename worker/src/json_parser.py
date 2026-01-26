@@ -302,20 +302,41 @@ def parse_workflow(
 ) -> dict:
     """
     解析並注入參數到 workflow
+    優先從 config.json 讀取映射規則 (Config-Driven)
     """
     # ==========================================
-    # 1. 初始化變數與引入 Config (修正點)
+    # 1. 初始化變數與引入 Config (優先定義)
     # ==========================================
-    from config import WORKFLOW_CONFIG_PATH # 引入 Config 路徑
-    config_path = WORKFLOW_CONFIG_PATH      # 確保變數在最開始就被定義
-
+    from config import WORKFLOW_CONFIG_PATH
+    config_path = WORKFLOW_CONFIG_PATH  # 確保變數在最開始就被定義
+    
     if image_files is None:
         image_files = {}
     if prompts is None:
         prompts = []
+    
     # 載入原始 workflow
     workflow = load_workflow(workflow_name)
     workflow = copy.deepcopy(workflow)  # 避免修改原始資料
+    
+    # ==========================================
+    # 2. 載入 Config.json 配置 (Config-Driven)
+    # ==========================================
+    config_data = {}
+    workflow_config = {}
+    image_map_config = {}
+    
+    try:
+        if config_path.exists():
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config_data = json.load(f)
+            workflow_config = config_data.get(workflow_name, {})
+            image_map_config = workflow_config.get('image_map', {})
+            print(f"[Parser] 成功載入 config.json for {workflow_name}")
+            if image_map_config:
+                print(f"[Parser] 偵測到 image_map 配置: {image_map_config}")
+    except Exception as e:
+        print(f"[Parser] ⚠️ 讀取 config.json 失敗，將使用 Fallback: {e}")
     
     # Veo3 Long Video 特殊處理：根據圖片數量動態裁剪工作流
     if workflow_name == "veo3_long_video":
@@ -528,47 +549,36 @@ def parse_workflow(
         print(f"[Parser] ⚠️ 未知模型: {model}，使用 workflow 預設值")
     
     # ==========================================
-    # 注入圖片 (LoadImage 節點)
+    # 注入圖片 (LoadImage 節點) - Config-Driven 優先
     # ==========================================
-    node_map = IMAGE_NODE_MAP.get(workflow_name, {})
+    images_injected = False
     
-    if node_map and image_files:
-        print(f"[Parser] 準備注入圖片，映射表: {node_map}")
-        print(f"[Parser] 收到的圖片檔案: {image_files}")
-        
-        for node_id, field_name in node_map.items():
+    # 優先策略: 從 config.json 的 image_map 注入
+    if image_map_config and image_files:
+        print(f"[Parser] 使用 Config-Driven 圖片注入: {image_map_config}")
+        for field_name, node_id in image_map_config.items():
             if field_name in image_files:
                 filename = image_files[field_name]
-                
-                # 找到對應的 LoadImage 節點
                 if node_id in workflow:
                     node = workflow[node_id]
                     if "inputs" in node:
                         old_image = node["inputs"].get("image", "")
                         node["inputs"]["image"] = filename
-                        print(f"[Parser] ✅ 節點 {node_id}: {old_image!r} -> {filename!r}")
+                        print(f"[Parser] ✅ Config Injection: Node {node_id} ({field_name}): {old_image!r} -> {filename!r}")
+                        images_injected = True
                     else:
-                        print(f"[Parser] ⚠️ 節點 {node_id} 沒有 inputs")
+                        print(f"[Parser] ⚠️ Node {node_id} 沒有 inputs")
                 else:
-                    print(f"[Parser] ⚠️ 找不到節點 {node_id}")
+                    print(f"[Parser] ⚠️ 找不到 Node {node_id}")
             else:
-                print(f"[Parser] ⚠️ 缺少圖片欄位: {field_name}")
-    elif node_map:
-        print(f"[Parser] ⚠️ 此工作流需要圖片但未提供: {list(node_map.values())}")
+                print(f"[Parser] ⚠️ Config 缺少圖片: {field_name}")
     
-    # ==========================================
-    # 從 config.json 讀取 image_map 注入圖片 (FLF 專用)
-    # 這是優先級較高的注入方式，覆蓋 IMAGE_NODE_MAP
-    # ==========================================
-    if config_path.exists() and image_files:
-        with open(config_path, 'r', encoding='utf-8') as f:
-            config_data = json.load(f)
-        workflow_config = config_data.get(workflow_name, {})
-        image_map_config = workflow_config.get('image_map', {})
-        
-        if image_map_config:
-            print(f"[Parser] 從 config.json 讀取 image_map: {image_map_config}")
-            for field_name, node_id in image_map_config.items():
+    # Fallback 策略: 使用 IMAGE_NODE_MAP (向後兼容)
+    if not images_injected:
+        node_map = IMAGE_NODE_MAP.get(workflow_name, {})
+        if node_map and image_files:
+            print(f"[Parser] 使用 Fallback 圖片注入 (IMAGE_NODE_MAP): {node_map}")
+            for node_id, field_name in node_map.items():
                 if field_name in image_files:
                     filename = image_files[field_name]
                     if node_id in workflow:
@@ -576,13 +586,16 @@ def parse_workflow(
                         if "inputs" in node:
                             old_image = node["inputs"].get("image", "")
                             node["inputs"]["image"] = filename
-                            print(f"[Parser] ✅ image_map 注入: Node {node_id} ({field_name}): {old_image!r} -> {filename!r}")
+                            print(f"[Parser] ✅ Fallback 節點 {node_id}: {old_image!r} -> {filename!r}")
                         else:
-                            print(f"[Parser] ⚠️ Node {node_id} 沒有 inputs")
+                            print(f"[Parser] ⚠️ 節點 {node_id} 沒有 inputs")
                     else:
-                        print(f"[Parser] ⚠️ 找不到 Node {node_id}")
+                        print(f"[Parser] ⚠️ 找不到節點 {node_id}")
                 else:
-                    print(f"[Parser] ⚠️ image_map 缺少圖片: {field_name}")
+                    print(f"[Parser] ⚠️ 缺少圖片欄位: {field_name}")
+        elif node_map:
+            print(f"[Parser] ⚠️ 此工作流需要圖片但未提供: {list(node_map.values())}")
+
     
     # ==========================================
     # 注入音訊 (LoadAudio 節點) - Phase 7 新增

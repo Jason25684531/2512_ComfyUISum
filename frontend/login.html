@@ -268,7 +268,7 @@
         // ==========================================
         // 初始化
         // ==========================================
-        
+
         // Initialize Lucide icons
         try {
             lucide.createIcons();
@@ -296,7 +296,7 @@
         /**
          * 切換 Tab (登入/註冊) - 綁定到 window 以便 onclick 使用
          */
-        window.switchTab = function(tab) {
+        window.switchTab = function (tab) {
             hideMessage();
 
             if (tab === 'login') {
@@ -350,7 +350,7 @@
         /**
          * 登入表單提交
          */
-        loginForm.addEventListener('submit', function(e) {
+        loginForm.addEventListener('submit', function (e) {
             e.preventDefault();
             console.log('[Login] 登入表單提交');
             hideMessage();
@@ -369,36 +369,36 @@
                 credentials: 'include',
                 body: JSON.stringify({ email: email, password: password })
             })
-            .then(function(response) {
-                console.log('[Login] Response status:', response.status);
-                return response.json().then(function(data) {
-                    return { ok: response.ok, data: data };
+                .then(function (response) {
+                    console.log('[Login] Response status:', response.status);
+                    return response.json().then(function (data) {
+                        return { ok: response.ok, data: data };
+                    });
+                })
+                .then(function (result) {
+                    console.log('[Login] Response data:', result.data);
+                    if (result.ok && result.data.success) {
+                        showMessage('登入成功！正在跳轉...', 'success');
+                        setTimeout(function () {
+                            window.location.href = '/dashboard.html';
+                        }, 1000);
+                    } else {
+                        showMessage(result.data.error || '登入失敗，請檢查帳號密碼');
+                    }
+                })
+                .catch(function (error) {
+                    console.error('[Login] Error:', error);
+                    showMessage('網路錯誤，請稍後再試');
+                })
+                .finally(function () {
+                    setLoading(btn, false);
                 });
-            })
-            .then(function(result) {
-                console.log('[Login] Response data:', result.data);
-                if (result.ok && result.data.success) {
-                    showMessage('登入成功！正在跳轉...', 'success');
-                    setTimeout(function() {
-                        window.location.href = '/dashboard.html';
-                    }, 1000);
-                } else {
-                    showMessage(result.data.error || '登入失敗，請檢查帳號密碼');
-                }
-            })
-            .catch(function(error) {
-                console.error('[Login] Error:', error);
-                showMessage('網路錯誤，請稍後再試');
-            })
-            .finally(function() {
-                setLoading(btn, false);
-            });
         });
 
         /**
          * 註冊表單提交
          */
-        registerForm.addEventListener('submit', function(e) {
+        registerForm.addEventListener('submit', function (e) {
             e.preventDefault();
             console.log('[Register] 註冊表單提交');
             hideMessage();
@@ -423,31 +423,31 @@
                 credentials: 'include',
                 body: JSON.stringify({ email: email, password: password, name: name })
             })
-            .then(function(response) {
-                console.log('[Register] Response status:', response.status);
-                return response.json().then(function(data) {
-                    return { ok: response.ok, data: data };
+                .then(function (response) {
+                    console.log('[Register] Response status:', response.status);
+                    return response.json().then(function (data) {
+                        return { ok: response.ok, data: data };
+                    });
+                })
+                .then(function (result) {
+                    console.log('[Register] Response data:', result.data);
+                    if (result.ok && result.data.success) {
+                        showMessage('註冊成功！請登入您的帳號', 'success');
+                        setTimeout(function () {
+                            switchTab('login');
+                            document.getElementById('login-email').value = email;
+                        }, 1500);
+                    } else {
+                        showMessage(result.data.error || '註冊失敗，請稍後再試');
+                    }
+                })
+                .catch(function (error) {
+                    console.error('[Register] Error:', error);
+                    showMessage('網路錯誤，請稍後再試');
+                })
+                .finally(function () {
+                    setLoading(btn, false);
                 });
-            })
-            .then(function(result) {
-                console.log('[Register] Response data:', result.data);
-                if (result.ok && result.data.success) {
-                    showMessage('註冊成功！請登入您的帳號', 'success');
-                    setTimeout(function() {
-                        switchTab('login');
-                        document.getElementById('login-email').value = email;
-                    }, 1500);
-                } else {
-                    showMessage(result.data.error || '註冊失敗，請稍後再試');
-                }
-            })
-            .catch(function(error) {
-                console.error('[Register] Error:', error);
-                showMessage('網路錯誤，請稍後再試');
-            })
-            .finally(function() {
-                setLoading(btn, false);
-            });
         });
 
         console.log('[Login] Event listeners added');
@@ -459,19 +459,19 @@
             fetch(API_URL + '/api/me', {
                 credentials: 'include'
             })
-            .then(function(response) {
-                return response.json();
-            })
-            .then(function(data) {
-                if (data.logged_in) {
-                    // 已登入，跳轉到主應用
-                    console.log('[Login] Already logged in, redirecting...');
-                    window.location.href = '/dashboard.html';
-                }
-            })
-            .catch(function(error) {
-                console.log('[Login] Not logged in');
-            });
+                .then(function (response) {
+                    return response.json();
+                })
+                .then(function (data) {
+                    if (data.logged_in) {
+                        // 已登入，跳轉到主應用
+                        console.log('[Login] Already logged in, redirecting...');
+                        window.location.href = '/dashboard.html';
+                    }
+                })
+                .catch(function (error) {
+                    console.log('[Login] Not logged in');
+                });
         })();
     </script>
 

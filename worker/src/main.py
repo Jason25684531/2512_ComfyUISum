@@ -22,44 +22,18 @@ from datetime import datetime, timedelta
 # ============================================
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-# 配置日誌系統 (優先設置)
-log_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# ==========================================
+# Phase 8C: 使用新的結構化日誌系統
+# ==========================================
+from shared.utils import load_env, setup_logger, JobLogAdapter
 
-# 確保 logs 目錄存在
-log_dir = Path(__file__).parent.parent.parent / 'logs'
-log_dir.mkdir(parents=True, exist_ok=True)
-log_file = log_dir / 'worker.log'
-
-# 配置 RotatingFileHandler (5MB, 保留 3 份)
-file_handler = RotatingFileHandler(
-    str(log_file),
-    maxBytes=5*1024*1024,  # 5MB
-    backupCount=3,
-    encoding='utf-8'
-)
-file_handler.setFormatter(log_formatter)
-file_handler.setLevel(logging.INFO)
-
-# 配置控制台輸出
-console_handler = logging.StreamHandler()
-console_handler.setFormatter(log_formatter)
-console_handler.setLevel(logging.INFO)
-
-# 配置 root logger
-logging.basicConfig(
-    level=logging.INFO,
-    handlers=[file_handler, console_handler]
-)
-
-logger = logging.getLogger(__name__)
-logger.info("=" * 60)
-logger.info("Worker 日誌系統已啟動")
-logger.info(f"日誌檔案位置: {log_file}")
-logger.info("=" * 60)
-
-# 使用共用的 load_env
-from shared.utils import load_env
 load_env()
+
+# 設置雙通道結構化日誌系統
+logger = setup_logger("worker", log_level=logging.INFO)
+logger.info("=" * 60)
+logger.info("Worker 日誌系統已啟動 (雙通道輸出)")
+logger.info("=" * 60)
 
 from json_parser import parse_workflow
 from comfy_client import ComfyClient
@@ -393,9 +367,15 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
     """
     job_id = job_data.get("job_id", "unknown")
     
-    logger.info("="*50)
-    logger.info(f"🚀 開始處理任務: {job_id}")
-    logger.info("="*50)
+    # Phase 8C: 使用 JobLogAdapter 自動注入 job_id
+    from shared.utils import JobLogAdapter
+    import logging
+    base_logger = logging.getLogger("worker")
+    job_logger = JobLogAdapter(base_logger, {'job_id': job_id})
+    
+    job_logger.info("="*50)
+    job_logger.info(f"🚀 開始處理任務")
+    job_logger.info("="*50)
     
     try:
         # 1. 更新狀態為處理中
@@ -411,39 +391,39 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
         batch_size = job_data.get("batch_size", 1)
         images = job_data.get("images", {})  # base64 圖片字典
         
-        logger.info(f"Workflow: {workflow_name}")
-        logger.info(f"Prompt: {prompt[:50] if prompt else '(empty)'}...")
+        job_logger.info(f"Workflow: {workflow_name}")
+        job_logger.info(f"Prompt: {prompt[:50] if prompt else '(empty)'}...")
         if prompts:
-            logger.info(f"Prompts: {len(prompts)} segments")
-        logger.info(f"Aspect Ratio: {aspect_ratio}")
-        logger.info(f"Model: {model}")
-        logger.info(f"Batch Size: {batch_size}")
-        logger.info(f"Images: {list(images.keys()) if images else 'None'}")
+            job_logger.info(f"Prompts: {len(prompts)} segments")
+        job_logger.info(f"Aspect Ratio: {aspect_ratio}")
+        job_logger.info(f"Model: {model}")
+        job_logger.info(f"Batch Size: {batch_size}")
+        job_logger.info(f"Images: {list(images.keys()) if images else 'None'}")
         
         # 3. 處理上傳的圖片 (base64 -> 檔案)
         update_job_status(r, job_id, "processing", progress=15, db_client=db_client)
         
         image_files = {}  # 儲存檔名映射 {"source": "upload_xxx_source.png"}
         if images:
-            logger.info(f"📷 開始處理 {len(images)} 張圖片...")
+            job_logger.info(f"📷 開始處理 {len(images)} 張圖片...")
             for field_name, base64_data in images.items():
                 if base64_data:
                     try:
                         filename = save_base64_image(base64_data, job_id, field_name)
                         image_files[field_name] = filename
                     except Exception as e:
-                        logger.warning(f"⚠️ 處理圖片 {field_name} 失敗: {e}")
+                        job_logger.warning(f"⚠️ 處理圖片 {field_name} 失敗: {e}")
         
         # 3.5 處理音訊參數 (Phase 7 新增)
         # 需要將音訊從 storage/inputs 複製到 ComfyUI/input
         audio_file = job_data.get("audio", "")
         comfyui_audio_file = ""
         if audio_file:
-            logger.info(f"🎵 Audio file specified: {audio_file}")
+            job_logger.info(f"🎵 Audio file specified: {audio_file}")
             try:
                 comfyui_audio_file = copy_audio_to_comfyui(audio_file, job_id)
             except Exception as e:
-                logger.warning(f"⚠️ 複製音訊檔案失敗: {e}")
+                job_logger.warning(f"⚠️ 複製音訊檔案失敗: {e}")
                 comfyui_audio_file = ""
         
         # 4. 解析 workflow (包含圖片與音訊注入)
@@ -461,7 +441,7 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
             prompts=prompts               # Veo3 Long Video: 傳入多段 prompts
         )
         
-        logger.info("Workflow 解析完成")
+        job_logger.info("Workflow 解析完成")
         
         # 5. 檢查 ComfyUI 連接
         if not client.check_connection():
@@ -474,7 +454,7 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
         if not prompt_id:
             raise Exception("任務提交失敗")
         
-        logger.info(f"任務已提交，prompt_id: {prompt_id}")
+        job_logger.info(f"任務已提交，prompt_id: {prompt_id}")
         
         # 7. 定義進度更新回調函數
         def on_progress(progress):
@@ -482,7 +462,7 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
             status_key = f"job:status:{job_id}"
             current_status = r.hget(status_key, "status")
             if current_status == "cancelled":
-                logger.warning("🛑 任務已被取消，發送中斷指令...")
+                job_logger.warning("🛑 任務已被取消，發送中斷指令...")
                 client.interrupt()
                 raise Exception("Task cancelled by user")
             
@@ -512,7 +492,7 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
                 g["_source"] = "gifs"
                 all_video_outputs.append(g)
             
-            logger.info(f"📊 輸出統計: videos={len(videos)}, gifs={len(gifs)}, images={len(images)}")
+            job_logger.info(f"📊 輸出統計: videos={len(videos)}, gifs={len(gifs)}, images={len(images)}")
             
             output_list = []
             output_type = "unknown"
@@ -521,25 +501,25 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
             if all_video_outputs:
                 output_list = all_video_outputs
                 output_type = "video"
-                logger.info(f"🎥 收到 {len(all_video_outputs)} 個視訊輸出")
+                job_logger.info(f"🎥 收到 {len(all_video_outputs)} 個視訊輸出")
             elif images:
                 output_list = images
                 output_type = "image"
-                logger.info(f"📷 收到 {len(images)} 張輸出圖片")
+                job_logger.info(f"📷 收到 {len(images)} 張輸出圖片")
             
             if output_list:
                 # 過濾掉臨時預覽圖（type: 'temp'），只保留真實輸出
                 real_outputs = [item for item in output_list if item.get("type") != "temp"]
                 
                 if not real_outputs:
-                    logger.warning("⚠️ 只有臨時預覽圖，沒有真實輸出")
-                    logger.info("📋 臨時預覽圖列表:")
+                    job_logger.warning("⚠️ 只有臨時預覽圖，沒有真實輸出")
+                    job_logger.info("📋 臨時預覽圖列表:")
                     for item in output_list:
-                        logger.info(f"   - {item.get('filename')} (type: {item.get('type')})")
+                        job_logger.info(f"   - {item.get('filename')} (type: {item.get('type')})")
                     # 如果完全沒有輸出，使用臨時預覽圖作為後備
                     real_outputs = output_list
                 else:
-                    logger.info(f"✓ 過濾後剩餘 {len(real_outputs)} 個真實輸出")
+                    job_logger.info(f"✓ 過濾後剩餘 {len(real_outputs)} 個真實輸出")
                 
                 # 優先選擇完整合併的影片 (filename 包含 Combined 或 Full)
                 selected_file = None
@@ -549,7 +529,7 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
                     filename = item.get("filename", "")
                     if "Combined" in filename or "Full" in filename:
                         selected_file = item
-                        logger.info(f"✨ 優先選擇合併影片: {filename}")
+                        job_logger.info(f"✨ 優先選擇合併影片: {filename}")
                         break
                 
                 # 2. 第二輪篩選：如果有 subfolder (備選)
@@ -557,13 +537,13 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
                     for item in real_outputs:
                         if item.get("subfolder"):
                             selected_file = item
-                            logger.info(f"選擇有子目錄的檔案: {item.get('filename')} (subfolder: {item.get('subfolder')})")
+                            job_logger.info(f"選擇有子目錄的檔案: {item.get('filename')} (subfolder: {item.get('subfolder')})")
                             break
                 
                 # 3. 最後手段：使用最後一個（通常最終輸出在最後）
                 if not selected_file:
                     selected_file = real_outputs[-1]
-                    logger.info(f"使用最後一個檔案: {selected_file.get('filename')}")
+                    job_logger.info(f"使用最後一個檔案: {selected_file.get('filename')}")
                 
                 # 嘗試複製選中的檔案（傳遞 file_type）
                 file_type = selected_file.get("type", "output")
@@ -576,7 +556,7 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
                 
                 # 如果選中的檔案複製失敗，嘗試其他檔案
                 if not new_filename and len(real_outputs) > 1:
-                    logger.warning("⚠️ 第一選擇失敗，嘗試其他檔案...")
+                    job_logger.warning("⚠️ 第一選擇失敗，嘗試其他檔案...")
                     for item in real_outputs:
                         if item == selected_file:
                             continue
@@ -588,26 +568,26 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
                             job_id=job_id
                         )
                         if new_filename:
-                            logger.info(f"✓ 成功複製備選檔案: {item.get('filename')}")
+                            job_logger.info(f"✓ 成功複製備選檔案: {item.get('filename')}")
                             break
                 
                 if new_filename:
                     # 無論是圖片還是影片，都通過 image_url 欄位回傳 (前端會根據副檔名判斷)
                     file_url = f"/outputs/{new_filename}"
                     update_job_status(r, job_id, "finished", progress=100, image_url=file_url, db_client=db_client)
-                    logger.info(f"✅ 任務完成，輸出 ({output_type}): {file_url}")
+                    job_logger.info(f"✅ 任務完成，輸出 ({output_type}): {file_url}")
                 else:
                     update_job_status(r, job_id, "finished", progress=100, db_client=db_client)
-                    logger.warning("⚠️ 任務完成，但所有輸出檔案都無法複製")
+                    job_logger.warning("⚠️ 任務完成，但所有輸出檔案都無法複製")
             else:
                 update_job_status(r, job_id, "finished", progress=100, db_client=db_client)
-                logger.info("✅ 任務完成，但沒有輸出檔案")
+                job_logger.info("✅ 任務完成，但沒有輸出檔案")
         else:
             error = result.get("error", "未知錯誤")
             
             # 超時情況特殊處理：嘗試從 History API 獲取部分結果
             if "超時" in error or "timeout" in error.lower():
-                logger.warning("⚠️ 任務超時，嘗試獲取已完成的輸出...")
+                job_logger.warning("⚠️ 任務超時，嘗試獲取已完成的輸出...")
                 try:
                     partial_outputs = client.get_outputs_from_history(prompt_id)
                     all_partial = partial_outputs.get("videos", []) + partial_outputs.get("gifs", []) + partial_outputs.get("images", [])
@@ -621,17 +601,17 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
                         if new_filename:
                             file_url = f"/outputs/{new_filename}"
                             update_job_status(r, job_id, "failed", error=f"{error} (partial output saved)", image_url=file_url, db_client=db_client)
-                            logger.info(f"⚠️ 任務超時但已保存部分輸出: {file_url}")
+                            job_logger.info(f"⚠️ 任務超時但已保存部分輸出: {file_url}")
                             return
                 except Exception as partial_err:
-                    logger.warning(f"⚠️ 獲取部分輸出失敗: {partial_err}")
+                    job_logger.warning(f"⚠️ 獲取部分輸出失敗: {partial_err}")
             
             update_job_status(r, job_id, "failed", error=error, db_client=db_client)
-            logger.error(f"❌ 任務失敗: {error}")
+            job_logger.error(f"❌ 任務失敗: {error}")
             
     except Exception as e:
         error_msg = str(e)
-        logger.error(f"❌ 處理錯誤: {error_msg}")
+        job_logger.error(f"❌ 處理錯誤: {error_msg}")
         update_job_status(r, job_id, "failed", progress=0, error=error_msg, db_client=db_client)
 
 

@@ -136,6 +136,7 @@ def setup_logger(service_name: str, log_level: int = logging.INFO) -> logging.Lo
         )
     except ImportError:
         # Fallback: 如果沒有 colorlog，使用標準格式
+        print("⚠️ colorlog 未安裝，使用標準格式。建議安裝: pip install colorlog")
         console_formatter = logging.Formatter(
             "[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s",
             datefmt="%H:%M:%S"

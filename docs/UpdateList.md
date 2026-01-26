@@ -1,9 +1,203 @@
 # 專案更新日誌
 
 ## 更新日期
-2026-01-21 (最新更新 - 架構複審與確認)
+2026-01-22 (最新更新 - Phase 8C 核心重構：Config-Driven Parser + 結構化日誌系統)
 
-## 最新更新摘要 (2026-01-21 - 架構複審與確認)
+## 最新更新摘要 (2026-01-22 - Phase 8C 核心重構)
+
+### 二十四、Phase 8C：Config-Driven Parser + 結構化日誌系統 (2026-01-22)
+
+#### 目標
+1. 將 JSON Parser 升級為 Config-Driven 架構，支援 FLF/T2V 等複雜工作流
+2. 移除 Rich Dashboard 的終端污染問題
+3. 實現雙通道結構化日誌系統（Console 彩色 + JSON File）
+
+#### 核心改進
+
+##### 24.1 Config-Driven Parser（worker/src/json_parser.py）
+**問題**：
+- 變數作用域錯誤（UnboundLocalError: config_path）
+- 硬編碼 IMAGE_NODE_MAP 無法支援動態工作流
+- FLF（首尾禎動畫）等新工作流無法靈活配置
+
+**解決方案**：
+```python
+# 1. 修正作用域問題
+from config import WORKFLOW_CONFIG_PATH
+config_path = WORKFLOW_CONFIG_PATH  # 提前定義在函式最開始
+
+# 2. 優先讀取 config.json
+config_data = json.load(open(config_path))
+workflow_config = config_data.get(workflow_name, {})
+image_map_config = workflow_config.get('image_map', {})
+
+# 3. Config-Driven 圖片注入
+if image_map_config:
+    for field_name, node_id in image_map_config.items():
+        if field_name in image_files:
+            workflow[node_id]["inputs"]["image"] = image_files[field_name]
+            print(f"[Parser] ✅ Config Injection: Node {node_id} ({field_name})")
+
+# 4. Fallback 到 IMAGE_NODE_MAP（向後兼容）
+if not images_injected:
+    node_map = IMAGE_NODE_MAP.get(workflow_name, {})
+    # ... 舊邏輯
+```
+
+**config.json 範例**：
+```json
+{
+  "flf_veo3": {
+    "file": "FLF.json",
+    "mapping": {
+      "prompt_node_id": "111",
+      "output_node_id": "110"
+    },
+    "image_map": {
+      "first_frame": "112",
+      "last_frame": "113"
+    }
+  }
+}
+```
+
+##### 24.2 結構化日誌系統（shared/utils.py）
+**問題**：
+- Rich Live Dashboard 導致終端輸出混亂（藍線污染）
+- 日誌格式不統一，難以機器解析
+- 無法追蹤特定任務的日誌流
+
+**解決方案**：
+```python
+# 雙通道日誌系統
+def setup_logger(service_name: str) -> logging.Logger:
+    # Channel 1: Console - 彩色輸出（colorlog）
+    console_formatter = ColoredFormatter(
+        "%(log_color)s[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s",
+        log_colors={'INFO': 'green', 'ERROR': 'red', 'WARNING': 'yellow'}
+    )
+    
+    # Channel 2: File - JSON Lines
+    file_handler = TimedRotatingFileHandler(
+        f"logs/{service_name}.json.log",
+        when="midnight", backupCount=7
+    )
+    file_handler.setFormatter(JSONFormatter())
+```
+
+**JobLogAdapter 自動注入任務 ID**：
+```python
+class JobLogAdapter(logging.LoggerAdapter):
+    def process(self, msg, kwargs):
+        job_id = self.extra.get('job_id', 'N/A')
+        modified_msg = f"[Job: {job_id}] {msg}"
+        kwargs['extra'] = {'job_id': job_id}  # 供 JSON 格式化器使用
+        return modified_msg, kwargs
+
+# 使用範例
+base_logger = logging.getLogger("worker")
+job_logger = JobLogAdapter(base_logger, {'job_id': job_id})
+job_logger.info("開始處理任務")  # 輸出: [Job: abc123] 開始處理任務
+```
+
+##### 24.3 Backend 清理（backend/src/app.py）
+**移除項目**：
+- ✂️ `from rich.logging import RichHandler`
+- ✂️ `from rich.panel import Panel`
+- ✂️ `from rich.console import Console`
+- ✂️ `def get_stats_panel()` 函式
+- ✂️ `def live_status_monitor()` 監控線程
+- ✂️ `status_thread.start()` 啟動代碼
+
+**新增項目**：
+```python
+from shared.utils import setup_logger
+
+logger = setup_logger("backend", log_level=logging.INFO)
+
+@app.after_request
+def after_request(response):
+    # 記錄請求 + Redis 隊列深度
+    queue_depth = redis_client.llen(REDIS_QUEUE_NAME)
+    logger.info(f"✓ {request.method} {request.path} - {response.status_code} | Queue: {queue_depth}")
+    return response
+```
+
+##### 24.4 Worker 整合（worker/src/main.py）
+```python
+# 移除舊日誌配置
+# ❌ logging.basicConfig(...)
+# ❌ RotatingFileHandler(...)
+
+# 使用新系統
+from shared.utils import setup_logger, JobLogAdapter
+
+logger = setup_logger("worker", log_level=logging.INFO)
+
+def process_job(r, client, job_data, db_client=None):
+    job_id = job_data.get("job_id")
+    job_logger = JobLogAdapter(logger, {'job_id': job_id})
+    
+    job_logger.info("🚀 開始處理任務")
+    # 所有後續日誌自動包含 [Job: {id}] 前綴
+```
+
+#### 實施結果
+
+##### 24.5 日誌輸出對比
+**Before (Rich Dashboard)**：
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  # 藍線污染
+📊 Backend Status Dashboard
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2026-01-21 15:30:45 - Worker 處理任務: abc123
+2026-01-21 15:30:46 - Backend API 請求: POST /api/submit
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  # 無法區分任務
+```
+
+**After (Structured Logging)**：
+```
+[15:30:45] [INFO] [worker] ✓ Structured Logger 已啟動: worker
+[15:30:45] [INFO] [worker] [Job: abc123] 🚀 開始處理任務
+[15:30:46] [INFO] [worker] [Job: abc123] Workflow: text_to_image
+[15:30:47] [INFO] [backend] ✓ POST /api/submit - 200 | Queue: 3
+```
+
+**JSON Log File (logs/worker.json.log)**：
+```json
+{"ts": "2026-01-22T07:30:45Z", "lvl": "INFO", "svc": "worker", "msg": "開始處理任務", "module": "main", "job_id": "abc123"}
+{"ts": "2026-01-22T07:30:46Z", "lvl": "INFO", "svc": "worker", "msg": "Workflow: text_to_image", "module": "main", "job_id": "abc123"}
+```
+
+#### 架構檢查結果
+
+| 檢查項目 | 結果 | 說明 |
+|---------|------|------|
+| 重複函式 | ✅ 無 | 核心函式唯一（load_env, setup_logger, JobLogAdapter） |
+| 備份檔案 | ✅ 無 | 無 *.bak, *.old, *_backup |
+| TODO/FIXME | ✅ 無 | Python 文件乾淨 |
+| 配置繼承 | ✅ 正確 | backend 和 worker 皆繼承 shared.config_base |
+| 日誌統一 | ✅ 完成 | 雙通道輸出（Console + JSON） |
+
+#### 文件修改清單
+
+| 文件 | 狀態 | 說明 |
+|------|------|------|
+| `worker/src/json_parser.py` | ✏️ 重構 | Config-Driven 圖片注入 + Fallback 機制 |
+| `shared/utils.py` | ✏️ 優化 | 新增 colorlog Fallback 提示 |
+| `backend/src/app.py` | ✏️ 清理 | 移除 Rich 相關代碼（~120 行） |
+| `worker/src/main.py` | ✏️ 整合 | 使用新日誌系統 + JobLogAdapter |
+| `TaskList_Core_Refactoring.md` | ✅ 完成 | 標記所有任務為已完成 |
+
+#### 驗證步驟
+1. **Parser 測試**：提交 FLF 工作流（雙圖片），確認日誌顯示 `[Parser] ✅ Config Injection: Node 112 (first_frame)`
+2. **日誌結構測試**：檢查 `logs/worker.json.log` 是否為有效 JSON Lines
+3. **Console 測試**：確認無藍線污染，輸出清晰有序
+4. **任務追蹤測試**：grep 日誌文件搜尋特定 job_id，確認完整流程
+
+---
+
+## 過往更新摘要 (2026-01-21 - 架構複審與確認)
 
 ### 二十三、架構複審與確認 (2026-01-21)
 

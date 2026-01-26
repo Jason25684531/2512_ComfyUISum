@@ -1030,13 +1030,36 @@ ComfyUI Studio 在 Phase 6 引入了完整的監控與安全機制。
 - 隊列長度數字顯示
 - Cyberpunk 霓虹風格設計
 
-#### 2. 後端監控儀表板 (Phase 8c 新增)
+#### 2. Phase 8C 結構化日誌系統（已移除 Rich Dashboard）
 
-啟動後端時會自動顯示置頂的監控儀表板：
+**⚠️ 重要更新 (2026-01-22)**: 已移除 Rich Live Dashboard 終端污染問題，改用清晰的雙通道結構化日誌系統。
 
+**Console 輸出（彩色，人類可讀）**：
 ```bash
-python backend/src/app.py
+[15:30:45] [INFO] [backend] ✓ Structured Logger 已啟動: backend
+[15:30:46] [INFO] [backend] ✓ POST /api/submit - 200 | Queue: 3
+[15:30:47] [INFO] [worker] [Job: abc123] 🚀 開始處理任務
+[15:30:48] [INFO] [worker] [Job: abc123] ✅ 任務完成
 ```
+
+**JSON Log Files（機器可讀）**：
+```json
+{"ts": "2026-01-22T07:30:45Z", "lvl": "INFO", "svc": "backend", "msg": "Redis 連接成功", "module": "app"}
+{"ts": "2026-01-22T07:30:47Z", "lvl": "INFO", "svc": "worker", "msg": "開始處理任務", "module": "main", "job_id": "abc123"}
+```
+
+**日誌文件位置**：
+- `logs/backend.json.log` - Backend JSON 日誌（午夜輪換，保留 7 天）
+- `logs/worker.json.log` - Worker JSON 日誌（午夜輪換，保留 7 天）
+
+**特性**：
+- ✨ **彩色輸出**: 綠色 INFO、紅色 ERROR、黃色 WARNING（colorlog）
+- 🏷️ **任務追蹤**: Worker 日誌自動包含 `[Job: ID]` 標籤
+- 📦 **JSON Lines**: 每行一個完整 JSON 對象，易於解析
+- 🔄 **自動輪換**: 每天午夜輪換，保留 7 天歷史
+- 🎯 **雙通道**: Console（人類）+ JSON File（機器）
+
+#### 3. Backend 監控儀表板（已移除，請改用 Metrics API）
 
 **終端輸出**:
 ```
