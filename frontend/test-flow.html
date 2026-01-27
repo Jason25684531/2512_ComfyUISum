@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>前端流程測試 - AIGEN.IO</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="config.js"></script>
+    <style>
+        .test-item {
+            padding: 1rem;
+            margin: 0.5rem 0;
+            border-radius: 0.5rem;
+            border: 1px solid #374151;
+            background: #1f2937;
+        }
+        .test-pass {
+            border-color: #10b981;
+            background: #064e3b;
+        }
+        .test-fail {
+            border-color: #ef4444;
+            background: #7f1d1d;
+        }
+        .test-pending {
+            border-color: #f59e0b;
+            background: #78350f;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white p-8">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-3xl font-bold mb-8">前端導航流程測試</h1>
+        
+        <div class="bg-gray-800 p-6 rounded-lg mb-8">
+            <h2 class="text-xl font-bold mb-4">API 配置</h2>
+            <div class="space-y-2 text-sm font-mono">
+                <div>API URL: <span id="api-url" class="text-green-400"></span></div>
+                <div>當前頁面: <span id="current-page" class="text-blue-400"></span></div>
+            </div>
+        </div>
+
+        <div class="space-y-4">
+            <h2 class="text-xl font-bold mb-4">測試項目</h2>
+
+            <!-- Test 1: API Connection -->
+            <div id="test-1" class="test-item test-pending">
+                <h3 class="font-bold mb-2">1. API 連線測試</h3>
+                <p class="text-sm text-gray-400 mb-2">測試 /api/me 端點</p>
+                <div id="test-1-result" class="text-sm"></div>
+            </div>
+
+            <!-- Test 2: Login Page Links -->
+            <div id="test-2" class="test-item test-pending">
+                <h3 class="font-bold mb-2">2. 登入頁面連結檢查</h3>
+                <p class="text-sm text-gray-400 mb-2">檢查 login.html 的跳轉邏輯</p>
+                <div id="test-2-result" class="text-sm">
+                    <a href="/login.html" class="text-blue-400 hover:underline">→ 前往測試</a>
+                </div>
+            </div>
+
+            <!-- Test 3: Dashboard Links -->
+            <div id="test-3" class="test-item test-pending">
+                <h3 class="font-bold mb-2">3. Dashboard 連結檢查</h3>
+                <p class="text-sm text-gray-400 mb-2">檢查 dashboard.html 的用戶頭像連結</p>
+                <div id="test-3-result" class="text-sm">
+                    <a href="/dashboard.html" class="text-blue-400 hover:underline">→ 前往測試</a>
+                </div>
+            </div>
+
+            <!-- Test 4: Profile Authentication -->
+            <div id="test-4" class="test-item test-pending">
+                <h3 class="font-bold mb-2">4. Profile 認證檢查</h3>
+                <p class="text-sm text-gray-400 mb-2">未登入應自動跳轉到 login.html</p>
+                <div id="test-4-result" class="text-sm">
+                    <a href="/profile.html" class="text-blue-400 hover:underline">→ 前往測試（未登入時）</a>
+                </div>
+            </div>
+
+            <!-- Test 5: Complete Flow -->
+            <div id="test-5" class="test-item test-pending">
+                <h3 class="font-bold mb-2">5. 完整流程測試</h3>
+                <p class="text-sm text-gray-400 mb-2">login → dashboard → profile → logout</p>
+                <div id="test-5-result" class="text-sm">
+                    <button onclick="testCompleteFlow()" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded">
+                        開始測試
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-8 bg-gray-800 p-6 rounded-lg">
+            <h2 class="text-xl font-bold mb-4">測試日誌</h2>
+            <div id="log" class="text-sm font-mono space-y-1 max-h-96 overflow-y-auto"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = (typeof window.API_URL !== 'undefined') ? window.API_URL : '';
+        
+        // 初始化顯示
+        document.getElementById('api-url').textContent = API_URL || '(相對路徑)';
+        document.getElementById('current-page').textContent = window.location.pathname;
+
+        // 日誌函數
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            const colors = {
+                info: 'text-blue-400',
+                success: 'text-green-400',
+                error: 'text-red-400',
+                warning: 'text-yellow-400'
+            };
+            logDiv.innerHTML += `<div class="${colors[type]}">[${timestamp}] ${message}</div>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        // Test 1: API Connection
+        async function test1() {
+            log('測試 1: 開始 API 連線測試');
+            try {
+                const response = await fetch(`${API_URL}/api/me`, { credentials: 'include' });
+                const data = await response.json();
+                
+                if (response.ok) {
+                    const status = data.logged_in ? '已登入' : '未登入';
+                    log(`API 連線成功！狀態: ${status}`, 'success');
+                    if (data.logged_in) {
+                        log(`用戶資訊: ${data.user.name} (${data.user.email})`, 'success');
+                    }
+                    document.getElementById('test-1').className = 'test-item test-pass';
+                    document.getElementById('test-1-result').innerHTML = 
+                        `<span class="text-green-400">✓ 成功</span> - ${status}`;
+                } else {
+                    throw new Error('API 回應錯誤');
+                }
+            } catch (error) {
+                log(`API 連線失敗: ${error.message}`, 'error');
+                document.getElementById('test-1').className = 'test-item test-fail';
+                document.getElementById('test-1-result').innerHTML = 
+                    `<span class="text-red-400">✗ 失敗</span> - ${error.message}`;
+            }
+        }
+
+        // Test Complete Flow
+        async function testCompleteFlow() {
+            log('測試 5: 開始完整流程測試', 'warning');
+            log('步驟 1: 檢查當前登入狀態');
+            
+            try {
+                const response = await fetch(`${API_URL}/api/me`, { credentials: 'include' });
+                const data = await response.json();
+                
+                if (data.logged_in) {
+                    log(`✓ 已登入為: ${data.user.name}`, 'success');
+                    log('步驟 2: 測試跳轉到 profile.html');
+                    log('→ 請手動點擊並確認頁面正確載入', 'warning');
+                    document.getElementById('test-5-result').innerHTML = `
+                        <div class="space-y-2">
+                            <div class="text-green-400">✓ 已登入，可以進行完整測試</div>
+                            <a href="/profile.html" class="inline-block bg-green-600 hover:bg-green-700 px-4 py-2 rounded">
+                                → 前往 Profile
+                            </a>
+                        </div>
+                    `;
+                } else {
+                    log('✗ 未登入，請先登入', 'error');
+                    log('→ 將跳轉到登入頁面...', 'warning');
+                    document.getElementById('test-5-result').innerHTML = `
+                        <div class="space-y-2">
+                            <div class="text-yellow-400">! 未登入，請先登入</div>
+                            <a href="/login.html" class="inline-block bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded">
+                                → 前往登入
+                            </a>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                log(`測試失敗: ${error.message}`, 'error');
+                document.getElementById('test-5').className = 'test-item test-fail';
+            }
+        }
+
+        // 自動執行 Test 1
+        window.addEventListener('load', () => {
+            log('頁面載入完成，開始自動測試');
+            test1();
+        });
+    </script>
+</body>
+</html>

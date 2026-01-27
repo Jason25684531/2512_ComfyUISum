@@ -1,7 +1,37 @@
 # 專案更新日誌
 
 ## 更新日期
-2026-01-22 (最新更新 - Phase 8C 核心重構：Config-Driven Parser + 結構化日誌系統)
+2026-01-27 (最新更新 - Phase 9：Dashboard 整合升級)
+
+## 最新更新摘要 (2026-01-27 - Dashboard 整合升級)
+
+### 二十五、Phase 9：Dashboard 整合升級 (2026-01-27)
+
+#### 目標
+將 `dashboard.html` 的完整功能整合至 `dashboard_v2.html` 的新版 UI 佈局中，實現統一的現代化 Dashboard 體驗。
+
+#### 核心改進
+
+##### 25.1 UI 整合 (CSS + HTML)
+- 整合 Neon 標題效果、Glassmorphism 樣式
+- 保留 glass-panel、glass-card、upload-zone、ratio-btn 等核心樣式
+- 完整實現 Image Composition、Video Studio、Avatar Studio、Gallery 四個工作區 HTML 結構
+
+##### 25.2 JavaScript 功能整合
+- 全域狀態管理 (currentTool, currentVideoTool, toolStates 等)
+- navigateTo() 導航邏輯
+- showCompositionMenu/hideCompositionMenu 工具選單控制
+- selectTool() 工具選擇與工作區動態渲染
+- 圖片上傳處理 (triggerUpload, handleFileSelect, processFile 等)
+- Video Studio 工具選單與 Multi-Shot/T2V/FLF 面板切換
+- Avatar Studio 圖片/音訊上傳處理
+- Gallery 歷史記錄載入
+
+##### 25.3 檔案變更
+- `frontend/dashboard_v2.html` → `frontend/dashboard.html` (覆蓋舊版)
+- 新版 dashboard.html 包含約 1500+ 行完整功能
+
+---
 
 ## 最新更新摘要 (2026-01-22 - Phase 8C 核心重構)
 

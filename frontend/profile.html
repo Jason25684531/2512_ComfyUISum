@@ -300,7 +300,8 @@
                 const response = await fetch(`${API_URL}/api/me`, { credentials: 'include' });
                 const data = await response.json();
                 if (!data.logged_in) {
-                    window.location.href = '/';
+                    console.log('[Profile] Not logged in, redirecting to login...');
+                    window.location.href = '/login.html';
                     return;
                 }
                 currentUser = data.user;
@@ -308,7 +309,7 @@
                 loadGallery();
             } catch (error) {
                 console.error('[Profile] Auth check failed:', error);
-                window.location.href = '/';
+                window.location.href = '/login.html';
             }
         }
 
@@ -419,14 +420,16 @@
         document.getElementById('logout-btn').addEventListener('click', async () => {
             try {
                 await fetch(`${API_URL}/api/logout`, { method: 'POST', credentials: 'include' });
-                window.location.href = '/';
+                console.log('[Profile] Logout successful, redirecting to login...');
+                window.location.href = '/login.html';
             } catch (error) {
-                window.location.href = '/';
+                console.error('[Profile] Logout failed:', error);
+                window.location.href = '/login.html';
             }
         });
 
         // 啟動身分檢查
-        // checkAuth();
+        checkAuth();
     </script>
 </body>
 
