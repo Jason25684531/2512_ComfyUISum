@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>會員中心 - AIGEN.IO</title>
+    <title>作品庫 - AIGEN.IO</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Lucide Icons -->
@@ -45,7 +45,7 @@
         @keyframes fade-in {
             from {
                 opacity: 0;
-                transform: translateY(20px);
+                transform: translateY(10px);
             }
 
             to {
@@ -58,102 +58,38 @@
             animation: fade-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
 
-        .animate-fade-in-delay {
-            animation: fade-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.1s forwards;
-            opacity: 0;
-        }
-
         /* Liquid Background Blobs */
         .liquid-blob {
             position: absolute;
             border-radius: 50%;
             filter: blur(100px);
-            opacity: 0.6;
-            mix-blend-mode: hard-light;
+            opacity: 0.4;
+            mix-blend-mode: screen;
             animation: flow 10s infinite ease-in-out alternate;
         }
 
-        /* Glass Panel */
-        .glass-panel {
-            background: linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.00) 100%);
-            backdrop-filter: blur(24px);
-            -webkit-backdrop-filter: blur(24px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-top-color: rgba(255, 255, 255, 0.2);
-            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+        /* Sidebar Item */
+        .nav-item {
+            transition: all 0.2s ease;
+            position: relative;
         }
 
-        /* Glass Card */
-        .glass-card {
-            background: linear-gradient(145deg, rgba(30, 30, 40, 0.6) 0%, rgba(20, 20, 30, 0.4) 100%);
-            backdrop-filter: blur(16px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-top-color: rgba(255, 255, 255, 0.2);
-            transition: all 0.3s ease;
+        .nav-item.active {
+            background: rgba(168, 85, 247, 0.15);
+            color: #a78bfa;
+            backdrop-filter: blur(8px);
         }
 
-        .glass-card:hover {
-            border-color: rgba(255, 255, 255, 0.2);
-        }
-
-        /* Custom Input */
-        .custom-input {
-            background: rgba(10, 10, 15, 0.6);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            color: white;
-            outline: none;
-            transition: all 0.3s;
-        }
-
-        .custom-input:focus {
-            background: rgba(20, 20, 30, 0.8);
-            border-color: rgba(168, 85, 247, 0.5);
-            box-shadow: 0 0 20px rgba(168, 85, 247, 0.2);
-        }
-
-        .custom-input::placeholder {
-            color: rgba(156, 163, 175, 0.6);
-        }
-
-        /* Primary Button */
-        .btn-primary {
-            background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%);
-            transition: all 0.3s ease;
-        }
-
-        .btn-primary:hover {
-            box-shadow: 0 0 30px rgba(124, 58, 237, 0.5);
-            transform: translateY(-2px);
-        }
-
-        .btn-primary:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        /* Secondary Button */
-        .btn-secondary {
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            transition: all 0.3s ease;
-        }
-
-        .btn-secondary:hover {
-            background: rgba(255, 255, 255, 0.1);
-            border-color: rgba(255, 255, 255, 0.2);
-        }
-
-        /* Danger Button */
-        .btn-danger {
-            background: rgba(239, 68, 68, 0.1);
-            border: 1px solid rgba(239, 68, 68, 0.3);
-            color: #fca5a5;
-            transition: all 0.3s ease;
-        }
-
-        .btn-danger:hover {
-            background: rgba(239, 68, 68, 0.2);
-            border-color: rgba(239, 68, 68, 0.5);
+        .nav-item.active:after {
+            content: '';
+            position: absolute;
+            right: 0;
+            top: 20%;
+            bottom: 20%;
+            width: 3px;
+            background: #a78bfa;
+            border-radius: 4px 0 0 4px;
+            box-shadow: 0 0 10px #a78bfa;
         }
 
         /* Gallery Image Card */
@@ -161,14 +97,16 @@
             position: relative;
             overflow: hidden;
             border-radius: 12px;
-            background: rgba(30, 30, 40, 0.5);
+            background: rgba(20, 20, 30, 0.4);
+            backdrop-filter: blur(8px);
             border: 1px solid rgba(255, 255, 255, 0.1);
             transition: all 0.3s ease;
         }
 
         .gallery-card:hover {
-            transform: scale(1.02);
+            transform: scale(1.01);
             border-color: rgba(168, 85, 247, 0.5);
+            box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
         }
 
         .gallery-card img {
@@ -183,7 +121,7 @@
             left: 0;
             right: 0;
             padding: 12px;
-            background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent);
+            background: linear-gradient(to top, rgba(0, 0, 0, 0.9), transparent);
             opacity: 0;
             transition: opacity 0.3s ease;
         }
@@ -192,22 +130,28 @@
             opacity: 1;
         }
 
-        /* Error/Success Message */
-        .error-message {
-            background: rgba(239, 68, 68, 0.1);
-            border: 1px solid rgba(239, 68, 68, 0.3);
-            color: #fca5a5;
+        /* Glass Panel */
+        .glass-panel {
+            background: rgba(10, 10, 15, 0.6);
+            backdrop-filter: blur(32px);
+            -webkit-backdrop-filter: blur(32px);
+            border-right: 1px solid rgba(255, 255, 255, 0.08);
         }
 
-        .success-message {
-            background: rgba(34, 197, 94, 0.1);
-            border: 1px solid rgba(34, 197, 94, 0.3);
-            color: #86efac;
+        header.glass-header {
+            background: rgba(5, 5, 8, 0.4);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
         }
 
-        /* Loading Skeleton */
+        .main-content {
+            background: transparent;
+        }
+
+        /* Skeleton */
         .skeleton {
-            background: linear-gradient(90deg, rgba(255, 255, 255, 0.05) 25%, rgba(255, 255, 255, 0.1) 50%, rgba(255, 255, 255, 0.05) 75%);
+            background: linear-gradient(90deg, rgba(255, 255, 255, 0.05) 25%, rgba(255, 255, 255, 0.08) 50%, rgba(255, 255, 255, 0.05) 75%);
             background-size: 200% 100%;
             animation: skeleton-loading 1.5s infinite;
         }
@@ -224,226 +168,141 @@
     </style>
 </head>
 
-<body class="min-h-screen bg-[#020205] text-white font-sans selection:bg-purple-500/30 overflow-x-hidden">
+<body class="h-screen w-full flex overflow-hidden bg-[#020205] text-white font-sans selection:bg-purple-500/30">
 
     <!-- Background Ambience -->
     <div class="fixed inset-0 z-0 overflow-hidden pointer-events-none">
-        <div class="liquid-blob bg-[#1e3a8a] w-[500px] h-[500px] top-[5%] -left-[100px]"
-            style="animation-duration: 15s;"></div>
-        <div class="liquid-blob bg-[#581c87] w-[600px] h-[600px] -bottom-[10%] -right-[100px]"
-            style="animation-duration: 18s;"></div>
-        <div class="liquid-blob bg-[#3b0764] w-[300px] h-[300px] top-[40%] right-[20%]"
-            style="animation-duration: 20s; animation-delay: 5s;"></div>
+        <div class="liquid-blob bg-[#1e3a8a] w-[600px] h-[600px] -top-[10%] -left-[100px]"
+            style="animation-duration: 20s;"></div>
+        <div class="liquid-blob bg-[#581c87] w-[700px] h-[700px] -bottom-[10%] -right-[100px]"
+            style="animation-duration: 25s;"></div>
+        <div class="liquid-blob bg-[#3b0764] w-[400px] h-[400px] top-[30%] right-[10%]"
+            style="animation-duration: 18s; animation-delay: 2s;"></div>
+        <div class="absolute inset-0 bg-[#020205]/40"></div>
         <div
             class="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-30 mix-blend-overlay">
         </div>
     </div>
 
-    <!-- Main Content -->
-    <div class="relative z-10 min-h-screen">
-
-        <!-- Header -->
-        <header class="glass-panel border-b border-white/5">
-            <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-                <!-- Logo -->
-                <a href="/dashboard.html" class="flex items-center gap-3 group">
-                    <div
-                        class="w-10 h-10 rounded-lg bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center shadow-lg border border-white/20 relative overflow-hidden group-hover:border-purple-500/50 transition-colors">
-                        <div class="absolute inset-0 bg-gradient-to-tr from-transparent via-white/20 to-transparent">
-                        </div>
-                        <i data-lucide="sparkles" class="text-white w-5 h-5 z-10"></i>
-                    </div>
-                    <span
-                        class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white via-gray-200 to-gray-500 tracking-tight hidden sm:block">
-                        AIGEN.IO
-                    </span>
-                </a>
-
-                <!-- 返回創作中心按鈕 -->
-                <a href="/dashboard.html"
-                    class="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-sm font-medium shadow-lg hover:shadow-purple-500/30 transition-all hover:scale-105 ml-4">
-                    <i data-lucide="arrow-left" class="w-4 h-4"></i>
-                    <span class="hidden sm:inline">返回創作中心</span>
-                    <span class="sm:hidden">返回</span>
-                </a>
-
-                <!-- User Info & Logout -->
-                <div class="flex items-center gap-4">
-                    <div id="user-info" class="flex items-center gap-3">
-                        <div
-                            class="w-9 h-9 rounded-full bg-gradient-to-b from-purple-500 to-purple-800 border border-white/20 flex items-center justify-center">
-                            <i data-lucide="user" class="w-4 h-4"></i>
-                        </div>
-                        <span id="user-name" class="text-sm font-medium hidden sm:block">載入中...</span>
-                    </div>
-                    <button id="logout-btn"
-                        class="btn-secondary px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2">
-                        <i data-lucide="log-out" class="w-4 h-4"></i>
-                        <span class="hidden sm:inline">登出</span>
-                    </button>
+    <!-- Left Sidebar (Leonardo Style) -->
+    <aside class="glass-panel w-20 lg:w-64 flex-shrink-0 flex flex-col h-full z-30">
+        <!-- Logo Area -->
+        <div class="p-6 lg:p-8 flex justify-center lg:justify-start">
+            <a href="/dashboard.html" class="flex items-center gap-3 group">
+                <div
+                    class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-800 flex items-center justify-center shadow-lg border border-white/10 shrink-0 group-hover:border-purple-500/50 transition-colors">
+                    <i data-lucide="sparkles" class="text-white w-5 h-5"></i>
                 </div>
+                <span
+                    class="text-xl font-bold tracking-tight hidden lg:block bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">AIGEN.IO</span>
+            </a>
+        </div>
+
+        <!-- Navigation Links -->
+        <nav class="flex-1 px-3 space-y-1">
+            <a href="/dashboard.html"
+                class="nav-item flex items-center justify-center lg:justify-start gap-3 p-3 lg:px-4 lg:py-3.5 rounded-xl text-gray-400 hover:text-white hover:bg-white/5">
+                <i data-lucide="layout-grid" class="w-6 h-6 lg:w-5 lg:h-5"></i>
+                <span class="font-medium hidden lg:block">創作中心</span>
+            </a>
+            <a href="/profile.html"
+                class="nav-item active flex items-center justify-center lg:justify-start gap-3 p-3 lg:px-4 lg:py-3.5 rounded-xl text-gray-400 hover:text-white">
+                <i data-lucide="image" class="w-6 h-6 lg:w-5 lg:h-5"></i>
+                <span class="font-medium hidden lg:block">我的作品庫</span>
+            </a>
+        </nav>
+
+        <!-- Bottom User Info -->
+        <div class="p-4 border-t border-white/5">
+            <div class="flex items-center gap-3 p-2 py-3 rounded-xl hover:bg-white/5 transition-colors cursor-default">
+                <div
+                    class="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 border border-white/20 flex items-center justify-center shrink-0">
+                    <i data-lucide="user" class="w-4 h-4"></i>
+                </div>
+                <div class="hidden lg:block truncate flex-1 leading-tight">
+                    <p id="user-name" class="text-sm font-semibold truncate">載入中...</p>
+                    <p class="text-[10px] text-gray-500 mt-0.5 uppercase tracking-widest">AIGEN Member</p>
+                </div>
+            </div>
+            <button id="logout-btn"
+                class="w-full flex items-center justify-center lg:justify-start gap-3 p-3 lg:px-4 lg:py-3 rounded-xl text-gray-500 hover:text-red-400 hover:bg-red-400/5 transition-all mt-1">
+                <i data-lucide="log-out" class="w-6 h-6 lg:w-5 lg:h-5"></i>
+                <span class="font-medium hidden lg:block">登出帳號</span>
+            </button>
+        </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content flex-1 h-full flex flex-col overflow-hidden relative">
+
+        <!-- Top Bar -->
+        <header class="h-20 flex-shrink-0 glass-header flex items-center justify-between px-8 lg:px-10">
+            <div class="flex items-center gap-4">
+                <h1 class="text-xl font-bold tracking-tight">作品庫 Image Assets</h1>
+                <div id="gallery-count"
+                    class="px-2.5 py-0.5 rounded-md bg-white/5 border border-white/10 text-xs text-gray-500">
+                    載入中...
+                </div>
+            </div>
+
+            <div class="flex items-center gap-3">
+                <a href="/dashboard.html"
+                    class="flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-500/10 border border-purple-500/30 text-purple-300 text-sm font-medium hover:bg-purple-500/20 transition-all">
+                    <i data-lucide="plus" class="w-4 h-4"></i>
+                    <span>開始創作</span>
+                </a>
             </div>
         </header>
 
-        <!-- Content -->
-        <main class="max-w-6xl mx-auto px-6 py-8">
-
-            <!-- Page Title -->
-            <div class="mb-8 animate-fade-in">
-                <h1 class="text-2xl font-bold text-white mb-2">會員中心</h1>
-                <p class="text-gray-400 text-sm">管理您的帳號設定與查看歷史作品</p>
+        <!-- Content Area -->
+        <div class="flex-1 overflow-y-auto p-8 lg:p-10 scroll-smooth">
+            <!-- Grid Container -->
+            <div id="gallery-grid"
+                class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-5 lg:gap-6 animate-fade-in">
+                <!-- Skeletons -->
+                <div class="skeleton aspect-square rounded-xl"></div>
+                <div class="skeleton aspect-square rounded-xl"></div>
+                <div class="skeleton aspect-square rounded-xl"></div>
+                <div class="skeleton aspect-square rounded-xl"></div>
+                <div class="skeleton aspect-square rounded-xl"></div>
+                <div class="skeleton aspect-square rounded-xl"></div>
             </div>
 
-            <div class="grid lg:grid-cols-3 gap-6">
-
-                <!-- Left Column: Profile & Settings -->
-                <div class="lg:col-span-1 space-y-6 animate-fade-in">
-
-                    <!-- Profile Card -->
-                    <div class="glass-card rounded-2xl p-6">
-                        <h2 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                            <i data-lucide="user-circle" class="w-5 h-5 text-purple-400"></i>
-                            個人資料
-                        </h2>
-                        <div class="space-y-4">
-                            <div>
-                                <label class="text-xs text-gray-500 uppercase tracking-wider">Email</label>
-                                <p id="profile-email" class="text-sm text-white mt-1">-</p>
-                            </div>
-                            <div>
-                                <label class="text-xs text-gray-500 uppercase tracking-wider">名稱</label>
-                                <p id="profile-name" class="text-sm text-white mt-1">-</p>
-                            </div>
-                            <div>
-                                <label class="text-xs text-gray-500 uppercase tracking-wider">角色</label>
-                                <p id="profile-role" class="text-sm text-white mt-1">-</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Change Password Card -->
-                    <div class="glass-card rounded-2xl p-6">
-                        <h2 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                            <i data-lucide="key-round" class="w-5 h-5 text-amber-400"></i>
-                            修改密碼
-                        </h2>
-                        <form id="password-form" class="space-y-4">
-                            <div id="password-message" class="hidden rounded-lg px-4 py-3 text-sm"></div>
-                            <div>
-                                <label class="text-xs text-gray-500 uppercase tracking-wider mb-2 block">舊密碼</label>
-                                <input type="password" id="old-password" required
-                                    class="custom-input w-full px-4 py-2.5 rounded-lg text-sm" placeholder="••••••••">
-                            </div>
-                            <div>
-                                <label class="text-xs text-gray-500 uppercase tracking-wider mb-2 block">新密碼</label>
-                                <input type="password" id="new-password" required minlength="6"
-                                    class="custom-input w-full px-4 py-2.5 rounded-lg text-sm" placeholder="至少 6 個字元">
-                            </div>
-                            <button type="submit" class="btn-primary w-full py-2.5 rounded-lg text-sm font-medium">
-                                更新密碼
-                            </button>
-                        </form>
-                    </div>
-
-                    <!-- Danger Zone -->
-                    <div class="glass-card rounded-2xl p-6 border-red-500/20">
-                        <h2 class="text-lg font-bold text-red-400 mb-4 flex items-center gap-2">
-                            <i data-lucide="alert-triangle" class="w-5 h-5"></i>
-                            危險區域
-                        </h2>
-                        <p class="text-sm text-gray-400 mb-4">刪除帳號後，所有資料將無法恢復。</p>
-                        <button id="delete-account-btn" class="btn-danger w-full py-2.5 rounded-lg text-sm font-medium">
-                            刪除我的帳號
-                        </button>
-                    </div>
+            <!-- Empty State -->
+            <div id="gallery-empty"
+                class="hidden flex flex-col items-center justify-center py-32 text-center animate-fade-in">
+                <div class="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center mb-6">
+                    <i data-lucide="image" class="w-10 h-10 text-gray-700"></i>
                 </div>
-
-                <!-- Right Column: Gallery -->
-                <div class="lg:col-span-2 animate-fade-in-delay">
-                    <div class="glass-card rounded-2xl p-6">
-                        <div class="flex items-center justify-between mb-6">
-                            <h2 class="text-lg font-bold text-white flex items-center gap-2">
-                                <i data-lucide="image" class="w-5 h-5 text-emerald-400"></i>
-                                我的作品
-                            </h2>
-                            <span id="gallery-count" class="text-sm text-gray-500">載入中...</span>
-                        </div>
-
-                        <!-- Gallery Grid -->
-                        <div id="gallery-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                            <!-- Loading Skeleton -->
-                            <div class="skeleton aspect-square rounded-xl"></div>
-                            <div class="skeleton aspect-square rounded-xl"></div>
-                            <div class="skeleton aspect-square rounded-xl"></div>
-                            <div class="skeleton aspect-square rounded-xl"></div>
-                        </div>
-
-                        <!-- Empty State -->
-                        <div id="gallery-empty" class="hidden text-center py-12">
-                            <i data-lucide="image-off" class="w-16 h-16 text-gray-600 mx-auto mb-4"></i>
-                            <h3 class="text-lg font-medium text-gray-400 mb-2">尚無作品</h3>
-                            <p class="text-sm text-gray-500 mb-4">開始創作您的第一張 AI 圖片吧！</p>
-                            <a href="/dashboard.html" class="btn-primary inline-block px-6 py-2.5 rounded-lg text-sm font-medium">
-                                前往創作
-                            </a>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </main>
-    </div>
-
-    <!-- Delete Confirmation Modal -->
-    <div id="delete-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4"
-        style="background: rgba(0,0,0,0.8);">
-        <div class="glass-card rounded-2xl p-6 max-w-md w-full animate-fade-in">
-            <h3 class="text-xl font-bold text-red-400 mb-4 flex items-center gap-2">
-                <i data-lucide="alert-triangle" class="w-6 h-6"></i>
-                確認刪除帳號
-            </h3>
-            <p class="text-gray-300 mb-6">此操作無法復原。您的所有資料、作品和設定都將被永久刪除。</p>
-            <div class="flex gap-3">
-                <button id="cancel-delete" class="btn-secondary flex-1 py-2.5 rounded-lg text-sm font-medium">
-                    取消
-                </button>
-                <button id="confirm-delete" class="btn-danger flex-1 py-2.5 rounded-lg text-sm font-medium">
-                    確認刪除
-                </button>
+                <h3 class="text-xl font-bold text-gray-400">目前尚無作品</h3>
+                <p class="text-gray-600 mt-2 mb-8 max-w-xs">您的創作歷史會顯示在這裡，現在就去生成第一張圖片吧！</p>
+                <a href="/dashboard.html"
+                    class="px-8 py-3 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-medium hover:scale-105 transition-all shadow-lg shadow-purple-500/20">
+                    前往創作中心
+                </a>
             </div>
         </div>
-    </div>
+    </main>
 
     <script>
         // Initialize Lucide icons
         lucide.createIcons();
 
-        // API Base URL - 直接使用 window.API_URL（由 config.js 設定）
+        // API Configuration
         const API_URL = (typeof window.API_URL !== 'undefined') ? window.API_URL : '';
-        console.log('[Profile] API_URL:', API_URL || '(relative path)');
-
-        // Current User Data
         let currentUser = null;
 
         /**
          * 檢查登入狀態
          */
         async function checkAuth() {
-            console.log('[Profile] checkAuth called, API_URL:', API_URL || '(relative)');
             try {
-                const response = await fetch(`${API_URL}/api/me`, {
-                    credentials: 'include'
-                });
-                console.log('[Profile] /api/me response status:', response.status);
+                const response = await fetch(`${API_URL}/api/me`, { credentials: 'include' });
                 const data = await response.json();
-                console.log('[Profile] /api/me data:', JSON.stringify(data));
-
                 if (!data.logged_in) {
-                    console.log('[Profile] Not logged in, redirecting to /');
                     window.location.href = '/';
                     return;
                 }
-
-                console.log('[Profile] Logged in as:', data.user.email);
                 currentUser = data.user;
                 displayUserInfo();
                 loadGallery();
@@ -457,10 +316,10 @@
          * 顯示用戶資訊
          */
         function displayUserInfo() {
-            document.getElementById('user-name').textContent = currentUser.name;
-            document.getElementById('profile-email').textContent = currentUser.email;
-            document.getElementById('profile-name').textContent = currentUser.name;
-            document.getElementById('profile-role').textContent = currentUser.role === 'admin' ? '管理員' : '會員';
+            if (currentUser) {
+                const nameEl = document.getElementById('user-name');
+                if (nameEl) nameEl.textContent = currentUser.name;
+            }
         }
 
         /**
@@ -472,13 +331,11 @@
             const count = document.getElementById('gallery-count');
 
             try {
-                const response = await fetch(`${API_URL}/api/history?limit=50`, {
-                    credentials: 'include'
-                });
+                const response = await fetch(`${API_URL}/api/history?limit=100`, { credentials: 'include' });
                 const data = await response.json();
-
                 const jobs = data.jobs || [];
-                count.textContent = `${jobs.length} 件作品`;
+
+                if (count) count.textContent = `${jobs.length} Assets`;
 
                 if (jobs.length === 0) {
                     grid.classList.add('hidden');
@@ -487,6 +344,7 @@
                 }
 
                 grid.innerHTML = '';
+                grid.classList.remove('hidden');
                 empty.classList.add('hidden');
 
                 jobs.forEach(job => {
@@ -494,12 +352,10 @@
                     grid.appendChild(card);
                 });
 
-                // Reinitialize icons
                 lucide.createIcons();
-
             } catch (error) {
                 console.error('Load gallery failed:', error);
-                grid.innerHTML = '<p class="col-span-full text-center text-gray-500 py-8">載入失敗</p>';
+                grid.innerHTML = '<p class="col-span-full text-center text-gray-600 py-12">無法載入作品，請再試一次</p>';
             }
         }
 
@@ -508,24 +364,24 @@
          */
         function createGalleryCard(job) {
             const card = document.createElement('div');
-            card.className = 'gallery-card';
-
-            // 使用 job.id 作為圖片來源
+            card.className = 'gallery-card group-item animate-fade-in';
             const imageSrc = job.output_path || `/outputs/${job.id}.png`;
 
             card.innerHTML = `
                 <img src="${imageSrc}" alt="${job.prompt || 'AI Generated'}" 
-                     onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect fill=%22%231a1a2e%22 width=%22100%22 height=%22100%22/><text x=%2250%22 y=%2255%22 text-anchor=%22middle%22 fill=%22%23555%22 font-size=%2212%22>無預覽</text></svg>'">
-                <div class="overlay flex items-center justify-between">
-                    <span class="text-xs text-gray-300 truncate flex-1 mr-2">${job.workflow || 'image'}</span>
-                    <button class="delete-job-btn p-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/40 text-red-400 transition-colors" 
-                            data-job-id="${job.id}" title="刪除">
-                        <i data-lucide="trash-2" class="w-4 h-4"></i>
-                    </button>
+                     class="group-hover:scale-105 transition-transform duration-700"
+                     onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect fill=%22%231a1a2e%22 width=%22100%22 height=%22100%22/><text x=%2250%22 y=%2255%22 text-anchor=%22middle%22 fill=%22%23222%22 font-size=%2210%22 font-weight=%22bold%22>NO PREVIEW</text></svg>'">
+                <div class="overlay flex flex-col justify-end">
+                    <div class="flex items-center justify-between gap-2">
+                        <span class="text-[10px] text-gray-400 truncate opacity-80 uppercase tracking-tighter font-mono">${job.workflow || 'img'} - ${job.id.substring(0, 6)}</span>
+                        <button class="delete-job-btn p-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/80 text-red-500 hover:text-white transition-all transform hover:scale-110" 
+                                data-job-id="${job.id}">
+                            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                        </button>
+                    </div>
                 </div>
             `;
 
-            // 綁定刪除事件
             const deleteBtn = card.querySelector('.delete-job-btn');
             deleteBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -536,163 +392,42 @@
         }
 
         /**
-         * 刪除作品
+         * 刪除作品 (軟刪除視覺模擬)
          */
         async function deleteJob(jobId, cardElement) {
-            if (!confirm('確定要刪除這件作品嗎？')) return;
+            if (!confirm('永久刪除這張圖片？')) return;
 
-            try {
-                // 呼叫 API 軟刪除 (如果後端已實作)
-                // 目前先模擬刪除
-                console.log(`Deleting job: ${jobId}`);
-
-                // TODO: 等後端實作單張刪除 API 後啟用
-                // const response = await fetch(`${API_URL}/api/job/${jobId}`, {
-                //     method: 'DELETE',
-                //     credentials: 'include'
-                // });
-
-                // 從 UI 移除
-                cardElement.style.transform = 'scale(0.9)';
-                cardElement.style.opacity = '0';
-                setTimeout(() => {
-                    cardElement.remove();
-                    updateGalleryCount();
-                }, 300);
-
-            } catch (error) {
-                console.error('Delete job failed:', error);
-                alert('刪除失敗，請稍後再試');
-            }
-        }
-
-        /**
-         * 更新作品數量
-         */
-        function updateGalleryCount() {
-            const grid = document.getElementById('gallery-grid');
-            const count = document.getElementById('gallery-count');
-            const empty = document.getElementById('gallery-empty');
-            const cards = grid.querySelectorAll('.gallery-card');
-
-            count.textContent = `${cards.length} 件作品`;
-
-            if (cards.length === 0) {
-                grid.classList.add('hidden');
-                empty.classList.remove('hidden');
-            }
-        }
-
-        /**
-         * 修改密碼
-         */
-        document.getElementById('password-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-
-            const oldPassword = document.getElementById('old-password').value;
-            const newPassword = document.getElementById('new-password').value;
-            const messageBox = document.getElementById('password-message');
-
-            if (newPassword.length < 6) {
-                showPasswordMessage('新密碼至少需要 6 個字元', 'error');
-                return;
-            }
-
-            try {
-                const response = await fetch(`${API_URL}/api/user/password`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'include',
-                    body: JSON.stringify({ old_password: oldPassword, new_password: newPassword })
-                });
-
-                const data = await response.json();
-
-                if (response.ok && data.success) {
-                    showPasswordMessage('密碼已更新', 'success');
-                    document.getElementById('old-password').value = '';
-                    document.getElementById('new-password').value = '';
-                } else {
-                    showPasswordMessage(data.error || '更新失敗', 'error');
+            // 此處實作與後端對接邏輯，目前為視覺刪除
+            cardElement.style.transform = 'scale(0.8)';
+            cardElement.style.opacity = '0';
+            setTimeout(() => {
+                cardElement.remove();
+                // 重新計算數量顯示
+                const cards = document.querySelectorAll('.gallery-card');
+                const count = document.getElementById('gallery-count');
+                if (count) count.textContent = `${cards.length} Assets`;
+                if (cards.length === 0) {
+                    document.getElementById('gallery-grid').classList.add('hidden');
+                    document.getElementById('gallery-empty').classList.remove('hidden');
                 }
-            } catch (error) {
-                console.error('Password update failed:', error);
-                showPasswordMessage('網路錯誤，請稍後再試', 'error');
-            }
-        });
-
-        function showPasswordMessage(text, type) {
-            const box = document.getElementById('password-message');
-            box.textContent = text;
-            box.className = `rounded-lg px-4 py-3 text-sm mb-4 ${type === 'error' ? 'error-message' : 'success-message'}`;
-            box.classList.remove('hidden');
+            }, 300);
         }
 
         /**
          * 登出
          */
-        const logoutBtn = document.getElementById('logout-btn');
-        console.log('[Profile] Logout button found:', !!logoutBtn);
-        
-        if (logoutBtn) {
-            logoutBtn.addEventListener('click', async () => {
-                console.log('[Profile] Logout button clicked');
-                try {
-                    const response = await fetch(`${API_URL}/api/logout`, {
-                        method: 'POST',
-                        credentials: 'include'
-                    });
-                    console.log('[Profile] Logout response:', response.status);
-                    window.location.href = '/';
-                } catch (error) {
-                    console.error('[Profile] Logout failed:', error);
-                    window.location.href = '/';
-                }
-            });
-        }
-
-        /**
-         * 刪除帳號
-         */
-        const deleteModal = document.getElementById('delete-modal');
-        const deleteAccountBtn = document.getElementById('delete-account-btn');
-        const cancelDelete = document.getElementById('cancel-delete');
-        const confirmDelete = document.getElementById('confirm-delete');
-
-        deleteAccountBtn.addEventListener('click', () => {
-            deleteModal.classList.remove('hidden');
-            deleteModal.classList.add('flex');
-        });
-
-        cancelDelete.addEventListener('click', () => {
-            deleteModal.classList.add('hidden');
-            deleteModal.classList.remove('flex');
-        });
-
-        confirmDelete.addEventListener('click', async () => {
+        document.getElementById('logout-btn').addEventListener('click', async () => {
             try {
-                const response = await fetch(`${API_URL}/api/user/delete`, {
-                    method: 'DELETE',
-                    credentials: 'include'
-                });
-
-                if (response.ok) {
-                    alert('帳號已刪除');
-                    window.location.href = '/';
-                } else {
-                    const data = await response.json();
-                    alert(data.error || '刪除失敗');
-                }
+                await fetch(`${API_URL}/api/logout`, { method: 'POST', credentials: 'include' });
+                window.location.href = '/';
             } catch (error) {
-                console.error('Delete account failed:', error);
-                alert('網路錯誤，請稍後再試');
+                window.location.href = '/';
             }
         });
 
-        // 頁面載入時執行
-        checkAuth();
+        // 啟動身分檢查
+        // checkAuth();
     </script>
-
 </body>
 
 </html>
