@@ -264,55 +264,77 @@
         </div>
     </div>
 
-    <!-- Left Sidebar (Icon Only - Home Layout) -->
-    <aside id="home-sidebar" class="glass-sidebar w-20 flex-shrink-0 flex flex-col h-full z-30 relative">
+    <!-- Left Sidebar (Wide with Labels - Home Layout) -->
+    <aside id="home-sidebar"
+        class="w-64 flex-shrink-0 glass-panel flex flex-col border-r border-white/5 h-full z-30 relative bg-[#0b0c15]/80">
         <!-- Logo -->
-        <div class="h-20 flex items-center justify-center border-b border-white/5">
-            <div
-                class="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-800 flex items-center justify-center shadow-lg border border-white/10 hover:border-purple-500/50 transition-colors cursor-pointer group">
-                <i data-lucide="sparkles" class="text-white w-6 h-6 group-hover:scale-110 transition-transform"></i>
+        <div class="h-20 flex items-center px-6 border-b border-white/5 cursor-pointer"
+            onclick="navigateTo('dashboard')">
+            <div class="flex items-center gap-2 group">
+                <div
+                    class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-800 flex items-center justify-center shadow-lg border border-white/20 relative overflow-hidden group-hover:border-purple-500/50 transition-colors">
+                    <div class="absolute inset-0 bg-gradient-to-tr from-transparent via-white/20 to-transparent"></div>
+                    <i data-lucide="sparkles" class="text-white w-5 h-5 z-10"></i>
+                </div>
+                <span
+                    class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white via-gray-200 to-gray-500 drop-shadow-sm tracking-tight group-hover:text-white transition-colors">
+                    AIGEN.IO
+                </span>
             </div>
         </div>
 
-        <!-- Navigation Icons -->
-        <nav class="flex-1 py-6 px-3 space-y-3">
+        <!-- Navigation -->
+        <nav class="flex-1 overflow-y-auto py-6 px-3 space-y-2">
+            <div class="px-3 mb-3 text-xs font-bold text-gray-500 uppercase tracking-wider">Core Tools</div>
+
             <button onclick="navigateTo('dashboard')"
-                class="nav-item active w-full p-4 rounded-xl text-gray-400 hover:text-white hover:bg-white/5 transition-all"
-                title="Dashboard">
-                <i data-lucide="home" class="w-7 h-7 mx-auto"></i>
+                class="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium text-gray-400 group nav-item hover:bg-white/5 hover:text-white transition-all active"
+                data-id="dashboard">
+                <i data-lucide="home" class="w-5 h-5 group-hover:text-blue-300"></i>
+                Dashboard
             </button>
+
             <button onclick="showCompositionMenu()"
-                class="nav-item w-full p-4 rounded-xl text-gray-400 hover:text-white hover:bg-white/5 transition-all"
-                title="Image Studio">
-                <i data-lucide="layers" class="w-7 h-7 mx-auto"></i>
+                class="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium text-gray-400 group nav-item hover:bg-white/5 hover:text-white transition-all"
+                data-id="canvas">
+                <i data-lucide="layers" class="w-5 h-5 group-hover:text-purple-300"></i>
+                Image Composition
             </button>
+
             <button onclick="navigateTo('motion'); showVideoToolMenu();"
-                class="nav-item w-full p-4 rounded-xl text-gray-400 hover:text-white hover:bg-white/5 transition-all"
-                title="Video Studio">
-                <i data-lucide="film" class="w-7 h-7 mx-auto"></i>
+                class="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium text-gray-400 group nav-item hover:bg-white/5 hover:text-white transition-all"
+                data-id="motion">
+                <i data-lucide="film" class="w-5 h-5 group-hover:text-amber-300"></i>
+                Image to Video
             </button>
+
             <button onclick="navigateTo('avatar')"
-                class="nav-item w-full p-4 rounded-xl text-gray-400 hover:text-white hover:bg-white/5 transition-all"
-                title="Avatar Studio">
-                <i data-lucide="user-circle-2" class="w-7 h-7 mx-auto"></i>
+                class="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium text-gray-400 group nav-item hover:bg-white/5 hover:text-white transition-all"
+                data-id="avatar">
+                <i data-lucide="user-circle-2" class="w-5 h-5 group-hover:text-emerald-300"></i>
+                Avatar Studio
             </button>
-            <div class="h-[1px] bg-white/10 my-4"></div>
+
+            <div class="my-4 border-t border-white/5 mx-3"></div>
+
             <button onclick="navigateTo('gallery')"
-                class="nav-item w-full p-4 rounded-xl text-gray-400 hover:text-white hover:bg-white/5 transition-all"
-                title="Gallery">
-                <i data-lucide="image" class="w-7 h-7 mx-auto"></i>
+                class="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium text-gray-400 group nav-item hover:bg-white/5 hover:text-white transition-all"
+                data-id="gallery">
+                <i data-lucide="image" class="w-5 h-5 group-hover:text-pink-300"></i>
+                Personal Gallery
             </button>
         </nav>
 
         <!-- Bottom: System Status -->
         <div class="p-4 border-t border-white/5">
             <div id="system-status"
-                class="flex flex-col items-center gap-2 p-3 rounded-xl bg-white/5 cursor-pointer hover:bg-white/10 transition-colors"
+                class="flex items-center gap-3 p-3 rounded-xl bg-white/5 cursor-pointer hover:bg-white/10 transition-colors"
                 title="System Status">
                 <div class="flex items-center gap-2">
                     <div class="w-2 h-2 rounded-full bg-green-500 status-dot"></div>
                 </div>
                 <i data-lucide="activity" class="w-5 h-5 text-gray-400"></i>
+                <span class="text-xs text-gray-400">System Online</span>
             </div>
         </div>
 
@@ -320,18 +342,22 @@
         <div class="p-4 border-t border-white/5">
             <!-- Guest State -->
             <a id="auth-guest" href="/login.html"
-                class="hidden flex-col items-center gap-2 p-3 rounded-xl text-gray-400 hover:text-white hover:bg-white/5 transition-all"
-                title="Login">
-                <i data-lucide="log-in" class="w-6 h-6"></i>
+                class="hidden flex items-center gap-3 p-3 rounded-xl text-gray-400 hover:text-white hover:bg-white/5 transition-all">
+                <i data-lucide="log-in" class="w-5 h-5"></i>
+                <span class="text-sm font-medium">登入 / 註冊</span>
             </a>
 
             <!-- User State -->
             <a id="auth-user" href="/profile.html"
-                class="hidden flex-col items-center gap-2 p-3 rounded-xl hover:bg-white/5 transition-all group"
-                title="Profile">
+                class="hidden flex items-center gap-3 p-3 rounded-xl hover:bg-white/5 transition-all group">
                 <div
                     class="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 border border-white/20 flex items-center justify-center group-hover:border-purple-500/50 transition-colors">
-                    <i data-lucide="user" class="w-5 h-5"></i>
+                    <i data-lucide="user" class="w-5 h-5 text-white"></i>
+                </div>
+                <div class="flex-1">
+                    <span id="sidebar-user-name"
+                        class="text-sm font-medium text-gray-300 group-hover:text-white transition-colors block">會員中心</span>
+                    <span class="text-xs text-gray-500">管理個人資料</span>
                 </div>
             </a>
         </div>
@@ -831,299 +857,419 @@
                     </div>
 
                     <!-- Video Workspace -->
-                    <div id="video-workspace" class="hidden flex h-full">
-                        <!-- Left Panel -->
-                        <div
-                            class="w-80 glass-panel border-r border-white/10 p-6 flex flex-col gap-4 overflow-y-auto h-full z-20">
-                            <div id="video-tool-header" class="flex items-center gap-3 mb-2">
-                                <button onclick="showVideoToolMenu()"
-                                    class="p-2 rounded-lg hover:bg-white/10 transition-colors text-gray-400 hover:text-white"
-                                    title="切換工具">
-                                    <i data-lucide="grid-3x3" class="w-5 h-5"></i>
-                                </button>
-                                <div class="h-6 w-[1px] bg-white/10"></div>
-                                <div id="video-tool-icon" class="p-2 rounded-lg bg-amber-500/20 text-amber-300">
-                                    <i data-lucide="film" class="w-4 h-4"></i>
-                                </div>
-                                <div>
-                                    <span id="video-tool-name" class="text-sm font-bold text-white">長片生成</span>
-                                    <span id="video-tool-desc" class="text-xs text-gray-500 ml-2">Multi-Shot</span>
-                                </div>
-                            </div>
-                            <div class="h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent">
-                            </div>
-                            <!-- Panel: Multi-Shot -->
-                            <div id="panel-veo3_long_video">
-                                <div class="flex items-center justify-between mb-3">
-                                    <div>
-                                        <h3 class="text-sm font-bold text-white">Multi-Shot Composition</h3>
-                                        <p class="text-xs text-gray-500 mt-1">Add up to 5 images to create a sequence.</p>
+                    <div id="video-workspace" class="hidden flex flex-col h-full">
+                        <!-- Main Content Area (Left Panel + Center Preview) -->
+                        <div class="flex flex-1 overflow-hidden">
+                            <!-- Left Panel: Multi-Shot Composition -->
+                            <div class="w-48 glass-panel border-r border-white/10 flex flex-col z-20">
+                                <!-- Tool Header -->
+                                <div id="video-tool-header"
+                                    class="flex items-center gap-2 p-4 border-b border-white/10">
+                                    <button onclick="showVideoToolMenu()"
+                                        class="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-gray-400 hover:text-white"
+                                        title="切換工具">
+                                        <i data-lucide="grid-3x3" class="w-4 h-4"></i>
+                                    </button>
+                                    <div class="h-4 w-[1px] bg-white/10"></div>
+                                    <div id="video-tool-icon" class="p-1.5 rounded-lg bg-amber-500/20 text-amber-300">
+                                        <i data-lucide="film" class="w-3.5 h-3.5"></i>
                                     </div>
-                                    <button id="btn-veo3-mode-toggle" onclick="toggleVeo3Mode()" 
-                                        class="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 text-xs font-bold text-amber-300 transition-all">
-                                        <i data-lucide="layout-grid" class="w-3 h-3 inline mr-1"></i>
-                                        <span id="veo3-mode-text">Multi Mode</span>
+                                    <div class="flex-1 min-w-0">
+                                        <span id="video-tool-name"
+                                            class="text-xs font-bold text-white block truncate">長片生成</span>
+                                        <span id="video-tool-desc"
+                                            class="text-[10px] text-gray-500 block truncate">Multi-Shot</span>
+                                    </div>
+                                </div>
+
+                                <!-- Panel: Multi-Shot -->
+                                <div id="panel-veo3_long_video" class="flex-1 overflow-y-auto p-4">
+                                    <div class="mb-4">
+                                        <h3 class="text-xs font-bold text-white mb-1">Multi-Shot Composition</h3>
+                                        <p class="text-[10px] text-gray-500">Add up to 5 images to create a sequence.
+                                        </p>
+                                    </div>
+                                    <!-- Shot Upload Zones -->
+                                    <div class="space-y-3" id="motion-shots-upload"></div>
+                                    <!-- Multi Prompts (in sidebar for multi mode) -->
+                                    <div id="veo3-multi-prompts" class="hidden space-y-2 mt-4">
+                                        <h4 class="text-[10px] font-bold text-white uppercase">Shot Prompts</h4>
+                                    </div>
+                                </div>
+
+                                <!-- Panel: T2V -->
+                                <div id="panel-t2v_veo3" class="hidden flex-1 overflow-y-auto p-4">
+                                    <h3 class="text-xs font-bold text-white mb-2">文字轉影片</h3>
+                                    <p class="text-[10px] text-gray-500 mb-4">直接輸入描述，無需圖片即可生成影片。</p>
+                                    <div class="glass-card rounded-xl p-3 border border-blue-500/20 bg-blue-500/10">
+                                        <div class="flex items-center gap-2">
+                                            <div class="p-1.5 rounded-lg bg-blue-500/20">
+                                                <i data-lucide="type" class="w-4 h-4 text-blue-300"></i>
+                                            </div>
+                                            <div>
+                                                <div class="text-xs font-bold text-white">純文字模式</div>
+                                                <div class="text-[10px] text-gray-400">在下方輸入 Prompt 即可</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Panel: FLF -->
+                                <div id="panel-flf_veo3" class="hidden flex-1 overflow-y-auto p-4">
+                                    <h3 class="text-xs font-bold text-white mb-2">首尾禎動畫</h3>
+                                    <p class="text-[10px] text-gray-500 mb-4">上傳首禎與尾禎圖片。</p>
+                                    <div class="space-y-3" id="flf-dropzones">
+                                        <div id="zone-first_frame"
+                                            class="upload-zone relative flex flex-col items-center justify-center rounded-xl cursor-pointer bg-black/20 p-3 min-h-[80px]"
+                                            onclick="triggerFLFUpload('first_frame')">
+                                            <input type="file" id="file-first_frame" class="hidden" accept="image/*"
+                                                onchange="handleFLFSelect(event, 'first_frame')" />
+                                            <div id="preview-first_frame" class="hidden absolute inset-0">
+                                                <img src="" alt="Preview"
+                                                    class="w-full h-full object-cover rounded-xl" />
+                                                <button onclick="event.stopPropagation(); clearFLFImage('first_frame')"
+                                                    class="absolute top-1 right-1 p-0.5 bg-black/70 rounded-full hover:bg-red-500/80 z-10">
+                                                    <i data-lucide="x" class="w-3 h-3 text-white"></i>
+                                                </button>
+                                            </div>
+                                            <div id="placeholder-first_frame"
+                                                class="flex flex-col items-center pointer-events-none">
+                                                <i data-lucide="image" class="w-6 h-6 text-purple-400 mb-1"></i>
+                                                <span class="text-xs font-bold text-white">首禎</span>
+                                            </div>
+                                        </div>
+                                        <div class="flex justify-center">
+                                            <i data-lucide="arrow-down" class="w-4 h-4 text-gray-500"></i>
+                                        </div>
+                                        <div id="zone-last_frame"
+                                            class="upload-zone relative flex flex-col items-center justify-center rounded-xl cursor-pointer bg-black/20 p-3 min-h-[80px]"
+                                            onclick="triggerFLFUpload('last_frame')">
+                                            <input type="file" id="file-last_frame" class="hidden" accept="image/*"
+                                                onchange="handleFLFSelect(event, 'last_frame')" />
+                                            <div id="preview-last_frame" class="hidden absolute inset-0">
+                                                <img src="" alt="Preview"
+                                                    class="w-full h-full object-cover rounded-xl" />
+                                                <button onclick="event.stopPropagation(); clearFLFImage('last_frame')"
+                                                    class="absolute top-1 right-1 p-0.5 bg-black/70 rounded-full hover:bg-red-500/80 z-10">
+                                                    <i data-lucide="x" class="w-3 h-3 text-white"></i>
+                                                </button>
+                                            </div>
+                                            <div id="placeholder-last_frame"
+                                                class="flex flex-col items-center pointer-events-none">
+                                                <i data-lucide="image" class="w-6 h-6 text-purple-400 mb-1"></i>
+                                                <span class="text-xs font-bold text-white">尾禎</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Right: Preview Area -->
+                            <div class="flex-1 flex flex-col relative">
+                                <!-- Preview Container -->
+                                <div id="motion-preview" class="flex-1 flex items-center justify-center p-8 relative">
+                                    <!-- Radial Gradient Background -->
+                                    <div class="absolute inset-0 pointer-events-none"
+                                        style="background: radial-gradient(ellipse 60% 50% at 50% 50%, rgba(6, 182, 212, 0.15) 0%, transparent 70%);">
+                                    </div>
+
+                                    <!-- Placeholder -->
+                                    <div id="motion-preview-placeholder" class="text-center relative z-10">
+                                        <div class="w-24 h-24 rounded-full bg-white/5 border border-white/10 mx-auto mb-6 flex items-center justify-center
+                                            shadow-[0_0_40px_rgba(6,182,212,0.2)]">
+                                            <i data-lucide="play" class="w-10 h-10 text-white/40"></i>
+                                        </div>
+                                        <h2 class="text-xl font-bold text-white mb-2">Preview Area</h2>
+                                        <p class="text-sm text-gray-500">Generated video will appear here</p>
+                                    </div>
+
+                                    <!-- Video Player (hidden by default) -->
+                                    <div id="motion-video-wrapper"
+                                        class="hidden absolute inset-4 flex items-center justify-center">
+                                        <video id="motion-video-player" controls
+                                            class="max-w-full max-h-full rounded-2xl shadow-2xl">
+                                            您的瀏覽器不支持視頻播放。
+                                        </video>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Bottom: Video Prompt Bar (Fixed at bottom) -->
+                        <div class="glass-panel border-t border-white/10 p-4">
+                            <div class="max-w-5xl mx-auto">
+                                <!-- Header Row -->
+                                <div class="flex justify-between items-center mb-3">
+                                    <div
+                                        class="text-xs text-gray-400 uppercase font-bold tracking-wider flex items-center gap-2">
+                                        <i data-lucide="sparkles" class="w-3 h-3 text-amber-400"></i>
+                                        VIDEO PROMPT
+                                    </div>
+                                    <button id="toggle-veo3-mode" onclick="toggleVeo3Mode()"
+                                        class="text-xs px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 transition-colors text-gray-400 hover:text-white border border-white/10 flex items-center gap-1.5">
+                                        <i data-lucide="layers" class="w-3 h-3"></i>
+                                        <span id="mode-label">切換至多段模式</span>
                                     </button>
                                 </div>
-                                <div class="space-y-3" id="motion-shots-upload"></div>
-                                <div id="veo3-multi-prompts" class="hidden space-y-2 mt-4">
-                                    <h4 class="text-xs font-bold text-white">Shot Prompts</h4>
-                                </div>
-                            </div>
-                            <!-- Panel: T2V -->
-                            <div id="panel-t2v_veo3" class="hidden">
-                                <h3 class="text-sm font-bold text-white mb-2">文字轉影片</h3>
-                                <p class="text-xs text-gray-500 mb-4">直接輸入描述，無需圖片即可生成影片。</p>
-                                <div class="glass-card rounded-xl p-4 border border-blue-500/20 bg-blue-500/10">
-                                    <div class="flex items-center gap-3">
-                                        <div class="p-2 rounded-lg bg-blue-500/20"><i data-lucide="type"
-                                                class="w-5 h-5 text-blue-300"></i></div>
-                                        <div>
-                                            <div class="text-sm font-bold text-white">純文字模式</div>
-                                            <div class="text-xs text-gray-400">在右側輸入 Prompt 即可生成</div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <!-- Panel: FLF -->
-                            <div id="panel-flf_veo3" class="hidden">
-                                <h3 class="text-sm font-bold text-white mb-2">首尾禎動畫</h3>
-                                <p class="text-xs text-gray-500 mb-4">上傳首禎與尾禎圖片。</p>
-                                <div class="space-y-4" id="flf-dropzones">
-                                    <div id="zone-first_frame"
-                                        class="upload-zone relative flex flex-col items-center justify-center rounded-xl cursor-pointer bg-black/20 p-4 min-h-[100px]"
-                                        onclick="triggerFLFUpload('first_frame')">
-                                        <input type="file" id="file-first_frame" class="hidden" accept="image/*"
-                                            onchange="handleFLFSelect(event, 'first_frame')" />
-                                        <div id="preview-first_frame" class="hidden absolute inset-0">
-                                            <img src="" alt="Preview" class="w-full h-full object-cover rounded-xl" />
-                                            <button onclick="event.stopPropagation(); clearFLFImage('first_frame')"
-                                                class="absolute top-2 right-2 p-1 bg-black/70 rounded-full hover:bg-red-500/80 z-10"><i
-                                                    data-lucide="x" class="w-4 h-4 text-white"></i></button>
-                                        </div>
-                                        <div id="placeholder-first_frame"
-                                            class="flex flex-col items-center pointer-events-none">
-                                            <i data-lucide="image" class="w-8 h-8 text-purple-400 mb-2"></i>
-                                            <span class="text-sm font-bold text-white">首禎</span>
-                                        </div>
-                                    </div>
-                                    <div class="flex justify-center"><i data-lucide="arrow-down"
-                                            class="w-5 h-5 text-gray-500"></i></div>
-                                    <div id="zone-last_frame"
-                                        class="upload-zone relative flex flex-col items-center justify-center rounded-xl cursor-pointer bg-black/20 p-4 min-h-[100px]"
-                                        onclick="triggerFLFUpload('last_frame')">
-                                        <input type="file" id="file-last_frame" class="hidden" accept="image/*"
-                                            onchange="handleFLFSelect(event, 'last_frame')" />
-                                        <div id="preview-last_frame" class="hidden absolute inset-0">
-                                            <img src="" alt="Preview" class="w-full h-full object-cover rounded-xl" />
-                                            <button onclick="event.stopPropagation(); clearFLFImage('last_frame')"
-                                                class="absolute top-2 right-2 p-1 bg-black/70 rounded-full hover:bg-red-500/80 z-10"><i
-                                                    data-lucide="x" class="w-4 h-4 text-white"></i></button>
-                                        </div>
-                                        <div id="placeholder-last_frame"
-                                            class="flex flex-col items-center pointer-events-none">
-                                            <i data-lucide="image" class="w-8 h-8 text-purple-400 mb-2"></i>
-                                            <span class="text-sm font-bold text-white">尾禎</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <!-- Right: Prompt & Preview -->
-                        <div class="flex-1 flex flex-col relative grid-bg">
-                            <div id="motion-preview" class="flex-1 flex items-center justify-center p-8">
-                                <div class="text-center opacity-50">
-                                    <div
-                                        class="w-32 h-32 border-4 border-dashed border-gray-600 rounded-full mx-auto mb-6 flex items-center justify-center">
-                                        <i data-lucide="film" class="w-12 h-12 text-gray-600"></i>
-                                    </div>
-                                    <h2 class="text-2xl font-bold text-gray-400 mb-2">Ready to Generate</h2>
-                                    <p class="text-sm text-gray-500">Upload images and enter prompt</p>
-                                </div>
-                            </div>
-                            <div class="glass-panel p-6">
-                                <div class="max-w-4xl mx-auto flex flex-col gap-4">
-                                    <!-- Mode Toggle Button -->
-                                    <div class="flex justify-between items-center">
-                                        <div class="text-xs text-gray-400 uppercase font-bold tracking-wider flex items-center gap-2">
-                                            <i data-lucide="sparkles" class="w-3 h-3 text-amber-400"></i> Video Prompt
-                                        </div>
-                                        <button id="toggle-veo3-mode" onclick="toggleVeo3Mode()"
-                                            class="text-xs px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 transition-colors text-gray-400 hover:text-white border border-white/10">
-                                            <i data-lucide="layers" class="w-3 h-3 inline-block mr-1"></i>
-                                            <span id="mode-label">切換至多段模式</span>
-                                        </button>
-                                    </div>
-                                    
-                                    <!-- Single Prompt (Default) -->
-                                    <div id="motion-single-prompt" class="flex gap-4">
-                                        <textarea id="motion-prompt-input"
-                                            class="flex-1 custom-input rounded-xl p-4 text-sm resize-none h-16"
-                                            placeholder="Describe your video..."></textarea>
-                                        <button id="btn-motion-generate" type="button" onclick="handleMotionGenerate()"
-                                            class="bg-gradient-to-r from-amber-600 to-orange-600 px-8 rounded-xl font-bold hover:shadow-[0_0_25px_rgba(245,158,11,0.5)] transition-all flex items-center gap-2 border border-white/10">
-                                            <i data-lucide="clapperboard" class="w-5 h-5"></i>
-                                            <span>Generate Video</span>
-                                        </button>
-                                    </div>
-                                    
-                                    <!-- Multi Prompts (Veo3 Long Video) -->
-                                    <div id="motion-multi-prompts" class="hidden flex-col gap-3">
-                                        <div class="text-xs text-gray-400 mb-1">💡 可選填 1-5 個片段，空白片段將自動跳過</div>
-                                        <div class="space-y-2">
-                                            <input type="text" id="veo3-segment-0"
-                                                class="w-full custom-input rounded-lg p-3 text-sm"
-                                                placeholder="Segment 1 (Optional)" />
-                                            <input type="text" id="veo3-segment-1"
-                                                class="w-full custom-input rounded-lg p-3 text-sm"
-                                                placeholder="Segment 2 (Optional)" />
-                                            <input type="text" id="veo3-segment-2"
-                                                class="w-full custom-input rounded-lg p-3 text-sm"
-                                                placeholder="Segment 3 (Optional)" />
-                                            <input type="text" id="veo3-segment-3"
-                                                class="w-full custom-input rounded-lg p-3 text-sm"
-                                                placeholder="Segment 4 (Optional)" />
-                                            <input type="text" id="veo3-segment-4"
-                                                class="w-full custom-input rounded-lg p-3 text-sm"
-                                                placeholder="Segment 5 (Optional)" />
-                                        </div>
-                                        <button id="btn-motion-generate-multi" type="button" onclick="handleMotionGenerate()"
-                                            class="bg-gradient-to-r from-amber-600 to-orange-600 px-8 py-3 rounded-xl font-bold hover:shadow-[0_0_25px_rgba(245,158,11,0.5)] transition-all flex items-center justify-center gap-2 border border-white/10">
-                                            <i data-lucide="sparkles" class="w-5 h-5"></i>
-                                            <span>Generate Long Video</span>
-                                        </button>
-                                    </div>
-                                    
-                                    <div id="motion-status" class="text-sm text-center hidden"></div>
-                                </div>
-                                
-                                <!-- Motion Results Display -->
-                                <div id="motion-results" class="hidden max-w-4xl mx-auto mt-6"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
 
-                <!-- Avatar Workspace -->
-                <!-- Avatar Workspace -->
-                <!-- Avatar Workspace -->
-                <div id="view-avatar" class="hidden">
-                    <!-- Close Button -->
-                    <button onclick="navigateTo('dashboard')"
-                        class="absolute top-6 right-6 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-all z-50">
-                        <i data-lucide="x" class="w-6 h-6 text-white"></i>
-                    </button>
-                    <div class="max-w-4xl mx-auto">
-                        <div class="flex items-center gap-4 mb-8">
-                            <div
-                                class="p-3 rounded-xl bg-gradient-to-r from-emerald-500/20 to-teal-600/20 border border-emerald-500/30">
-                                <i data-lucide="user-circle-2" class="w-8 h-8 text-emerald-400"></i>
-                            </div>
-                            <div>
-                                <h1 class="text-2xl font-bold text-white">Avatar Studio</h1>
-                                <p class="text-gray-400">上傳人像圖片和音訊，生成說話的虛擬人像影片</p>
-                            </div>
-                        </div>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                            <!-- Image Upload -->
-                            <div id="avatar-image-zone"
-                                class="upload-zone rounded-xl p-6 min-h-[200px] flex flex-col items-center justify-center"
-                                onclick="triggerAvatarImageUpload()">
-                                <input type="file" id="avatar-image-input" class="hidden" accept="image/*"
-                                    onchange="handleAvatarImageSelect(event)" />
-                                <div id="avatar-image-preview" class="hidden w-full h-full p-4">
-                                    <img src="" alt="Avatar Preview" class="w-full h-full object-contain rounded-xl" />
-                                    <button onclick="event.stopPropagation(); clearAvatarImage()"
-                                        class="absolute top-2 right-2 p-1 bg-black/70 rounded-full hover:bg-red-500/80 z-10"><i
-                                            data-lucide="x" class="w-4 h-4 text-white"></i></button>
+                                <!-- Single Prompt Mode -->
+                                <div id="motion-single-prompt" class="flex gap-4">
+                                    <textarea id="motion-prompt-input"
+                                        class="flex-1 custom-input rounded-xl p-4 text-sm resize-none h-14"
+                                        placeholder="Describe the camera movement, subject action, or atmosphere..."></textarea>
+                                    <button id="btn-motion-generate" type="button" onclick="handleMotionGenerate()"
+                                        class="bg-gradient-to-r from-amber-600 to-orange-600 px-6 rounded-xl font-bold hover:shadow-[0_0_25px_rgba(245,158,11,0.5)] transition-all flex items-center gap-2 border border-white/10 whitespace-nowrap">
+                                        <i data-lucide="sparkles" class="w-5 h-5"></i>
+                                        <span>Generate</span>
+                                    </button>
                                 </div>
-                                <div id="avatar-image-placeholder" class="flex flex-col items-center">
-                                    <i data-lucide="user" class="w-10 h-10 text-emerald-400 mb-3"></i>
-                                    <span class="text-lg font-bold text-white mb-1">Avatar Image</span>
-                                    <span class="text-sm text-gray-500">Click or Drop</span>
+
+                                <!-- Multi Prompts Mode (Veo3 Long Video) -->
+                                <div id="motion-multi-prompts" class="hidden"
+                                    style="flex-direction: column; gap: 0.75rem;">
+                                    <div class="text-xs text-amber-400 mb-2 flex items-center gap-2">
+                                        <i data-lucide="info" class="w-3 h-3"></i>
+                                        可選填 1-5 個片段，空白片段將自動跳過
+                                    </div>
+                                    <div class="space-y-2">
+                                        <input type="text" id="veo3-segment-0"
+                                            class="w-full custom-input rounded-lg p-3 text-sm"
+                                            placeholder="Segment 1 (Optional)" />
+                                        <input type="text" id="veo3-segment-1"
+                                            class="w-full custom-input rounded-lg p-3 text-sm"
+                                            placeholder="Segment 2 (Optional)" />
+                                        <input type="text" id="veo3-segment-2"
+                                            class="w-full custom-input rounded-lg p-3 text-sm"
+                                            placeholder="Segment 3 (Optional)" />
+                                        <input type="text" id="veo3-segment-3"
+                                            class="w-full custom-input rounded-lg p-3 text-sm"
+                                            placeholder="Segment 4 (Optional)" />
+                                        <input type="text" id="veo3-segment-4"
+                                            class="w-full custom-input rounded-lg p-3 text-sm"
+                                            placeholder="Segment 5 (Optional)" />
+                                    </div>
+                                    <button id="btn-motion-generate-multi" type="button"
+                                        onclick="handleMotionGenerate()"
+                                        class="w-fit bg-gradient-to-r from-amber-600 to-orange-600 px-8 py-3 rounded-xl font-bold hover:shadow-[0_0_25px_rgba(245,158,11,0.5)] transition-all flex items-center gap-2 border border-white/10">
+                                        <i data-lucide="sparkles" class="w-5 h-5"></i>
+                                        <span>Generate Long Video</span>
+                                    </button>
                                 </div>
-                            </div>
-                            <!-- Audio Upload -->
-                            <div id="avatar-audio-zone"
-                                class="upload-zone rounded-xl p-6 min-h-[200px] flex flex-col items-center justify-center"
-                                onclick="triggerAvatarAudioUpload()">
-                                <input type="file" id="avatar-audio-input" class="hidden" accept="audio/*,.wav,.mp3"
-                                    onchange="handleAvatarAudioSelect(event)" />
-                                <div id="avatar-audio-preview" class="hidden flex items-center gap-3">
-                                    <div class="p-3 rounded-lg bg-emerald-500/20"><i data-lucide="music"
-                                            class="w-6 h-6 text-emerald-300"></i></div>
-                                    <span id="avatar-audio-filename" class="text-white font-medium">audio.wav</span>
-                                    <button onclick="event.stopPropagation(); clearAvatarAudio()"
-                                        class="p-1 rounded hover:bg-red-500/50"><i data-lucide="x"
-                                            class="w-4 h-4"></i></button>
-                                </div>
-                                <div id="avatar-audio-placeholder" class="flex flex-col items-center">
-                                    <i data-lucide="mic" class="w-10 h-10 text-emerald-400 mb-3"></i>
-                                    <span class="text-lg font-bold text-white mb-1">Audio File</span>
-                                    <span class="text-sm text-gray-500">WAV or MP3</span>
-                                </div>
+
+                                <!-- Status -->
+                                <div id="motion-status" class="text-sm text-center hidden mt-3"></div>
                             </div>
                         </div>
-                        <!-- Script Input -->
-                        <div class="glass-card rounded-xl p-4 mb-6">
-                            <label class="text-xs font-bold text-gray-500 uppercase mb-2 block">Prompt (Optional)</label>
-                            <textarea id="avatar-prompt-input"
-                                class="w-full custom-input rounded-xl p-4 text-sm resize-none h-20"
-                                placeholder="Describe the avatar behavior or style..."></textarea>
-                        </div>
-                        <!-- Generate Button -->
-                        <button id="avatar-generate-btn" onclick="generateAvatarVideo()"
-                            class="w-full bg-gradient-to-r from-emerald-600 to-teal-600 py-4 rounded-xl font-bold text-lg hover:shadow-[0_0_25px_rgba(16,185,129,0.5)] transition-all flex items-center justify-center gap-3">
-                            <i data-lucide="video" class="w-6 h-6"></i>
-                            <span>Generate Avatar Video</span>
+
+                        <!-- Motion Results Display -->
+                        <div id="motion-results" class="hidden max-w-4xl mx-auto p-6"></div>
+                    </div>
+                    <!-- Avatar Workspace -->
+                    <div id="view-avatar" class="hidden h-full">
+                        <!-- Close Button -->
+                        <button onclick="navigateTo('dashboard')"
+                            class="absolute top-6 right-6 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-all z-50">
+                            <i data-lucide="x" class="w-6 h-6 text-white"></i>
                         </button>
-                        <div id="avatar-status" class="hidden mt-4 p-4 rounded-xl text-center"></div>
-                        <div id="avatar-results" class="hidden mt-6"></div>
-                    </div>
-                </div>
 
-                <!-- Gallery Workspace -->
-                <!-- Gallery Workspace -->
-                <!-- Gallery Workspace -->
-                <div id="view-gallery" class="hidden">
-                    <!-- Close Button -->
-                    <button onclick="navigateTo('dashboard')"
-                        class="absolute top-6 right-6 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-all z-50">
-                        <i data-lucide="x" class="w-6 h-6 text-white"></i>
-                    </button>
-                    <div class="max-w-7xl mx-auto">
-                        <div class="flex items-center justify-between mb-8">
-                            <div>
-                                <h1 class="text-3xl font-bold mb-2 text-white">Personal Gallery</h1>
-                                <p class="text-gray-400">回顧您的創作歷史，重新混音您的作品</p>
+                        <!-- Two-Column Layout: Left Control + Right Preview -->
+                        <div class="flex h-full gap-6 p-6">
+
+                            <!-- Left Panel: Controls (約 40% 寬度) -->
+                            <div class="w-2/5 flex flex-col overflow-y-auto">
+                                <!-- Header -->
+                                <div class="flex items-center gap-4 mb-6">
+                                    <div
+                                        class="p-3 rounded-xl bg-gradient-to-r from-emerald-500/20 to-teal-600/20 border border-emerald-500/30">
+                                        <i data-lucide="user-circle-2" class="w-8 h-8 text-emerald-400"></i>
+                                    </div>
+                                    <div>
+                                        <h1 class="text-2xl font-bold text-white">Avatar Studio</h1>
+                                        <p class="text-gray-400 text-sm">輸入台詞，上傳人像與參考語音</p>
+                                    </div>
+                                </div>
+
+                                <!-- Upload Zones (2 columns) -->
+                                <div class="grid grid-cols-2 gap-4 mb-4">
+                                    <!-- Image Upload -->
+                                    <div id="avatar-image-zone"
+                                        class="upload-zone rounded-xl p-4 min-h-[140px] flex flex-col items-center justify-center relative"
+                                        onclick="triggerAvatarImageUpload()">
+                                        <input type="file" id="avatar-image-input" class="hidden" accept="image/*"
+                                            onchange="handleAvatarImageSelect(event)" />
+                                        <div id="avatar-image-preview" class="hidden absolute inset-0 p-2">
+                                            <img src="" alt="Avatar Preview"
+                                                class="w-full h-full object-cover rounded-lg" />
+                                            <button onclick="event.stopPropagation(); clearAvatarImage()"
+                                                class="absolute top-3 right-3 p-1 bg-black/70 rounded-full hover:bg-red-500/80 z-10">
+                                                <i data-lucide="x" class="w-4 h-4 text-white"></i>
+                                            </button>
+                                        </div>
+                                        <div id="avatar-image-placeholder" class="flex flex-col items-center">
+                                            <i data-lucide="user" class="w-8 h-8 text-emerald-400 mb-2"></i>
+                                            <span class="text-sm font-bold text-white">人像圖片</span>
+                                            <span class="text-xs text-gray-500">PNG / JPG</span>
+                                        </div>
+                                    </div>
+
+                                    <!-- Audio Upload -->
+                                    <div id="avatar-audio-zone"
+                                        class="upload-zone rounded-xl p-4 min-h-[140px] flex flex-col items-center justify-center"
+                                        onclick="triggerAvatarAudioUpload()">
+                                        <input type="file" id="avatar-audio-input" class="hidden"
+                                            accept="audio/*,.wav,.mp3" onchange="handleAvatarAudioSelect(event)" />
+                                        <div id="avatar-audio-preview" class="hidden flex flex-col items-center gap-2">
+                                            <div class="p-2 rounded-lg bg-emerald-500/20">
+                                                <i data-lucide="music" class="w-6 h-6 text-emerald-300"></i>
+                                            </div>
+                                            <span id="avatar-audio-filename"
+                                                class="text-white text-xs font-medium truncate max-w-full px-2">audio.wav</span>
+                                            <button onclick="event.stopPropagation(); clearAvatarAudio()"
+                                                class="p-1 rounded hover:bg-red-500/50 text-gray-400 hover:text-white">
+                                                <i data-lucide="x" class="w-4 h-4"></i>
+                                            </button>
+                                        </div>
+                                        <div id="avatar-audio-placeholder" class="flex flex-col items-center">
+                                            <i data-lucide="mic" class="w-8 h-8 text-emerald-400 mb-2"></i>
+                                            <span class="text-sm font-bold text-white">參考語音</span>
+                                            <span class="text-xs text-gray-500">WAV / MP3</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Script Input (台詞輸入) -->
+                                <div class="glass-card rounded-xl p-4 mb-4 flex-1">
+                                    <label class="text-xs font-bold text-emerald-400 uppercase mb-2 block">
+                                        📝 台詞 Script
+                                        <span class="text-gray-500 normal-case ml-1">(虛擬人要說的話)</span>
+                                    </label>
+                                    <textarea id="avatar-prompt-input"
+                                        class="w-full custom-input rounded-xl p-3 text-sm resize-none h-32" placeholder="輸入虛擬人要說的台詞內容...
+
+例如：
+謝謝你的支持，真的很感動。
+老實講，有時候直播久了會累，
+但看到有人願意花時間、甚至願意支持我，
+那種感覺真的像被補滿能量一樣。"></textarea>
+                                    <p class="text-xs text-gray-500 mt-2">💡 台詞會透過 TTS 語音合成轉為聲音</p>
+                                </div>
+
+                                <!-- Generate Button -->
+                                <button id="avatar-generate-btn" onclick="generateAvatarVideo()"
+                                    class="w-full bg-gradient-to-r from-emerald-600 to-teal-600 py-4 rounded-xl font-bold text-lg hover:shadow-[0_0_25px_rgba(16,185,129,0.5)] transition-all flex items-center justify-center gap-3">
+                                    <i data-lucide="video" class="w-6 h-6"></i>
+                                    <span>生成虛擬人影片</span>
+                                </button>
+
+                                <!-- Status -->
+                                <div id="avatar-status" class="hidden mt-4 p-4 rounded-xl text-center"></div>
                             </div>
-                            <button onclick="loadHistory()"
-                                class="glass-card px-4 py-2 rounded-lg text-sm font-medium hover:bg-white/10 flex items-center gap-2">
-                                <i data-lucide="refresh-cw" class="w-4 h-4"></i>
-                                重新整理
-                            </button>
-                        </div>
-                        <div class="glass-card rounded-xl p-4 mb-6 flex items-center gap-4">
-                            <span class="text-sm text-gray-400">篩選:</span>
-                            <button
-                                class="px-3 py-1 rounded-lg bg-purple-500/20 border border-purple-500/50 text-purple-300 text-sm">全部</button>
-                            <button
-                                class="px-3 py-1 rounded-lg hover:bg-white/5 border border-transparent text-gray-400 text-sm">已完成</button>
-                            <button
-                                class="px-3 py-1 rounded-lg hover:bg-white/5 border border-transparent text-gray-400 text-sm">生成中</button>
-                        </div>
-                        <div id="gallery-grid"
-                            class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                            <div class="col-span-full text-center py-12 text-gray-500">
-                                <i data-lucide="loader" class="w-8 h-8 mx-auto mb-4 animate-spin"></i>
-                                <p>載入歷史記錄中...</p>
+
+                            <!-- Right Panel: Video Preview (約 60% 寬度) -->
+                            <div class="w-3/5 flex flex-col">
+                                <!-- Preview Header -->
+                                <div class="flex items-center justify-between mb-4">
+                                    <div class="flex items-center gap-2">
+                                        <i data-lucide="monitor-play" class="w-5 h-5 text-emerald-400"></i>
+                                        <span class="text-white font-medium">影片預覽</span>
+                                    </div>
+                                    <span id="avatar-preview-status" class="text-xs text-gray-500">等待生成...</span>
+                                </div>
+
+                                <!-- Video Preview Area -->
+                                <div id="avatar-preview-container"
+                                    class="flex-1 glass-card rounded-2xl overflow-hidden flex items-center justify-center relative">
+                                    <!-- Placeholder -->
+                                    <div id="avatar-preview-placeholder"
+                                        class="flex flex-col items-center text-center p-8">
+                                        <div
+                                            class="w-24 h-24 rounded-full bg-emerald-500/10 flex items-center justify-center mb-6">
+                                            <i data-lucide="video" class="w-12 h-12 text-emerald-500/50"></i>
+                                        </div>
+                                        <h3 class="text-xl font-bold text-white mb-2">影片預覽區</h3>
+                                        <p class="text-gray-500 text-sm max-w-xs">
+                                            完成左側設定後點擊「生成虛擬人影片」，<br>
+                                            生成的影片將在此顯示
+                                        </p>
+                                    </div>
+
+                                    <!-- Video Player (hidden by default) -->
+                                    <div id="avatar-video-wrapper" class="hidden absolute inset-0 flex flex-col">
+                                        <video id="avatar-video-player" controls
+                                            class="w-full h-full object-contain bg-black">
+                                            您的瀏覽器不支持視頻播放。
+                                        </video>
+                                        <!-- Video Controls -->
+                                        <div
+                                            class="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent">
+                                            <div class="flex items-center justify-between">
+                                                <span class="text-white text-sm font-medium">生成完成</span>
+                                                <div class="flex gap-2">
+                                                    <a id="avatar-download-btn" href="#" download
+                                                        class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 rounded-lg text-white text-sm font-medium flex items-center gap-2 transition-colors">
+                                                        <i data-lucide="download" class="w-4 h-4"></i>
+                                                        下載影片
+                                                    </a>
+                                                    <button
+                                                        onclick="window.open(document.getElementById('avatar-video-player').src, '_blank')"
+                                                        class="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-white text-sm font-medium flex items-center gap-2 transition-colors">
+                                                        <i data-lucide="external-link" class="w-4 h-4"></i>
+                                                        新視窗
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Hidden legacy results div -->
+                                <div id="avatar-results" class="hidden"></div>
                             </div>
                         </div>
                     </div>
-                </div>
 
+                    <!-- Gallery Workspace -->
+                    <!-- Gallery Workspace -->
+                    <!-- Gallery Workspace -->
+                    <div id="view-gallery" class="hidden">
+                        <!-- Close Button -->
+                        <button onclick="navigateTo('dashboard')"
+                            class="absolute top-6 right-6 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-all z-50">
+                            <i data-lucide="x" class="w-6 h-6 text-white"></i>
+                        </button>
+                        <div class="max-w-7xl mx-auto">
+                            <div class="flex items-center justify-between mb-8">
+                                <div>
+                                    <h1 class="text-3xl font-bold mb-2 text-white">Personal Gallery</h1>
+                                    <p class="text-gray-400">回顧您的創作歷史，重新混音您的作品</p>
+                                </div>
+                                <button onclick="loadHistory()"
+                                    class="glass-card px-4 py-2 rounded-lg text-sm font-medium hover:bg-white/10 flex items-center gap-2">
+                                    <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                                    重新整理
+                                </button>
+                            </div>
+                            <div class="glass-card rounded-xl p-4 mb-6 flex items-center gap-4">
+                                <span class="text-sm text-gray-400">篩選:</span>
+                                <button
+                                    class="px-3 py-1 rounded-lg bg-purple-500/20 border border-purple-500/50 text-purple-300 text-sm">全部</button>
+                                <button
+                                    class="px-3 py-1 rounded-lg hover:bg-white/5 border border-transparent text-gray-400 text-sm">已完成</button>
+                                <button
+                                    class="px-3 py-1 rounded-lg hover:bg-white/5 border border-transparent text-gray-400 text-sm">生成中</button>
+                            </div>
+                            <div id="gallery-grid"
+                                class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                                <div class="col-span-full text-center py-12 text-gray-500">
+                                    <i data-lucide="loader" class="w-8 h-8 mx-auto mb-4 animate-spin"></i>
+                                    <p>載入歷史記錄中...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
             </div>
-        </div>
     </main>
 
     <script>
@@ -1804,21 +1950,35 @@
             const singlePrompt = document.getElementById('motion-single-prompt');
             const multiPrompts = document.getElementById('motion-multi-prompts');
             const toggleBtn = document.getElementById('toggle-veo3-mode');
-            
+
+            console.log('[Video Studio] Toggling mode to:', window.veo3MultiMode ? 'Multi' : 'Single');
+
             if (window.veo3MultiMode) {
                 // Switch to Multi Mode
                 modeLabel.textContent = '切換至單段模式';
-                toggleBtn.querySelector('i').setAttribute('data-lucide', 'layout');
-                singlePrompt.classList.add('hidden');
-                multiPrompts.classList.remove('hidden');
-                multiPrompts.classList.add('flex');
+                if (toggleBtn && toggleBtn.querySelector('i')) {
+                    toggleBtn.querySelector('i').setAttribute('data-lucide', 'layout');
+                }
+                if (singlePrompt) {
+                    singlePrompt.style.display = 'none';
+                }
+                if (multiPrompts) {
+                    multiPrompts.classList.remove('hidden');
+                    multiPrompts.style.display = 'flex';
+                }
             } else {
                 // Switch to Single Mode
                 modeLabel.textContent = '切換至多段模式';
-                toggleBtn.querySelector('i').setAttribute('data-lucide', 'layers');
-                singlePrompt.classList.remove('hidden');
-                multiPrompts.classList.add('hidden');
-                multiPrompts.classList.remove('flex');
+                if (toggleBtn && toggleBtn.querySelector('i')) {
+                    toggleBtn.querySelector('i').setAttribute('data-lucide', 'layers');
+                }
+                if (singlePrompt) {
+                    singlePrompt.style.display = 'flex';
+                }
+                if (multiPrompts) {
+                    multiPrompts.classList.add('hidden');
+                    multiPrompts.style.display = 'none';
+                }
             }
             lucide.createIcons();
         }
@@ -1826,11 +1986,11 @@
         function updateMultiPrompts() {
             const container = document.getElementById('veo3-multi-prompts');
             if (!container) return;
-            
+
             // 清除現有內容（保留標題）
             const existingPrompts = container.querySelectorAll('.shot-prompt-input');
             existingPrompts.forEach(el => el.remove());
-            
+
             // 為有圖片的 shot 添加 prompt 輸入框
             for (let i = 1; i <= 5; i++) {
                 const preview = document.getElementById(`motion-preview-${i}`);
@@ -1886,7 +2046,7 @@
                 preview.classList.remove('hidden');
                 placeholder.classList.add('hidden');
                 zone.classList.add('has-image');
-                
+
                 // 如果是 Multi Mode，更新 prompt 輸入框
                 if (!window.veo3SingleMode) {
                     updateMultiPrompts();
@@ -1942,14 +2102,14 @@
             console.log('[Motion] Generate triggered, currentVideoTool:', currentVideoTool);
             const statusEl = document.getElementById('motion-status');
             const btn = document.getElementById('btn-motion-generate') || document.getElementById('btn-motion-generate-multi');
-            
+
             // 获取 prompt，优先使用 motion-prompt-input
             let prompt = document.getElementById('motion-prompt-input')?.value || '';
-            
+
             statusEl.classList.remove('hidden');
             statusEl.textContent = '正在處理...';
             statusEl.className = 'text-sm text-center text-amber-400';
-            
+
             btn.disabled = true;
             btn.classList.add('opacity-50', 'cursor-not-allowed');
             const originalHTML = btn.innerHTML;
@@ -1961,31 +2121,31 @@
                     images: {},
                     prompt: prompt
                 };
-                
+
                 if (currentVideoTool === 'flf_veo3') {
                     workflow = 'FLF';
                     const firstFrame = document.getElementById('file-first_frame')?.files[0];
                     const lastFrame = document.getElementById('file-last_frame')?.files[0];
-                    
+
                     if (!firstFrame || !lastFrame) {
                         throw new Error('請上傳首尾幀圖片');
                     }
-                    
+
                     // 转换为 Base64
                     payload.images.first_frame = await fileToBase64(firstFrame);
                     payload.images.last_frame = await fileToBase64(lastFrame);
-                    
+
                 } else if (currentVideoTool === 't2v_veo3') {
                     workflow = 'T2V';
-                    
+
                     if (!prompt) {
                         throw new Error('請輸入提示詞');
                     }
-                    
+
                 } else if (currentVideoTool === 'veo3_long_video') {
                     workflow = 'veo3_long_video';
                     const isMultiMode = window.veo3MultiMode || false;
-                    
+
                     if (isMultiMode) {
                         // Multi Mode: 使用 veo3-segment-0 到 veo3-segment-4
                         const prompts = [];
@@ -1995,13 +2155,13 @@
                                 prompts.push(segmentInput.value.trim());
                             }
                         }
-                        
+
                         if (prompts.length > 0) {
                             payload.prompts = prompts;
                             delete payload.prompt;
                         }
                     }
-                    
+
                     // 收集所有上傳的圖片
                     let shotCount = 0;
                     for (let i = 1; i <= 5; i++) {
@@ -2011,11 +2171,11 @@
                             shotCount++;
                         }
                     }
-                    
+
                     if (shotCount === 0) {
                         throw new Error('請至少上傳一個鏡頭');
                     }
-                    
+
                     payload.mode = isMultiMode ? 'multi' : 'single';
                 }
 
@@ -2033,7 +2193,7 @@
                 }
 
                 const data = await response.json();
-                
+
                 if (data.job_id) {
                     statusEl.textContent = '任務已提交，正在生成...';
                     pollMotionStatus(data.job_id, btn, originalHTML);
@@ -2073,11 +2233,25 @@
                     });
                     const data = await response.json();
 
-                    if (data.status === 'finished' && data.result) {
+                    if (data.status === 'finished') {
                         clearInterval(interval);
                         statusEl.textContent = '生成完成！';
                         statusEl.className = 'text-sm text-center text-green-400';
-                        showMotionResult(data.result);
+
+                        // 🔧 修復：後端返回 image_url，需要處理完整路徑
+                        const outputPath = data.image_url || data.output_path || data.result;
+                        if (outputPath) {
+                            let fullVideoUrl = outputPath;
+                            if (!outputPath.startsWith('http')) {
+                                const filename = outputPath.split('/').pop().split('\\').pop();
+                                fullVideoUrl = `${API_URL}/outputs/${filename}`;
+                            }
+                            showMotionResult(fullVideoUrl);
+                        } else {
+                            statusEl.textContent = '⚠️ 生成完成但未返回輸出路徑';
+                            statusEl.className = 'text-sm text-center text-yellow-400';
+                        }
+
                         btn.disabled = false;
                         btn.classList.remove('opacity-50', 'cursor-not-allowed');
                         btn.innerHTML = originalHTML;
@@ -2175,7 +2349,7 @@
             console.log('[Avatar] Generate triggered');
             const statusEl = document.getElementById('avatar-status');
             const btn = document.getElementById('avatar-generate-btn');
-            
+
             if (!avatarImage || !avatarAudio) {
                 statusEl.classList.remove('hidden');
                 statusEl.textContent = '請上傳頭像圖片和音頻文件';
@@ -2186,7 +2360,7 @@
             statusEl.classList.remove('hidden');
             statusEl.textContent = '正在處理...';
             statusEl.className = 'mt-4 p-4 rounded-xl text-center bg-blue-500/10 text-blue-400';
-            
+
             btn.disabled = true;
             btn.classList.add('opacity-50', 'cursor-not-allowed');
             const originalHTML = btn.innerHTML;
@@ -2196,10 +2370,10 @@
                 // 转换文件为 Base64
                 const imageBase64 = await fileToBase64(avatarImage);
                 const audioBase64 = await fileToBase64(avatarAudio);
-                
+
                 // 获取 prompt
                 const prompt = document.getElementById('avatar-prompt-input')?.value || '';
-                
+
                 const payload = {
                     workflow: 'virtual_human',
                     prompt: prompt,
@@ -2221,7 +2395,7 @@
                 }
 
                 const data = await response.json();
-                
+
                 if (data.job_id) {
                     statusEl.textContent = '任務已提交，正在生成...';
                     pollAvatarStatus(data.job_id, btn, originalHTML);
@@ -2261,11 +2435,26 @@
                     });
                     const data = await response.json();
 
-                    if (data.status === 'finished' && data.result) {
+                    if (data.status === 'finished') {
                         clearInterval(interval);
                         statusEl.textContent = '生成完成！';
                         statusEl.className = 'mt-4 p-4 rounded-xl text-center bg-green-500/10 text-green-400';
-                        showAvatarResult(data.result);
+
+                        // 🔧 修復：後端返回 image_url，需要處理完整路徑
+                        const outputPath = data.image_url || data.output_path || data.result;
+                        if (outputPath) {
+                            // 處理路徑：如果是相對路徑，加上 API_URL 前綴
+                            let fullVideoUrl = outputPath;
+                            if (!outputPath.startsWith('http')) {
+                                const filename = outputPath.split('/').pop().split('\\').pop();
+                                fullVideoUrl = `${API_URL}/outputs/${filename}`;
+                            }
+                            showAvatarResult(fullVideoUrl);
+                        } else {
+                            statusEl.textContent = '⚠️ 生成完成但未返回輸出路徑';
+                            statusEl.className = 'mt-4 p-4 rounded-xl text-center bg-yellow-500/10 text-yellow-400';
+                        }
+
                         btn.disabled = false;
                         btn.classList.remove('opacity-50', 'cursor-not-allowed');
                         btn.innerHTML = originalHTML;
@@ -2288,18 +2477,56 @@
         }
 
         function showAvatarResult(videoUrl) {
+            // 更新右側預覽區狀態
+            const previewStatus = document.getElementById('avatar-preview-status');
+            if (previewStatus) {
+                previewStatus.textContent = '✅ 生成完成';
+                previewStatus.className = 'text-xs text-emerald-400';
+            }
+
+            // 隱藏 placeholder，顯示 video wrapper
+            const placeholder = document.getElementById('avatar-preview-placeholder');
+            const videoWrapper = document.getElementById('avatar-video-wrapper');
+            const videoPlayer = document.getElementById('avatar-video-player');
+            const downloadBtn = document.getElementById('avatar-download-btn');
+
+            if (placeholder) placeholder.classList.add('hidden');
+            if (videoWrapper) videoWrapper.classList.remove('hidden');
+
+            // 設置影片來源
+            if (videoPlayer) {
+                videoPlayer.src = videoUrl;
+                videoPlayer.load();
+            }
+
+            // 設置下載連結
+            if (downloadBtn) {
+                downloadBtn.href = videoUrl;
+                // 從 URL 提取檔名
+                const filename = videoUrl.split('/').pop().split('\\').pop() || 'avatar_video.mp4';
+                downloadBtn.download = filename;
+            }
+
+            // 更新 Lucide icons
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
+            }
+
+            // 兼容舊版：同時更新 legacy results div
             const resultsDiv = document.getElementById('avatar-results');
-            resultsDiv.classList.remove('hidden');
-            resultsDiv.innerHTML = `
-                <div class="glass-card rounded-xl p-4">
-                    <video controls class="w-full rounded-xl mb-4" src="${videoUrl}">
-                        您的瀏覽器不支持視頻播放。
-                    </video>
-                    <a href="${videoUrl}" download class="block w-full px-4 py-2 bg-emerald-600 hover:bg-emerald-700 rounded-xl text-center transition-colors">
-                        下載視頻
-                    </a>
-                </div>
-            `;
+            if (resultsDiv) {
+                resultsDiv.classList.remove('hidden');
+                resultsDiv.innerHTML = `
+                    <div class="glass-card rounded-xl p-4">
+                        <video controls class="w-full rounded-xl mb-4" src="${videoUrl}">
+                            您的瀏覽器不支持視頻播放。
+                        </video>
+                        <a href="${videoUrl}" download class="block w-full px-4 py-2 bg-emerald-600 hover:bg-emerald-700 rounded-xl text-center transition-colors">
+                            下載視頻
+                        </a>
+                    </div>
+                `;
+            }
         }
 
         // ==========================================
@@ -2345,7 +2572,7 @@
         // ==========================================
         // Generate 功能 - 核心 API 通訊
         // ==========================================
-        
+
         // 工具輪詢間隔管理
         const toolPollingIntervals = {};
 

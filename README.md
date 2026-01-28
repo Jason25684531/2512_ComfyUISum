@@ -437,15 +437,17 @@ curl http://localhost:5000/api/health
 
 ```
 ComfyUISum/
-├── shared/                     # 共用模組 (核心 - 2026-01-21 確認)
+├── shared/                     # 共用模組 (核心 - Phase 10 優化)
 │   ├── __init__.py            # 模組導出 (18 個配置項)
-│   ├── utils.py               # load_env(), get_project_root(), setup_logger(), JobLogAdapter
+│   ├── utils.py               # load_env(), get_project_root(), setup_logger(), 
+│   │                          # JobLogAdapter, get_redis_client() ⭐ 新增統一 Redis 連接
 │   ├── config_base.py         # 共用配置 (Redis, DB, Storage, ComfyUI)
 │   └── database.py            # Database 類 + ORM 模型 (User, Job) - 558 行
 │
 ├── backend/                    # Flask 後端服務
 │   ├── src/
-│   │   ├── app.py             # 主應用 (1447 行, API + 靜態服務 + 會員系統)
+│   │   ├── app.py             # 主應用 (1318 行, API + 靜態服務 + 會員系統)
+│   │   │                      # ⭐ 已使用 shared.utils.get_redis_client()
 │   │   └── config.py          # 配置管理 (繼承 shared.config_base)
 │   ├── Readme/                # 文檔目錄
 │   │   ├── README.md          # Backend 使用指南
@@ -454,7 +456,8 @@ ComfyUISum/
 │
 ├── worker/                     # 任務處理器
 │   ├── src/
-│   │   ├── main.py            # Worker 主邏輯 (743 行)
+│   │   ├── main.py            # Worker 主邏輯 (723 行)
+│   │   │                      # ⭐ 已使用 shared.utils.get_redis_client()
 │   │   ├── json_parser.py     # Workflow 解析 (631 行)
 │   │   ├── comfy_client.py    # ComfyUI 客戶端 (525 行)
 │   │   ├── check_comfy_connection.py  # 連線檢查工具
@@ -465,10 +468,12 @@ ComfyUISum/
 │   ├── index.html             # 主頁面 (SPA + 會員狀態切換) - 157KB
 │   ├── login.html             # 登入/註冊頁面 (會員系統) - 18KB
 │   ├── profile.html           # 會員中心 - 28KB
-│   ├── dashboard.html         # 儀表板 - 158KB
-│   ├── motion-workspace.js    # Video Studio 邏輯 - 29KB
+│   ├── dashboard.html         # 儀表板 (Phase 9 整合完成) - 158KB
+│   ├── motion-workspace.js    # Video Studio 邏輯 - 696 行
+│   ├── image-utils.js         # ⭐ 新增統一圖片處理模組 - 220 行
 │   ├── style.css              # 擴展樣式
-│   └── config.js              # API 配置 (自動生成)
+│   ├── config.js              # API 配置 (自動生成)
+│   └── NAVIGATION_FLOW.md     # 導航流程文檔
 │
 ├── ComfyUIworkflow/           # Workflow 模板
 │   ├── config.json            # Workflow 配置映射 (含 image_map)
@@ -478,10 +483,20 @@ ComfyUISum/
 │   ├── face_swap_*.json       # 人臉替換
 │   ├── multi_image_blend_*.json  # 圖片混合
 │   ├── single_image_edit_*.json  # 單圖編輯
-│   └── sketch_to_image_*.json    # 草圖轉圖像
+│   ├── sketch_to_image_*.json    # 草圖轉圖像
+│   └── InfiniteTalk_IndexTTS_2.json  # 虛擬人說話
+│
+├── openspec/                   # ⭐ OpenSpec 規格文件系統 (Phase 10 新增)
+│   ├── AGENTS.md              # OpenSpec 代理指南
+│   ├── project.md             # 專案概述
+│   ├── specs/                 # 規格文件目錄
+│   │   └── 001-stability-refactor.md  # 穩定性重構規格
+│   └── changes/               # 變更提案目錄
+│       └── Stability Refactor/
+│           └── Stability Refactor.md  # 穩定性重構任務
 │
 ├── docs/                       # 文檔目錄 (6 個檔案)
-│   ├── UpdateList.md          # 詳細更新日誌 (2500+ 行)
+│   ├── UpdateList.md          # 詳細更新日誌 (2900+ 行, Phase 10 更新)
 │   ├── HYBRID_DEPLOYMENT_STRATEGY.md  # 混合部署策略指南
 │   ├── Phase8C_Monitoring_Guide.md    # 監控指南
 │   ├── Phase9_Completion_Report.md    # Phase 9 完成報告
@@ -1181,12 +1196,34 @@ curl http://localhost:5000/api/metrics
 ---
 ## 📝 更新日誌
 
-### Architecture Review - 2026-01-21 ⭐ 最新
-- ✅ 全面架構複審與確認
-- ✅ 確認無重複代碼、無髒 code
-- ✅ 所有核心函式唯一存在
-- ✅ 配置繼承正確無誤
+### Phase 12 - 架構審查與代碼清理 (2026-01-28) ⭐ 最新
+- ✅ 執行 OpenSpec Apply 工作流程
+- ✅ 全面審查 Backend、Worker、Shared、Frontend 代碼
+- ✅ 確認無核心代碼重複（共用函式統一位於 `shared/` 模組）
+- ✅ 識別冗餘備份檔案（`dashboard_Backup.html`, `dashboard_v2.html`）
+- ✅ Docker Compose 文件分析（三個配置各有用途，非重複）
+- ✅ 代碼品質評估：整潔性 5/5、可擴展性 5/5、可維護性 5/5
 - ✅ 更新 UpdateList.md 與 README.md
+
+### Phase 11 - Video Studio Layout 重設計 (2026-01-28)
+- ✅ Video Studio 三欄布局重新設計
+- ✅ 左側面板垂直排列 Multi-Shot 上傳區
+- ✅ 中央預覽區域擴大
+- ✅ 底部固定 Video Prompt 欄
+
+### Phase 10 - Architecture Refactoring & OpenSpec Standardization (2026-01-28)
+- ✅ OpenSpec 規格文件系統建立 (specs/001-stability-refactor.md)
+- ✅ 代碼合併優化：
+  - Redis 連接邏輯統一化 (shared/utils.py::get_redis_client)
+  - 前端圖片處理模組化 (frontend/image-utils.js)
+- ✅ 架構分析與技術債務記錄
+- ✅ 穩定性問題規範化 (Backend Race Condition + Frontend State Pollution)
+
+### Phase 9 - Dashboard Integration & UI Upgrade (2026-01-27)
+- ✅ Dashboard 完整功能整合 (dashboard_v2.html → dashboard.html)
+- ✅ Neon 標題效果與 Glassmorphism 樣式統一
+- ✅ 四大工作區實作 (Image Composition, Video Studio, Avatar Studio, Gallery)
+- ✅ 全域狀態管理與工具選單控制邏輯
 
 ### Member System Beta - 2026-01-20
 - ✅ 會員認證系統 (Flask-Login + Bcrypt)
@@ -1203,10 +1240,15 @@ curl http://localhost:5000/api/metrics
 - ✅ 前端 Image Composition 多工具狀態管理
 - ✅ UI 閃爍問題修復
 
-### Video Studio Integration (2026-01-15)
-- ✅ 三種影片工作流整合
+### Phase 8C - Config-Driven Parser & Structured Logging (2026-01-22)
 - ✅ Config-Driven Parser (image_map)
-- ✅ Structured Logging 系統
+- ✅ 雙通道結構化日誌系統 (Console 彩色 + JSON File)
+- ✅ Worker/Backend 日誌系統統一化
+
+### Video Studio Integration (2026-01-15)
+- ✅ 三種影片工作流整合 (Veo3 Long Video, T2V, FLF)
+- ✅ Multi-Shot 與 First-Last Frame 圖片上傳
+- ✅ Video Tool 選擇器 Overlay
 
 ### Phase 6 - Security & Monitoring (2026-01-06)
 - ✅ Rate Limiting
@@ -1249,8 +1291,10 @@ curl http://localhost:5000/api/metrics
 
 ### 文檔資源
 - [README.md](README.md) - 項目完整文檔（本文件）
-- [NGROK_SETUP.md](NGROK_SETUP.md) - Ngrok 詳細指南
-- [UpdateList.md](UpdateList.md) - 更新日誌
+- [BEST_PRACTICES.md](frontend/BEST_PRACTICES.md) - **前端最佳實踐指南** ⭐ 新增
+- [UpdateList.md](docs/UpdateList.md) - 更新日誌
+- [Stability Refactor Spec](openspec/specs/001-stability-refactor.md) - 穩定性重構規格文件
+- [Stability Refactor Validation Guide](docs/Stability_Refactor_Validation_Guide.md) - 驗證測試指南
 - [API_TESTING.md](backend/Readme/API_TESTING.md) - API 測試指南
 
 ### 獲取幫助

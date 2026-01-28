@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 # ==========================================
 # Phase 8C: 使用新的結構化日誌系統
 # ==========================================
-from shared.utils import load_env, setup_logger, JobLogAdapter
+from shared.utils import load_env, setup_logger, JobLogAdapter, get_redis_client
 
 load_env()
 
@@ -46,18 +46,6 @@ from config import (
 from shared.config_base import (
     DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
 )
-
-
-def get_redis_client() -> redis.Redis:
-    """
-    建立 Redis 連接
-    """
-    return redis.Redis(
-        host=REDIS_HOST,
-        port=REDIS_PORT,
-        password=REDIS_PASSWORD,
-        decode_responses=True
-    )
 
 
 def save_base64_image(base64_data: str, job_id: str, field_name: str) -> str:

@@ -9,6 +9,7 @@ import uuid
 import logging
 import threading
 import time
+import base64  # <--- 🟢 請補上這一行！
 from logging.handlers import RotatingFileHandler
 from datetime import datetime
 from pathlib import Path
@@ -207,19 +208,14 @@ def load_user(user_id):
 # Redis Connection Setup
 # ============================================
 try:
-    redis_client = Redis(
-        host=REDIS_HOST, 
-        port=REDIS_PORT, 
-        password=REDIS_PASSWORD,
-        decode_responses=True
-    )
-    redis_client.ping()
+    from shared.utils import get_redis_client
+    redis_client = get_redis_client(decode_responses=True)
     logger.info(f"✓ Redis 连接成功: {REDIS_HOST}:{REDIS_PORT}")
     
     # 配置 Limiter 使用 Redis
     limiter.storage_uri = f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/1"
     
-except RedisError as e:
+except Exception as e:
     logger.error(f"✗ Redis 连接失败: {e}")
     redis_client = None
 
@@ -658,6 +654,9 @@ def generate():
     POST /api/generate
     接收生成请求并将任务推送到 Redis 队列
     
+    ⭐ Phase 10: 實作嚴格事務響應 (Strict Transactional Response)
+    流程: Start Transaction → Insert DB → Flush → Push Redis → Commit → Return 200
+    
     Request Body:
     {
         "prompt": "a cyberpunk cat",
@@ -671,6 +670,7 @@ def generate():
         "status": "queued"
     }
     """
+    session = None
     try:
         # 1. 验证请求数据
         data = request.get_json()
@@ -701,7 +701,40 @@ def generate():
         if workflow == 'text_to_image' and not prompt:
             logger.warning("text_to_image 的 prompt 参数为空")
             return jsonify({'error': 'prompt is required for text_to_image'}), 400
-        
+        # =====================================================
+        # 這裡會檢查 data['audio'] 是否為 Base64 字串
+        # 如果是，就轉存成檔案，並把 data['audio'] 替換成檔名
+        # 這樣後面的 job_data 就會拿到檔名，而不是超長的字串
+        # =====================================================
+        audio_val = data.get('audio', '')
+        if audio_val and isinstance(audio_val, str) and audio_val.startswith('data:audio'):
+            try:
+                # 1. 解析 Base64 Header
+                header, encoded = audio_val.split(",", 1)
+                
+                # 2. 判斷副檔名
+                file_ext = '.wav'  # 預設
+                if 'audio/mpeg' in header:
+                    file_ext = '.mp3'
+                elif 'audio/wav' in header:
+                    file_ext = '.wav'
+                
+                # 3. 生成音訊檔專用的唯一檔名 (這不會影響下面的 job_id)
+                audio_filename = f"audio_{uuid.uuid4().hex[:12]}{file_ext}"
+                save_path = UPLOAD_FOLDER / audio_filename
+                
+                # 4. 存檔
+                with open(save_path, "wb") as f:
+                    f.write(base64.b64decode(encoded))
+                
+                logger.info(f"✓ Base64 音訊已自動轉存: {audio_filename}")
+                
+                # 5. 【關鍵】將變數替換為檔名，這樣寫入 DB 時就不會過長了
+                data['audio'] = audio_filename 
+                
+            except Exception as e:
+                logger.error(f"❌ Base64 音訊解碼失敗: {e}")
+                return jsonify({'error': 'Invalid base64 audio data'}), 400
         # 2. 生成唯一的 job_id
         job_id = str(uuid.uuid4())
         
@@ -720,56 +753,98 @@ def generate():
             'created_at': datetime.now().isoformat()
         }
         
-        # 4. 推送到 Redis 队列
+        # ===== Phase 10: 嚴格事務處理開始 =====
+        # 4. 檢查 Redis 可用性
         if redis_client is None:
             logger.error("Redis 客户端未初始化")
             return jsonify({'error': 'Redis service unavailable'}), 503
         
-        redis_client.rpush(REDIS_QUEUE_NAME, json.dumps(job_data))
-        logger.info(f"✓ 任务已推送到队列: job_id={job_id}, prompt='{prompt}'")
+        # 5. 開始資料庫事務 (使用 SQLAlchemy Session)
+        session = get_db_session()
         
-        # 5. 初始化状态 Hash
-        status_key = f"job:status:{job_id}"
-        redis_client.hset(status_key, mapping={
-            'job_id': job_id,
-            'status': 'queued',
-            'progress': 0,
-            'image_url': '',
-            'error': '',
-            'updated_at': datetime.now().isoformat()
-        })
-        redis_client.expire(status_key, 86400)  # 24小时过期
-        
-        # 6. 寫入資料庫 (如果資料庫可用)
-        if db_client:
+        try:
             # Member System: 獲取當前用戶 ID（如已登入）
             user_id_for_job = None
             if current_user.is_authenticated:
                 user_id_for_job = current_user.id
             
-            db_client.insert_job(
-                job_id=job_id,
+            # 6. 建立 Job 物件並加入 Session
+            from shared.database import Job
+            new_job = Job(
+                id=job_id,
+                user_id=user_id_for_job,
                 prompt=prompt,
-                workflow=workflow,
+                workflow_name=workflow,
+                workflow_data=job_data,
                 model=job_data.get('model', 'turbo_fp8'),
                 aspect_ratio=job_data.get('aspect_ratio', '1:1'),
                 batch_size=job_data.get('batch_size', 1),
                 seed=job_data.get('seed', -1),
                 status='queued',
-                input_audio_path=job_data.get('audio', None),
-                user_id=user_id_for_job,
-                workflow_data=job_data  # 保存完整任務資料
+                input_audio_path=job_data.get('audio', None)
             )
+            session.add(new_job)
+            
+            # 7. Flush：強制寫入資料庫但不提交事務
+            session.flush()
+            logger.info(f"✓ Job {job_id} 已寫入資料庫 (未提交)")
+            
+            # 8. 推送到 Redis 佇列
+            redis_client.rpush(REDIS_QUEUE_NAME, json.dumps(job_data))
+            logger.info(f"✓ Job {job_id} 已推送至 Redis")
+            
+            # 9. 初始化 Redis 狀態 Hash
+            status_key = f"job:status:{job_id}"
+            redis_client.hset(status_key, mapping={
+                'job_id': job_id,
+                'status': 'queued',
+                'progress': 0,
+                'image_url': '',
+                'error': '',
+                'updated_at': datetime.now().isoformat()
+            })
+            redis_client.expire(status_key, 86400)  # 24小时过期
+            logger.info(f"✓ Job {job_id} Redis 狀態已初始化")
+            
+            # 10. 提交事務
+            session.commit()
+            logger.info(f"✓ Job {job_id} 事務已提交")
+            
+            # 11. 返回成功响应 (只有在事務提交成功後才返回)
+            return jsonify({
+                'job_id': job_id,
+                'status': 'queued',
+                'message': '任務已成功提交'
+            }), 200
+            
+        except RedisError as redis_err:
+            # Redis 失敗：回滾資料庫
+            session.rollback()
+            logger.error(f"❌ Redis Push 失敗，已回滾資料庫: {redis_err}")
+            return jsonify({
+                'error': '任務佇列異常，請稍後再試',
+                'details': str(redis_err)
+            }), 500
+            
+        except Exception as db_err:
+            # 資料庫錯誤：回滾
+            session.rollback()
+            logger.error(f"❌ 資料庫操作失敗: {db_err}", exc_info=True)
+            return jsonify({
+                'error': '任務建立失敗',
+                'details': str(db_err)
+            }), 500
         
-        # 7. 返回成功响应
-        return jsonify({
-            'job_id': job_id,
-            'status': 'queued'
-        }), 202
+        # ===== Phase 10: 嚴格事務處理結束 =====
     
     except Exception as e:
         logger.error(f"✗ generate 接口异常: {e}", exc_info=True)
         return jsonify({'error': 'Internal server error'}), 500
+    
+    finally:
+        # 確保 Session 關閉
+        if session:
+            session.close()
 
 
 @app.route('/api/status/<job_id>', methods=['GET'])
@@ -778,6 +853,9 @@ def status(job_id):
     """
     GET /api/status/<job_id>
     查询任务状态
+    
+    ⭐ Phase 10: 增強查詢邏輯 - 優先 Redis，回退至資料庫
+    流程: Redis (活動任務) → Database (歷史任務) → 404
     
     Response:
     {
@@ -789,32 +867,68 @@ def status(job_id):
     }
     """
     try:
-        if redis_client is None:
-            logger.error("Redis 客户端未初始化")
-            return jsonify({'error': 'Redis service unavailable'}), 503
+        # 1. 優先從 Redis 讀取狀態 (活動任務)
+        if redis_client:
+            status_key = f"job:status:{job_id}"
+            job_status = redis_client.hgetall(status_key)
+            
+            if job_status:
+                # Redis 中找到任務，同步到資料庫（如果已完成）
+                current_status = job_status.get('status', 'unknown')
+                if db_client and current_status in ['finished', 'failed', 'cancelled']:
+                    output_path = job_status.get('image_url', '')
+                    db_client.update_job_status(job_id, current_status, output_path)
+                
+                # 返回 Redis 中的狀態
+                return jsonify({
+                    'job_id': job_status.get('job_id', job_id),
+                    'status': current_status,
+                    'progress': int(job_status.get('progress', 0)),
+                    'image_url': job_status.get('image_url', ''),
+                    'error': job_status.get('error', ''),
+                    'source': 'redis'  # 標記數據來源
+                }), 200
         
-        # 从 Redis 读取状态
-        status_key = f"job:status:{job_id}"
-        job_status = redis_client.hgetall(status_key)
+        # 2. Redis 中沒找到，查詢資料庫 (歷史任務或 Redis 過期)
+        if db_client:
+            session = get_db_session()
+            try:
+                from shared.database import Job
+                
+                # 查詢資料庫中的任務記錄
+                job = session.query(Job).filter_by(id=job_id).first()
+                
+                if job:
+                    # 從資料庫恢復狀態
+                    logger.info(f"✓ 從資料庫恢復任務狀態: {job_id} (status={job.status})")
+                    
+                    # 處理 output_path 轉換為 image_url 格式
+                    image_url = ''
+                    if job.status == 'finished':
+                        # 從 Job ID 推導輸出檔案路徑 (根據實際儲存邏輯)
+                        # 假設格式為: {job_id}_0.png
+                        image_url = f"/outputs/{job_id}_0.png"
+                    
+                    return jsonify({
+                        'job_id': job.id,
+                        'status': job.status,
+                        'progress': 100 if job.status == 'finished' else 0,
+                        'image_url': image_url,
+                        'error': '',
+                        'source': 'database',  # 標記數據來源
+                        'created_at': job.created_at.isoformat() if job.created_at else None
+                    }), 200
+                    
+            finally:
+                session.close()
         
-        if not job_status:
-            logger.warning(f"任务不存在: job_id={job_id}")
-            return jsonify({'error': 'Job not found'}), 404
-        
-        # 如果任務已完成且資料庫可用，同步狀態到資料庫
-        current_status = job_status.get('status', 'unknown')
-        if db_client and current_status in ['finished', 'failed', 'cancelled']:
-            output_path = job_status.get('image_url', '')
-            db_client.update_job_status(job_id, current_status, output_path)
-        
-        # 返回状态信息
+        # 3. Redis 和資料庫都沒找到，返回 404
+        logger.warning(f"任務不存在: job_id={job_id} (Redis 和資料庫均未找到)")
         return jsonify({
-            'job_id': job_status.get('job_id', job_id),
-            'status': job_status.get('status', 'unknown'),
-            'progress': int(job_status.get('progress', 0)),
-            'image_url': job_status.get('image_url', ''),
-            'error': job_status.get('error', '')
-        }), 200
+            'error': 'Job not found',
+            'job_id': job_id,
+            'message': '任務不存在或已被刪除'
+        }), 404
     
     except Exception as e:
         logger.error(f"✗ status 接口异常: {e}", exc_info=True)

@@ -171,3 +171,39 @@ def setup_logger(service_name: str, log_level: int = logging.INFO) -> logging.Lo
     logger.info(f"  - File: {log_file} (JSON Lines, 午夜輪換)")
     
     return logger
+
+
+# ==========================================
+# Phase 10: Redis Connection Utility
+# ==========================================
+
+def get_redis_client(decode_responses: bool = True):
+    """
+    取得 Redis 客戶端連接 (統一介面，避免重複代碼)
+    
+    Args:
+        decode_responses: 是否自動解碼響應為字串 (預設 True)
+    
+    Returns:
+        Redis 客戶端實例
+        
+    Raises:
+        Exception: 連接失敗時拋出異常
+    """
+    from redis import Redis
+    from shared.config_base import REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
+    
+    try:
+        client = Redis(
+            host=REDIS_HOST,
+            port=REDIS_PORT,
+            password=REDIS_PASSWORD,
+            decode_responses=decode_responses,
+            socket_connect_timeout=5,
+            socket_keepalive=True
+        )
+        # 測試連接
+        client.ping()
+        return client
+    except Exception as e:
+        raise Exception(f"Redis 連接失敗 ({REDIS_HOST}:{REDIS_PORT}): {e}")

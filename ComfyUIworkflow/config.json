@@ -14,11 +14,13 @@
     "description": "InfiniteTalk 虛擬人說話 (IndexTTS)",
     "category": "avatar",
     "mapping": {
-      "prompt_text_node_id": "312",
+      "text_node_id": "312",
       "seed_node_id": "312",
-      "output_node_id": "320",
-      "input_audio_node_id": "311",
-      "input_image_node_id": "284"
+      "output_node_id": "131",
+      "audio_node_id": "311"
+    },
+    "image_map": {
+      "avatar": "284"
     }
   },
   "image_edit": {

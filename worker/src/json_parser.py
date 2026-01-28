@@ -355,6 +355,29 @@ def parse_workflow(
     print(f"[Parser] 解析度: {width}x{height}, Seed: {seed}, Model: {model}")
     
     # ==========================================
+    # 特殊處理: virtual_human 台詞注入 (IndexTTS2BaseNode)
+    # 從 config.json 讀取 text_node_id，注入到 inputs.text
+    # ==========================================
+    if workflow_name == "virtual_human" and prompt:
+        text_node_id = workflow_config.get('mapping', {}).get('text_node_id')
+        if text_node_id and text_node_id in workflow:
+            node = workflow[text_node_id]
+            if 'inputs' in node and 'text' in node['inputs']:
+                node['inputs']['text'] = prompt
+                print(f"[Parser] 🎤 virtual_human: 注入台詞到 Node {text_node_id} (IndexTTS2BaseNode)")
+                print(f"[Parser] 📝 台詞內容: {prompt[:100] if len(prompt) > 100 else prompt}...")
+            else:
+                print(f"[Parser] ⚠️ Node {text_node_id} 沒有 inputs.text 欄位")
+        else:
+            # Fallback: 直接查找 IndexTTS2BaseNode
+            tts_nodes = find_nodes_by_class(workflow, "IndexTTS2BaseNode")
+            if tts_nodes:
+                node_id, node = tts_nodes[0]
+                if 'inputs' in node and 'text' in node['inputs']:
+                    node['inputs']['text'] = prompt
+                    print(f"[Parser] 🎤 virtual_human: 注入台詞到 IndexTTS2BaseNode 節點 {node_id} (fallback)")
+    
+    # ==========================================
     # 注入 Prompt (支援多種節點類型)
     # ==========================================
     prompt_injected = False
@@ -599,26 +622,47 @@ def parse_workflow(
     
     # ==========================================
     # 注入音訊 (LoadAudio 節點) - Phase 7 新增
+    # 優先從 config.json 讀取 audio_node_id
     # ==========================================
-    audio_config = AUDIO_NODE_MAP.get(workflow_name)
+    audio_injected = False
     
-    if audio_config and audio_file:
-        node_id = audio_config.get("node_id")
-        input_key = audio_config.get("input_key", "audio")
-        
-        if node_id and node_id in workflow:
-            node = workflow[node_id]
+    # 優先策略: 從 config.json 讀取 audio_node_id
+    audio_node_id = workflow_config.get('mapping', {}).get('audio_node_id')
+    if audio_node_id and audio_file:
+        if audio_node_id in workflow:
+            node = workflow[audio_node_id]
             if "inputs" in node:
-                old_audio = node["inputs"].get(input_key, "")
-                node["inputs"][input_key] = audio_file
-                print(f"[Parser] 🎵 Injecting audio file: {audio_file} into node {node_id}")
-                print(f"[Parser] ✅ 音訊節點 {node_id}: {old_audio!r} -> {audio_file!r}")
+                old_audio = node["inputs"].get("audio", "")
+                node["inputs"]["audio"] = audio_file
+                print(f"[Parser] 🎵 Config: 音訊注入到 Node {audio_node_id}")
+                print(f"[Parser] ✅ 音訊節點 {audio_node_id}: {old_audio!r} -> {audio_file!r}")
+                audio_injected = True
             else:
-                print(f"[Parser] ⚠️ 音訊節點 {node_id} 沒有 inputs")
-        elif node_id:
-            print(f"[Parser] ⚠️ 找不到音訊節點 {node_id}")
-    elif audio_config and not audio_file:
-        print(f"[Parser] ℹ️ 工作流 {workflow_name} 支援音訊注入，但未提供音訊檔案，使用預設值")
+                print(f"[Parser] ⚠️ 音訊節點 {audio_node_id} 沒有 inputs")
+        else:
+            print(f"[Parser] ⚠️ 找不到音訊節點 {audio_node_id}")
+    
+    # Fallback 策略: 使用 AUDIO_NODE_MAP
+    if not audio_injected:
+        audio_config = AUDIO_NODE_MAP.get(workflow_name)
+        
+        if audio_config and audio_file:
+            node_id = audio_config.get("node_id")
+            input_key = audio_config.get("input_key", "audio")
+            
+            if node_id and node_id in workflow:
+                node = workflow[node_id]
+                if "inputs" in node:
+                    old_audio = node["inputs"].get(input_key, "")
+                    node["inputs"][input_key] = audio_file
+                    print(f"[Parser] 🎵 Fallback: Injecting audio file: {audio_file} into node {node_id}")
+                    print(f"[Parser] ✅ 音訊節點 {node_id}: {old_audio!r} -> {audio_file!r}")
+                else:
+                    print(f"[Parser] ⚠️ 音訊節點 {node_id} 沒有 inputs")
+            elif node_id:
+                print(f"[Parser] ⚠️ 找不到音訊節點 {node_id}")
+        elif audio_config and not audio_file:
+            print(f"[Parser] ℹ️ 工作流 {workflow_name} 支援音訊注入，但未提供音訊檔案，使用預設值")
     
     return workflow
 
