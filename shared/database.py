@@ -51,9 +51,10 @@ def get_db_engine(db_url: Optional[str] = None):
         
         _engine = create_engine(
             db_url,
-            pool_size=5,
-            max_overflow=10,
+            pool_size=20,            # Phase 7: 增加至 20 (適應 50 並發)
+            max_overflow=30,         # Phase 7: 峰值可達 50 連接
             pool_recycle=3600,
+            pool_pre_ping=True,      # Phase 7: 連接前先檢查有效性
             echo=False
         )
         logger.info(f"✓ SQLAlchemy Engine 建立成功")
@@ -191,7 +192,7 @@ class Database:
         password: str,
         database: str,
         pool_name: str = "studio_pool",
-        pool_size: int = 5
+        pool_size: int = 20          # Phase 7: 預設改為 20
     ):
         """
         初始化資料庫連接池

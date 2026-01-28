@@ -17,12 +17,23 @@ services:
     container_name: studio-redis
     ports:
       - "${REDIS_PORT:-6379}:6379"
-    command: redis-server --requirepass ${REDIS_PASSWORD:-mysecret} --appendonly yes
+    command: >
+      redis-server 
+      --requirepass ${REDIS_PASSWORD:-mysecret} 
+      --appendonly yes 
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
     volumes:
       - ${REDIS_DATA_PATH:-./redis_data}:/data
     restart: ${RESTART_POLICY:-unless-stopped}
     networks:
       - studio-net
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -118,6 +129,14 @@ services:
     restart: ${RESTART_POLICY:-unless-stopped}
     networks:
       - studio-net
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
     working_dir: /app
     volumes:
       - ./frontend:/app/frontend
@@ -159,6 +178,14 @@ services:
     restart: ${RESTART_POLICY:-unless-stopped}
     networks:
       - studio-net
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
     volumes:
       - ${STORAGE_DIR:-./storage}:/worker/storage
       - ${LOG_DIR:-./logs}:/worker/logs
