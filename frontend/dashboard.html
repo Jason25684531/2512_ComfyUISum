@@ -247,6 +247,57 @@
                 opacity: 1;
             }
         }
+
+        /* Liquid Metal Effect */
+        .liquid-metal {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            box-shadow:
+                inset 0 0 15px rgba(255, 255, 255, 0.3),
+                inset 0 0 5px rgba(255, 255, 255, 0.5),
+                0 8px 32px 0 rgba(0, 0, 0, 0.3);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .liquid-metal::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg,
+                    rgba(255, 255, 255, 0.4) 0%,
+                    rgba(255, 255, 255, 0) 40%,
+                    rgba(255, 255, 255, 0) 60%,
+                    rgba(255, 255, 255, 0.2) 100%);
+            pointer-events: none;
+        }
+
+        .liquid-metal-shine {
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 50%;
+            height: 100%;
+            background: linear-gradient(to right,
+                    transparent,
+                    rgba(255, 255, 255, 0.6),
+                    transparent);
+            transform: skewX(-25deg);
+            animation: liquid-shine 6s infinite;
+        }
+
+        @keyframes liquid-shine {
+            0% {
+                left: -100%;
+            }
+
+            20%,
+            100% {
+                left: 200%;
+            }
+        }
     </style>
 </head>
 
@@ -474,16 +525,16 @@
 
                 <!-- Dashboard View -->
                 <div id="view-dashboard" class="animate-fade-in">
-                    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-10">
+                    <div class="flex flex-wrap justify-center gap-10">
 
 
 
                         <!-- Image Composition -->
                         <button onclick="showCompositionMenu()"
-                            class="tool-icon glass-card rounded-2xl p-8 flex flex-col items-center justify-center gap-4 group">
+                            class="tool-icon glass-card rounded-2xl p-8 w-80 flex flex-col items-center justify-center gap-6 group">
                             <div
-                                class="w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-500/20 to-cyan-600/20 border border-blue-500/30 flex items-center justify-center group-hover:border-blue-500/60 transition-all">
-                                <i data-lucide="layers" class="w-10 h-10 text-blue-400"></i>
+                                class="w-24 h-24 rounded-2xl bg-gradient-to-br from-blue-500/20 to-cyan-600/20 border border-blue-500/30 flex items-center justify-center group-hover:border-blue-500/60 transition-all">
+                                <i data-lucide="layers" class="w-12 h-12 text-blue-400"></i>
                             </div>
                             <div class="text-center">
                                 <h3 class="text-2xl font-semibold text-white mb-1"
@@ -494,10 +545,10 @@
 
                         <!-- Video Generation -->
                         <button onclick="navigateTo('motion'); showVideoToolMenu();"
-                            class="tool-icon glass-card rounded-2xl p-8 flex flex-col items-center justify-center gap-4 group">
+                            class="tool-icon glass-card rounded-2xl p-8 w-80 flex flex-col items-center justify-center gap-6 group">
                             <div
-                                class="w-20 h-20 rounded-2xl bg-gradient-to-br from-amber-500/20 to-orange-600/20 border border-amber-500/30 flex items-center justify-center group-hover:border-amber-500/60 transition-all">
-                                <i data-lucide="film" class="w-10 h-10 text-amber-400"></i>
+                                class="w-24 h-24 rounded-2xl bg-gradient-to-br from-amber-500/20 to-orange-600/20 border border-amber-500/30 flex items-center justify-center group-hover:border-amber-500/60 transition-all">
+                                <i data-lucide="film" class="w-12 h-12 text-amber-400"></i>
                             </div>
                             <div class="text-center">
                                 <h3 class="text-2xl font-semibold text-white mb-1"
@@ -508,10 +559,10 @@
 
                         <!-- Avatar Studio -->
                         <button onclick="navigateTo('avatar')"
-                            class="tool-icon glass-card rounded-2xl p-8 flex flex-col items-center justify-center gap-4 group">
+                            class="tool-icon glass-card rounded-2xl p-8 w-80 flex flex-col items-center justify-center gap-6 group">
                             <div
-                                class="w-20 h-20 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-600/20 border border-emerald-500/30 flex items-center justify-center group-hover:border-emerald-500/60 transition-all">
-                                <i data-lucide="user-circle-2" class="w-10 h-10 text-emerald-400"></i>
+                                class="w-24 h-24 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-600/20 border border-emerald-500/30 flex items-center justify-center group-hover:border-emerald-500/60 transition-all">
+                                <i data-lucide="user-circle-2" class="w-12 h-12 text-emerald-400"></i>
                             </div>
                             <div class="text-center">
                                 <h3 class="text-2xl font-semibold text-white mb-1"
@@ -542,80 +593,82 @@
                         class="absolute inset-0 z-50 flex items-center justify-center overlay-backdrop"
                         style="background: rgba(0,0,0,0.6); backdrop-filter: blur(8px);">
                         <div
-                            class="floating-toolbar glass-panel rounded-3xl p-12 max-w-6xl w-full mx-6 border border-white/10">
+                            class="floating-toolbar glass-panel rounded-[40px] p-24 max-w-[1550px] w-full mx-6 border border-white/10">
                             <!-- Header -->
-                            <div class="flex items-center justify-between mb-10">
-                                <div class="flex items-center gap-4">
-                                    <div
-                                        class="p-4 rounded-2xl bg-gradient-to-r from-purple-500 to-indigo-600 shadow-lg shadow-purple-500/30">
-                                        <i data-lucide="layers" class="w-8 h-8"></i>
+                            <div class="flex items-center justify-between mb-12">
+                                <div class="flex items-center gap-6">
+                                    <div class="p-5 rounded-3xl liquid-metal shadow-lg shadow-white/10">
+                                        <div class="liquid-metal-shine"></div>
+                                        <i data-lucide="layers" class="w-12 h-12 text-white relative z-10"></i>
                                     </div>
                                     <div>
-                                        <h2 class="text-3xl font-bold text-white">Image Composition</h2>
-                                        <p class="text-base text-gray-400 mt-1">選擇一個工具開始創作</p>
+                                        <h2 class="text-5xl font-bold text-white">Image Composition</h2>
+                                        <p class="text-xl text-gray-400 mt-2">選擇一個工具開始創作</p>
                                     </div>
                                 </div>
-                                <button onclick="hideCompositionMenu()"
-                                    class="p-3 rounded-xl hover:bg-white/10 transition-colors text-gray-400 hover:text-white">
-                                    <i data-lucide="x" class="w-8 h-8"></i>
-                                </button>
+
                             </div>
 
                             <!-- Tool Grid -->
-                            <div class="grid grid-cols-2 md:grid-cols-5 gap-6">
+                            <div class="flex flex-nowrap justify-center gap-10">
                                 <!-- Face Swap -->
                                 <button onclick="selectTool('face_swap')"
-                                    class="tool-card glass-card rounded-3xl p-6 text-center cursor-pointer hover:border-purple-500/50 group">
+                                    class="tool-card glass-card rounded-[32px] p-10 w-64 h-64 flex flex-col flex-shrink-0 items-center justify-center text-center cursor-pointer hover:border-purple-500/50 group">
                                     <div
-                                        class="p-4 rounded-2xl bg-purple-500/10 text-purple-300 mx-auto w-fit mb-4 group-hover:bg-purple-500/20 group-hover:scale-110 transition-all border border-purple-500/20">
-                                        <i data-lucide="users" class="w-10 h-10"></i>
+                                        class="w-24 h-24 flex items-center justify-center rounded-2xl bg-purple-500/10 text-purple-300 mx-auto mb-4 group-hover:bg-purple-500/20 group-hover:scale-110 transition-all border border-purple-500/20">
+                                        <i data-lucide="users" class="w-12 h-12"></i>
                                     </div>
-                                    <h3 class="text-base font-bold text-white mb-1">Face Swap</h3>
-                                    <p class="text-xs text-gray-500">換臉</p>
+                                    <h3 class="text-xl font-bold text-white mb-1"
+                                        style="font-family: 'Orbitron', sans-serif;">Face Swap</h3>
+                                    <p class="text-xl text-gray-500">換臉</p>
                                 </button>
 
                                 <!-- Multi-Blend -->
                                 <button onclick="selectTool('multi_image_blend')"
-                                    class="tool-card glass-card rounded-3xl p-6 text-center cursor-pointer hover:border-amber-500/50 group">
+                                    class="tool-card glass-card rounded-[32px] p-10 w-64 h-64 flex flex-col flex-shrink-0 items-center justify-center text-center cursor-pointer hover:border-amber-500/50 group">
                                     <div
-                                        class="p-4 rounded-2xl bg-amber-500/10 text-amber-300 mx-auto w-fit mb-4 group-hover:bg-amber-500/20 group-hover:scale-110 transition-all border border-amber-500/20">
-                                        <i data-lucide="layers" class="w-10 h-10"></i>
+                                        class="w-24 h-24 flex items-center justify-center rounded-2xl bg-amber-500/10 text-amber-300 mx-auto mb-4 group-hover:bg-amber-500/20 group-hover:scale-110 transition-all border border-amber-500/20">
+                                        <i data-lucide="layers" class="w-12 h-12"></i>
                                     </div>
-                                    <h3 class="text-base font-bold text-white mb-1">Multi-Blend</h3>
-                                    <p class="text-xs text-gray-500">多圖融合</p>
+                                    <h3 class="text-xl font-bold text-white mb-1"
+                                        style="font-family: 'Orbitron', sans-serif;">Multi-Blend</h3>
+                                    <p class="text-xl text-gray-500">多圖融合</p>
                                 </button>
 
                                 <!-- Sketch to Image -->
                                 <button onclick="selectTool('sketch_to_image')"
-                                    class="tool-card glass-card rounded-3xl p-6 text-center cursor-pointer hover:border-emerald-500/50 group">
+                                    class="tool-card glass-card rounded-[32px] p-10 w-64 h-64 flex flex-col flex-shrink-0 items-center justify-center text-center cursor-pointer hover:border-emerald-500/50 group">
                                     <div
-                                        class="p-4 rounded-2xl bg-emerald-500/10 text-emerald-300 mx-auto w-fit mb-4 group-hover:bg-emerald-500/20 group-hover:scale-110 transition-all border border-emerald-500/20">
-                                        <i data-lucide="pencil" class="w-10 h-10"></i>
+                                        class="w-24 h-24 flex items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-300 mx-auto mb-4 group-hover:bg-emerald-500/20 group-hover:scale-110 transition-all border border-emerald-500/20">
+                                        <i data-lucide="pencil" class="w-12 h-12"></i>
                                     </div>
-                                    <h3 class="text-base font-bold text-white mb-1">Sketch</h3>
-                                    <p class="text-xs text-gray-500">草稿轉精稿</p>
+                                    <h3 class="text-xl font-bold text-white mb-1"
+                                        style="font-family: 'Orbitron', sans-serif;">Sketch</h3>
+                                    <p class="text-xl  text-gray-500">草稿轉精稿</p>
                                 </button>
 
                                 <!-- Text to Image -->
                                 <button onclick="selectTool('text_to_image')"
-                                    class="tool-card glass-card rounded-3xl p-6 text-center cursor-pointer hover:border-blue-500/50 group">
+                                    class="tool-card glass-card rounded-[32px] p-10 w-64 h-64 flex flex-col flex-shrink-0 items-center justify-center text-center cursor-pointer hover:border-blue-500/50 group">
                                     <div
-                                        class="p-4 rounded-2xl bg-blue-500/10 text-blue-300 mx-auto w-fit mb-4 group-hover:bg-blue-500/20 group-hover:scale-110 transition-all border border-blue-500/20">
-                                        <i data-lucide="type" class="w-10 h-10"></i>
+                                        class="w-24 h-24 flex items-center justify-center rounded-2xl bg-blue-500/10 text-blue-300 mx-auto mb-4 group-hover:bg-blue-500/20 group-hover:scale-110 transition-all border border-blue-500/20">
+                                        <i data-lucide="type" class="w-12 h-12"></i>
                                     </div>
-                                    <h3 class="text-base font-bold text-white mb-1">Text2Img</h3>
-                                    <p class="text-xs text-gray-500">文生圖</p>
+                                    <h3 class="text-xl font-bold text-white mb-1"
+                                        style="font-family: 'Orbitron', sans-serif;">Text2Img</h3>
+                                    <p class="text-xl text-gray-500">文生圖</p>
                                 </button>
 
                                 <!-- Single Image Edit -->
                                 <button onclick="selectTool('single_image_edit')"
-                                    class="tool-card glass-card rounded-3xl p-6 text-center cursor-pointer hover:border-pink-500/50 group">
+                                    class="tool-card glass-card rounded-[32px] p-10 w-64 h-64 flex flex-col flex-shrink-0 items-center justify-center text-center cursor-pointer hover:border-pink-500/50 group">
                                     <div
-                                        class="p-4 rounded-2xl bg-pink-500/10 text-pink-300 mx-auto w-fit mb-4 group-hover:bg-pink-500/20 group-hover:scale-110 transition-all border border-pink-500/20">
-                                        <i data-lucide="image" class="w-10 h-10"></i>
+                                        class="w-24 h-24 flex items-center justify-center rounded-2xl bg-pink-500/10 text-pink-300 mx-auto mb-4 group-hover:bg-pink-500/20 group-hover:scale-110 transition-all border border-pink-500/20">
+                                        <i data-lucide="image" class="w-12 h-12"></i>
                                     </div>
-                                    <h3 class="text-base font-bold text-white mb-1">Edit</h3>
-                                    <p class="text-xs text-gray-500">單圖編輯</p>
+                                    <h3 class="text-xl font-bold text-white mb-1"
+                                        style="font-family: 'Orbitron', sans-serif;">Edit</h3>
+                                    <p class="text-xl text-gray-500">單圖編輯</p>
                                 </button>
                             </div>
 
@@ -806,50 +859,54 @@
                         class="absolute inset-0 z-50 flex items-center justify-center overlay-backdrop"
                         style="background: rgba(0,0,0,0.6); backdrop-filter: blur(8px);">
                         <div
-                            class="floating-toolbar glass-panel rounded-3xl p-12 max-w-4xl w-full mx-6 border border-white/10">
-                            <div class="flex items-center justify-between mb-10">
-                                <div class="flex items-center gap-4">
-                                    <div
-                                        class="p-4 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-600 shadow-lg shadow-amber-500/30">
-                                        <i data-lucide="film" class="w-8 h-8"></i>
+                            class="floating-toolbar glass-panel rounded-[40px] p-24 max-w-[1550px] w-full mx-6 border border-white/10">
+                            <div class="flex items-center justify-between mb-12">
+                                <div class="flex items-center gap-6">
+                                    <div class="p-5 rounded-3xl liquid-metal shadow-lg shadow-white/10">
+                                        <div class="liquid-metal-shine"></div>
+                                        <i data-lucide="film" class="w-12 h-12 text-white relative z-10"></i>
                                     </div>
                                     <div>
-                                        <h2 class="text-3xl font-bold text-white">Video Studio</h2>
-                                        <p class="text-base text-gray-400 mt-1">選擇一種影片生成方式</p>
+                                        <h2 class="text-5xl font-bold text-white">Video Studio</h2>
+                                        <p class="text-xl text-gray-400 mt-2">選擇一種影片生成方式</p>
                                     </div>
                                 </div>
-                                <button onclick="hideVideoToolMenu()"
-                                    class="p-3 rounded-xl hover:bg-white/10 transition-colors text-gray-400 hover:text-white">
-                                    <i data-lucide="x" class="w-8 h-8"></i>
-                                </button>
                             </div>
-                            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div class="flex flex-nowrap justify-center gap-10">
+                                <!-- Long Video -->
                                 <button onclick="selectVideoTool('veo3_long_video')"
-                                    class="tool-card glass-card rounded-3xl p-8 text-center cursor-pointer hover:border-amber-500/50 group">
+                                    class="tool-card glass-card rounded-[32px] p-10 w-64 h-64 flex flex-col flex-shrink-0 items-center justify-center text-center cursor-pointer hover:border-amber-500/50 group">
                                     <div
-                                        class="p-5 rounded-2xl bg-amber-500/10 text-amber-300 mx-auto w-fit mb-5 group-hover:bg-amber-500/20 group-hover:scale-110 transition-all border border-amber-500/20">
+                                        class="w-24 h-24 flex items-center justify-center rounded-2xl bg-amber-500/10 text-amber-300 mx-auto mb-4 group-hover:bg-amber-500/20 group-hover:scale-110 transition-all border border-amber-500/20">
                                         <i data-lucide="film" class="w-12 h-12"></i>
                                     </div>
-                                    <h3 class="text-lg font-bold text-white mb-2">長片生成</h3>
-                                    <p class="text-sm text-gray-500">Multi-Shot (1-5)</p>
+                                    <h3 class="text-xl font-bold text-white mb-1"
+                                        style="font-family: 'Orbitron', sans-serif;">Long Gen</h3>
+                                    <p class="text-xl text-gray-500">長片生成</p>
                                 </button>
+
+                                <!-- Text to Video -->
                                 <button onclick="selectVideoTool('t2v_veo3')"
-                                    class="tool-card glass-card rounded-3xl p-8 text-center cursor-pointer hover:border-blue-500/50 group">
+                                    class="tool-card glass-card rounded-[32px] p-10 w-64 h-64 flex flex-col flex-shrink-0 items-center justify-center text-center cursor-pointer hover:border-blue-500/50 group">
                                     <div
-                                        class="p-5 rounded-2xl bg-blue-500/10 text-blue-300 mx-auto w-fit mb-5 group-hover:bg-blue-500/20 group-hover:scale-110 transition-all border border-blue-500/20">
+                                        class="w-24 h-24 flex items-center justify-center rounded-2xl bg-blue-500/10 text-blue-300 mx-auto mb-4 group-hover:bg-blue-500/20 group-hover:scale-110 transition-all border border-blue-500/20">
                                         <i data-lucide="type" class="w-12 h-12"></i>
                                     </div>
-                                    <h3 class="text-lg font-bold text-white mb-2">文字轉影片</h3>
-                                    <p class="text-sm text-gray-500">Text to Video</p>
+                                    <h3 class="text-xl font-bold text-white mb-1"
+                                        style="font-family: 'Orbitron', sans-serif;">Text2Video</h3>
+                                    <p class="text-xl text-gray-500">文字轉影片</p>
                                 </button>
+
+                                <!-- First-Last Frame -->
                                 <button onclick="selectVideoTool('flf_veo3')"
-                                    class="tool-card glass-card rounded-3xl p-8 text-center cursor-pointer hover:border-purple-500/50 group">
+                                    class="tool-card glass-card rounded-[32px] p-10 w-64 h-64 flex flex-col flex-shrink-0 items-center justify-center text-center cursor-pointer hover:border-purple-500/50 group">
                                     <div
-                                        class="p-5 rounded-2xl bg-purple-500/10 text-purple-300 mx-auto w-fit mb-5 group-hover:bg-purple-500/20 group-hover:scale-110 transition-all border border-purple-500/20">
+                                        class="w-24 h-24 flex items-center justify-center rounded-2xl bg-purple-500/10 text-purple-300 mx-auto mb-4 group-hover:bg-purple-500/20 group-hover:scale-110 transition-all border border-purple-500/20">
                                         <i data-lucide="image" class="w-12 h-12"></i>
                                     </div>
-                                    <h3 class="text-lg font-bold text-white mb-2">首尾禎動畫</h3>
-                                    <p class="text-sm text-gray-500">First-Last Frame</p>
+                                    <h3 class="text-xl font-bold text-white mb-1"
+                                        style="font-family: 'Orbitron', sans-serif;">F-L Frame</h3>
+                                    <p class="text-xl text-gray-500">首尾禎動畫</p>
                                 </button>
                             </div>
                             <p class="text-center text-base text-gray-500 mt-10">按 ESC 或點擊外部區域關閉</p>
