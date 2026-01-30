@@ -13,6 +13,16 @@
     <script src="config.js"></script>
 
     <style>
+        @font-face {
+            font-family: 'TTNormsPro';
+            src: url('front/TT Norms Pro Bold Italic.ttf') format('truetype');
+        }
+
+        @font-face {
+            font-family: 'TTNormsProBold';
+            src: url('front/TT Norms Pro Bold.ttf') format('truetype');
+        }
+
         /* 隱藏滾動條 */
         ::-webkit-scrollbar {
             display: none;
@@ -136,20 +146,19 @@
             color: #86efac;
         }
 
-        /* Slider Styles */
-        .slide-bg {
+        /* Background Video */
+        .bg-video {
             position: absolute;
-            inset: 0;
-            background-size: cover;
-            background-position: center;
-            opacity: 0;
-            transition: opacity 1.5s ease-in-out, transform 10s ease-out;
-            transform: scale(1.05);
-        }
-
-        .slide-bg.active {
-            opacity: 1;
-            transform: scale(1);
+            bottom: -7.5%;
+            left: 5%;
+            width: 100vw;
+            height: auto;
+            transform: scale(1.1);
+            object-fit: contain;
+            opacity: 0.5;
+            z-index: 1;
+            pointer-events: none;
+            mix-blend-mode: screen;
         }
 
         /* Glassmorphism subtle */
@@ -162,7 +171,35 @@
     </style>
 </head>
 
-<body class="h-screen w-full flex overflow-hidden bg-[#020205] text-white font-sans selection:bg-purple-500/30">
+<body class="h-screen w-full flex overflow-hidden bg-[#020205] text-white selection:bg-purple-500/30">
+
+    <!-- Background Layer -->
+    <div id="home-bg-layer" class="fixed inset-0 z-0 pointer-events-none">
+        <!-- Background Video -->
+        <video autoplay muted loop playsinline class="bg-video">
+            <source src="image/Circle.mp4" type="video/mp4">
+        </video>
+        <!-- Gradient Overlay -->
+        <div class="absolute inset-0 bg-gradient-to-b from-[#020205]/0 via-[#020205]/90 to-[#020205]/100"></div>
+        <!-- Noise Texture -->
+        <div
+            class="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-40 mix-blend-overlay">
+        </div>
+
+        <!-- Central Title -->
+        <div class="absolute inset-0 flex items-center justify-center pl-[400px]">
+            <div class="relative inline-block">
+                <!-- Outline Offset Shadow (15px) -->
+                <h2
+                    style="font-family: 'TTNormsPro'; font-size: 8rem; letter-spacing: 0.15em; font-weight: bold; font-style: italic; transform: skewX(-5deg) translate(15px, 15px); -webkit-text-stroke: 1.5px rgba(255, 255, 255, 0.2); color: transparent; position: absolute; top: 0; left: 0; z-index: 0; white-space: nowrap;">
+                    STUDIO CORE</h2>
+                <!-- Main Gradient Title -->
+                <h2
+                    style="font-family: 'TTNormsPro'; font-size: 8rem; letter-spacing: 0.15em; font-weight: bold; font-style: italic; opacity: 1; transform: skewX(-5deg); background: linear-gradient(to top, #000000 0%, #ffffff 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; position: relative; z-index: 1;">
+                    STUDIO CORE</h2>
+            </div>
+        </div>
+    </div>
 
     <!-- Left Sidebar (Login Panel) -->
     <div
@@ -171,13 +208,11 @@
         <!-- Header / Logo -->
         <div class="p-8 lg:p-12">
             <a href="/" class="inline-flex items-center gap-3 group">
-                <div
-                    class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-700 flex items-center justify-center shadow-lg shadow-indigo-500/20 border border-white/10 group-hover:border-white/30 transition-colors">
-                    <i data-lucide="sparkles" class="text-white w-5 h-5"></i>
-                </div>
+                <img src="image/LOGO.png" alt="STUDIO CORE"
+                    class="w-10 h-10 object-contain group-hover:scale-110 transition-transform brightness-0 invert">
                 <span
-                    class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white via-gray-200 to-gray-400 tracking-tight">
-                    AIGEN.IO
+                    class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white via-gray-200 to-gray-500 drop-shadow-sm tracking-tight group-hover:text-white transition-colors">
+                    STUDIO CORE
                 </span>
             </a>
         </div>
@@ -297,33 +332,6 @@
         </div>
     </div>
 
-    <!-- Right Visual Area (Slider) -->
-    <div
-        class="hidden md:block absolute right-0 top-0 bottom-0 left-[480px] lg:left-[500px] overflow-hidden bg-black z-0">
-
-        <!-- Slideshow Container -->
-        <div id="slideshow" class="absolute inset-0">
-            <!-- Slide 1 -->
-            <div class="slide-bg active" style="background-image: url('image/BG_v01.jpg');">
-            </div>
-        </div>
-
-        <!-- Overlays -->
-        <div
-            class="absolute inset-0 bg-gradient-to-r from-[#020205] via-[rgba(2,2,5,1)] to-transparent w-[20%] pointer-events-none">
-        </div>
-        <div
-            class="absolute inset-0 bg-gradient-to-t from-[#020205] via-transparent to-transparent h-[30%] bottom-0 mt-auto pointer-events-none">
-        </div>
-
-        <!-- Ambient Blobs (Moved to Right Side) -->
-        <div class="absolute inset-0 overflow-hidden pointer-events-none mix-blend-screen opacity-40">
-            <div class="absolute top-[20%] left-[20%] w-[500px] h-[500px] bg-purple-600 rounded-full blur-[120px] animate-pulse"
-                style="animation-duration: 4s;"></div>
-            <div class="absolute bottom-[10%] right-[10%] w-[400px] h-[400px] bg-blue-600 rounded-full blur-[100px] animate-pulse"
-                style="animation-duration: 6s; animation-delay: 1s;"></div>
-        </div>
-    </div>
 
     <script>
         // ==========================================

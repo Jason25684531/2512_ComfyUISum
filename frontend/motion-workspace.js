@@ -13,6 +13,10 @@ if (typeof window.isVeo3Mode === 'undefined') {
 if (typeof window.motionShotImages === 'undefined') {
     window.motionShotImages = {};
 }
+// [TEMP] 新增: 儲存原始檔名 (用於 IU 測試模式)
+if (typeof window.motionShotFilenames === 'undefined') {
+    window.motionShotFilenames = {};
+}
 // 新增: 當前選擇的 Video 工作流
 if (typeof window.currentVideoWorkflow === 'undefined') {
     window.currentVideoWorkflow = 'veo3_long_video';
@@ -350,6 +354,8 @@ function triggerMotionShotUpload(shotId) {
 function handleMotionShotSelect(event, shotId) {
     var file = event.target.files[0];
     if (file && file.type.startsWith('image/')) {
+        // [TEMP] 儲存原始檔名 (用於 IU 測試模式)
+        window.motionShotFilenames[shotId] = file.name;
         processImageUpload(file, shotId, window.motionShotImages, 'amber');
     }
 }
@@ -364,6 +370,8 @@ function handleMotionShotDrop(event, shotId) {
 
     var file = event.dataTransfer.files[0];
     if (file && file.type.startsWith('image/')) {
+        // [TEMP] 儲存原始檔名 (用於 IU 測試模式)
+        window.motionShotFilenames[shotId] = file.name;
         processImageUpload(file, shotId, window.motionShotImages, 'amber');
     }
 }
@@ -373,6 +381,8 @@ function handleMotionShotDrop(event, shotId) {
  */
 function clearMotionShot(shotId) {
     clearImageUpload(shotId, window.motionShotImages, 'amber');
+    // [TEMP] 同時清除檔名記錄
+    delete window.motionShotFilenames[shotId];
 }
 
 
@@ -441,6 +451,15 @@ function handleMotionGenerate() {
         if (Object.keys(uploadedShots).length > 0) {
             payload.images = uploadedShots;
             console.log('[Motion] Uploaded shots:', Object.keys(uploadedShots));
+        }
+
+        // [TEMP] 傳遞原始檔名給後端 (用於 IU 測試模式)
+        if (Object.keys(window.motionShotFilenames).length > 0) {
+            payload.filenames = window.motionShotFilenames;
+            console.log('[Motion] [TEST MODE] Original filenames:', window.motionShotFilenames);
+            console.log('[Motion] [TEST MODE] Filenames values:', Object.values(window.motionShotFilenames));
+        } else {
+            console.warn('[Motion] [TEST MODE] No filenames recorded!');
         }
 
     } else if (window.currentVideoWorkflow === 't2v_veo3') {

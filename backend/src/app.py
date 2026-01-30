@@ -161,7 +161,10 @@ app.logger = logger
 # 從 config 載入配置
 from config import (
     REDIS_HOST, REDIS_PORT, REDIS_PASSWORD, JOB_QUEUE,
-    STORAGE_OUTPUT_DIR
+    STORAGE_OUTPUT_DIR,
+    # [TEMP] Veo3 測試模式配置
+    VEO3_TEST_MODE, VEO3_TEST_VIDEO_PATH,
+    PROJECT_ROOT  # 需要用於定位測試視頻文件
 )
 REDIS_QUEUE_NAME = JOB_QUEUE
 
@@ -752,6 +755,61 @@ def generate():
             'audio': data.get('audio', ''),  # 音訊檔名 (virtual_human 工作流使用)
             'created_at': datetime.now().isoformat()
         }
+        
+        # ==========================================
+        # [TEMP] Veo3 測試模式: Veo3 Long Video 攔截
+        # ==========================================
+        if VEO3_TEST_MODE and workflow == 'veo3_long_video':
+            logger.info(f"🔧 [TEST MODE] 測試模式已啟用，檢查圖片上傳...")
+            logger.info(f"🔧 [TEST MODE] VEO3_TEST_MODE={VEO3_TEST_MODE}, workflow={workflow}")
+            
+            # 檢查是否有上傳圖片
+            images = data.get('images', {})
+            has_images = bool(images and len(images) > 0)
+            
+            logger.info(f"🔧 [TEST MODE] 上傳圖片數量: {len(images) if images else 0}")
+            logger.info(f"🔧 [TEST MODE] 檢測結果: has_images={has_images}")
+            
+            if has_images:
+                logger.warning(f"🔧 [TEST MODE] ✅ 檢測到圖片上傳，返回測試視頻: {VEO3_TEST_VIDEO_PATH}")
+                
+                # 構造假的完成狀態並存入 Redis
+                test_video_filename = os.path.basename(VEO3_TEST_VIDEO_PATH)
+                test_video_url = f'/api/outputs/{test_video_filename}'
+                
+                status_key = f"job:status:{job_id}"
+                redis_client.hset(status_key, mapping={
+                    'job_id': job_id,
+                    'status': 'finished',  # 前端檢查 'finished' 狀態
+                    'progress': 100,
+                    'image_url': test_video_url,  # 前端讀取 'image_url' 欄位
+                    'video_url': test_video_url,  # 同時設置 video_url 供未來使用
+                    'output_path': test_video_url,  # 備用欄位
+                    'error': '',
+                    'updated_at': datetime.now().isoformat(),
+                    'test_mode': 'true'  # 標記為測試模式
+                })
+                redis_client.expire(status_key, 86400)
+                
+                # 將測試視頻複製到 outputs 目錄以便下載
+                import shutil
+                test_video_src = PROJECT_ROOT / VEO3_TEST_VIDEO_PATH
+                test_video_dest = STORAGE_OUTPUT_DIR / test_video_filename
+                if test_video_src.exists():
+                    shutil.copy2(test_video_src, test_video_dest)
+                    logger.info(f"✓ [TEST MODE] 測試視頻已複製到 outputs: {test_video_filename}")
+                else:
+                    logger.error(f"❌ [TEST MODE] 測試視頻不存在: {test_video_src}")
+                
+                # 直接返回完成狀態，跳過佇列處理
+                return jsonify({
+                    'job_id': job_id,
+                    'status': 'completed',
+                    'video_url': test_video_url,
+                    'message': '[TEST MODE] 已返回測試視頻'
+                }), 200
+            else:
+                logger.info(f"🔧 [TEST MODE] ❌ 未檢測到圖片上傳，繼續正常流程")
         
         # ===== Phase 10: 嚴格事務處理開始 =====
         # 4. 檢查 Redis 可用性
@@ -1410,6 +1468,14 @@ if __name__ == '__main__':
     logger.info("🚀 Backend API 啟動中...")
     logger.info("📁 同時提供前端靜態文件服務")
     logger.info("✓ 結構化日誌系統已啟動（雙通道輸出）")
+    
+    # [TEMP] 顯示 Veo3 測試模式狀態
+    if VEO3_TEST_MODE:
+        logger.warning(f"🔧 [TEST MODE] Veo3 測試模式已啟用！")
+        logger.warning(f"🔧 [TEST MODE] 觸發條件: veo3_long_video + 上傳圖片")
+        logger.warning(f"🔧 [TEST MODE] 測試視頻: {VEO3_TEST_VIDEO_PATH}")
+    else:
+        logger.info("ℹ️  Veo3 測試模式未啟用")
     
     is_windows = sys.platform.startswith('win')
     

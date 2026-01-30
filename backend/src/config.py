@@ -43,6 +43,13 @@ COMFYUI_CHECKPOINTS_DIR = COMFYUI_MODELS_DIR / "checkpoints"
 COMFYUI_UNET_DIR = COMFYUI_MODELS_DIR / "unet"
 
 # ==========================================
+# [TEMP] Veo3 測試模式 (Veo3 Test Mode)
+# ==========================================
+# 當啟用時，veo3_long_video 工作流只要上傳圖片就直接返回測試視頻
+VEO3_TEST_MODE = os.getenv("VEO3_TEST_MODE", "false").lower() == "true"
+VEO3_TEST_VIDEO_PATH = os.getenv("VEO3_TEST_VIDEO_PATH", "tests/IU_Final/IU_Combine.mp4")
+
+# ==========================================
 # 除錯輸出
 # ==========================================
 def print_config():
