@@ -769,8 +769,10 @@
                                         </button>
                                     </div>
 
-                                    <!-- Status Message -->
-                                    <div id="status-message" class="text-sm text-gray-400 text-center hidden"></div>
+                                    <!-- Status Message - 固定高度避免版面跳動 -->
+                                    <div id="status-message"
+                                        class="text-sm text-gray-400 text-center min-h-[32px] flex items-center justify-center"
+                                        style="visibility: hidden;"></div>
                                 </div>
                             </div>
                         </div>
@@ -1069,9 +1071,9 @@
 
                                     <!-- Video Player (hidden by default) -->
                                     <div id="motion-video-wrapper"
-                                        class="hidden absolute inset-4 flex items-center justify-center">
+                                        class="hidden absolute inset-0 flex items-center justify-center p-8">
                                         <video id="motion-video-player" controls
-                                            class="max-w-full max-h-full rounded-2xl shadow-2xl">
+                                            class="max-w-full max-h-full object-contain rounded-2xl shadow-2xl">
                                             您的瀏覽器不支持視頻播放。
                                         </video>
                                     </div>
@@ -1140,8 +1142,10 @@
                                     </button>
                                 </div>
 
-                                <!-- Status -->
-                                <div id="motion-status" class="text-sm text-center hidden mt-3"></div>
+                                <!-- Status - 固定高度避免彈跳 -->
+                                <div id="motion-status"
+                                    class="text-sm text-center mt-3 min-h-[40px] flex items-center justify-center"
+                                    style="visibility: hidden;"></div>
                             </div>
                         </div>
 
@@ -1222,14 +1226,15 @@
                                     </div>
                                 </div>
 
-                                <!-- Script Input (台詞輸入) -->
+                                <!-- Script Input (台詞輸入) 擴充到藍框範圍 -->
                                 <div class="glass-card rounded-xl p-4 mb-4 flex-1">
                                     <label class="text-xs font-bold text-emerald-400 uppercase mb-2 block">
                                         📝 台詞 Script
                                         <span class="text-gray-500 normal-case ml-1">(虛擬人要說的話)</span>
                                     </label>
                                     <textarea id="avatar-prompt-input"
-                                        class="w-full custom-input rounded-xl p-3 text-sm resize-none h-32" placeholder="輸入虛擬人要說的台詞內容...
+                                        class="w-full custom-input rounded-xl p-3 text-sm resize-none"
+                                        style="min-height: 280px;" placeholder="輸入虛擬人要說的台詞內容...
 
 例如：
 謝謝你的支持，真的很感動。
@@ -1241,17 +1246,19 @@
 
                                 <!-- Generate Button -->
                                 <button id="avatar-generate-btn" onclick="generateAvatarVideo()"
-                                    class="w-full bg-gradient-to-r from-emerald-600 to-teal-600 py-4 rounded-xl font-bold text-lg hover:shadow-[0_0_25px_rgba(16,185,129,0.5)] transition-all flex items-center justify-center gap-3">
-                                    <i data-lucide="video" class="w-6 h-6"></i>
+                                    class="w-full bg-gradient-to-r from-emerald-600 to-teal-600 py-3 rounded-xl font-bold text-base hover:shadow-[0_0_25px_rgba(16,185,129,0.5)] transition-all flex items-center justify-center gap-3">
+                                    <i data-lucide="video" class="w-5 h-5"></i>
                                     <span>生成虛擬人影片</span>
                                 </button>
 
-                                <!-- Status -->
-                                <div id="avatar-status" class="hidden mt-4 p-4 rounded-xl text-center"></div>
+                                <!-- Status - 固定高度避免彈跳 -->
+                                <div id="avatar-status"
+                                    class="mt-4 p-4 rounded-xl text-center min-h-[60px] flex items-center justify-center"
+                                    style="visibility: hidden;"></div>
                             </div>
 
                             <!-- Right Panel: Video Preview (約 60% 寬度) -->
-                            <div class="w-3/5 flex flex-col">
+                            <div class="w-2/4 flex flex-col">
                                 <!-- Preview Header -->
                                 <div class="flex items-center justify-between mb-4">
                                     <div class="flex items-center gap-2">
@@ -1261,7 +1268,7 @@
                                     <span id="avatar-preview-status" class="text-xs text-gray-500">等待生成...</span>
                                 </div>
 
-                                <!-- Video Preview Area -->
+                                <!-- Video Preview Area - 確保內容在紅框內 -->
                                 <div id="avatar-preview-container"
                                     class="flex-1 glass-card rounded-2xl overflow-hidden flex items-center justify-center relative">
                                     <!-- Placeholder -->
@@ -1279,29 +1286,26 @@
                                     </div>
 
                                     <!-- Video Player (hidden by default) -->
-                                    <div id="avatar-video-wrapper" class="hidden absolute inset-0 flex flex-col">
+                                    <div id="avatar-video-wrapper" class="hidden absolute inset-0 flex flex-col p-4">
                                         <video id="avatar-video-player" controls
-                                            class="w-full h-full object-contain bg-black">
+                                            class="flex-1 w-full object-contain bg-black rounded-xl">
                                             您的瀏覽器不支持視頻播放。
                                         </video>
                                         <!-- Video Controls -->
-                                        <div
-                                            class="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent">
-                                            <div class="flex items-center justify-between">
-                                                <span class="text-white text-sm font-medium">生成完成</span>
-                                                <div class="flex gap-2">
-                                                    <a id="avatar-download-btn" href="#" download
-                                                        class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 rounded-lg text-white text-sm font-medium flex items-center gap-2 transition-colors">
-                                                        <i data-lucide="download" class="w-4 h-4"></i>
-                                                        下載影片
-                                                    </a>
-                                                    <button
-                                                        onclick="window.open(document.getElementById('avatar-video-player').src, '_blank')"
-                                                        class="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-white text-sm font-medium flex items-center gap-2 transition-colors">
-                                                        <i data-lucide="external-link" class="w-4 h-4"></i>
-                                                        新視窗
-                                                    </button>
-                                                </div>
+                                        <div class="mt-3 flex items-center justify-between">
+                                            <span class="text-white text-sm font-medium">生成完成</span>
+                                            <div class="flex gap-2">
+                                                <a id="avatar-download-btn" href="#" download
+                                                    class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 rounded-lg text-white text-sm font-medium flex items-center gap-2 transition-colors">
+                                                    <i data-lucide="download" class="w-4 h-4"></i>
+                                                    下載影片
+                                                </a>
+                                                <button
+                                                    onclick="window.open(document.getElementById('avatar-video-player').src, '_blank')"
+                                                    class="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-white text-sm font-medium flex items-center gap-2 transition-colors">
+                                                    <i data-lucide="external-link" class="w-4 h-4"></i>
+                                                    新視窗
+                                                </button>
                                             </div>
                                         </div>
                                     </div>
@@ -2191,9 +2195,9 @@
             // 获取 prompt，优先使用 motion-prompt-input
             let prompt = document.getElementById('motion-prompt-input')?.value || '';
 
-            statusEl.classList.remove('hidden');
+            statusEl.style.visibility = 'visible';
             statusEl.textContent = '正在處理...';
-            statusEl.className = 'text-sm text-center text-amber-400';
+            statusEl.className = 'text-sm text-center mt-3 min-h-[40px] flex items-center justify-center text-amber-400';
 
             btn.disabled = true;
             btn.classList.add('opacity-50', 'cursor-not-allowed');
@@ -2288,7 +2292,7 @@
             } catch (error) {
                 console.error('Motion generation error:', error);
                 statusEl.textContent = `錯誤: ${error.message}`;
-                statusEl.className = 'text-sm text-center text-red-400';
+                statusEl.className = 'text-sm text-center mt-3 min-h-[40px] flex items-center justify-center text-red-400';
                 btn.disabled = false;
                 btn.classList.remove('opacity-50', 'cursor-not-allowed');
                 btn.innerHTML = originalHTML;
@@ -2305,7 +2309,7 @@
                 if (pollCount > maxPolls) {
                     clearInterval(interval);
                     statusEl.textContent = '生成超時';
-                    statusEl.className = 'text-sm text-center text-red-400';
+                    statusEl.className = 'text-sm text-center mt-3 min-h-[40px] flex items-center justify-center text-red-400';
                     btn.disabled = false;
                     btn.classList.remove('opacity-50', 'cursor-not-allowed');
                     btn.innerHTML = originalHTML;
@@ -2321,7 +2325,7 @@
                     if (data.status === 'finished') {
                         clearInterval(interval);
                         statusEl.textContent = '生成完成！';
-                        statusEl.className = 'text-sm text-center text-green-400';
+                        statusEl.className = 'text-sm text-center mt-3 min-h-[40px] flex items-center justify-center text-green-400';
 
                         // 🔧 修復：後端返回 image_url，需要處理完整路徑
                         const outputPath = data.image_url || data.output_path || data.result;
@@ -2334,7 +2338,7 @@
                             showMotionResult(fullVideoUrl);
                         } else {
                             statusEl.textContent = '⚠️ 生成完成但未返回輸出路徑';
-                            statusEl.className = 'text-sm text-center text-yellow-400';
+                            statusEl.className = 'text-sm text-center mt-3 min-h-[40px] flex items-center justify-center text-yellow-400';
                         }
 
                         btn.disabled = false;
@@ -2343,7 +2347,7 @@
                     } else if (data.status === 'failed') {
                         clearInterval(interval);
                         statusEl.textContent = `生成失敗: ${data.error || '未知錯誤'}`;
-                        statusEl.className = 'text-sm text-center text-red-400';
+                        statusEl.className = 'text-sm text-center mt-3 min-h-[40px] flex items-center justify-center text-red-400';
                         btn.disabled = false;
                         btn.classList.remove('opacity-50', 'cursor-not-allowed');
                         btn.innerHTML = originalHTML;
@@ -2359,18 +2363,47 @@
         }
 
         function showMotionResult(videoUrl) {
-            const resultsDiv = document.getElementById('motion-results');
-            resultsDiv.classList.remove('hidden');
-            resultsDiv.innerHTML = `
-                <div class="glass-card rounded-xl p-4">
-                    <video controls class="w-full rounded-xl mb-4" src="${videoUrl}">
-                        您的瀏覽器不支持視頻播放。
-                    </video>
-                    <a href="${videoUrl}" download class="block w-full px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded-xl text-center transition-colors">
-                        下載視頻
-                    </a>
-                </div>
-            `;
+            // 隱藏 placeholder
+            const placeholder = document.getElementById('motion-preview-placeholder');
+            if (placeholder) {
+                placeholder.classList.add('hidden');
+            }
+
+            // 顯示 video wrapper 和設置影片源
+            const videoWrapper = document.getElementById('motion-video-wrapper');
+            const videoPlayer = document.getElementById('motion-video-player');
+
+            if (videoWrapper && videoPlayer) {
+                videoPlayer.src = videoUrl;
+                videoWrapper.classList.remove('hidden');
+                lucide.createIcons();
+            }
+        }
+
+        function showAvatarResult(videoUrl) {
+            // 隱藏 placeholder
+            const placeholder = document.getElementById('avatar-preview-placeholder');
+            if (placeholder) {
+                placeholder.classList.add('hidden');
+            }
+
+            // 顯示 video wrapper 和設置影片源
+            const videoWrapper = document.getElementById('avatar-video-wrapper');
+            const videoPlayer = document.getElementById('avatar-video-player');
+            const downloadBtn = document.getElementById('avatar-download-btn');
+
+            if (videoWrapper && videoPlayer) {
+                videoPlayer.src = videoUrl;
+                videoWrapper.classList.remove('hidden');
+
+                // 設置下載按鈕
+                if (downloadBtn) {
+                    downloadBtn.href = videoUrl;
+                    downloadBtn.download = videoUrl.split('/').pop();
+                }
+
+                lucide.createIcons();
+            }
         }
 
         // ==========================================
@@ -2436,15 +2469,15 @@
             const btn = document.getElementById('avatar-generate-btn');
 
             if (!avatarImage || !avatarAudio) {
-                statusEl.classList.remove('hidden');
+                statusEl.style.visibility = 'visible';
                 statusEl.textContent = '請上傳頭像圖片和音頻文件';
-                statusEl.className = 'mt-4 p-4 rounded-xl text-center bg-red-500/10 text-red-400';
+                statusEl.className = 'mt-4 p-4 rounded-xl text-center min-h-[60px] flex items-center justify-center bg-red-500/10 text-red-400';
                 return;
             }
 
-            statusEl.classList.remove('hidden');
+            statusEl.style.visibility = 'visible';
             statusEl.textContent = '正在處理...';
-            statusEl.className = 'mt-4 p-4 rounded-xl text-center bg-blue-500/10 text-blue-400';
+            statusEl.className = 'mt-4 p-4 rounded-xl text-center min-h-[60px] flex items-center justify-center bg-blue-500/10 text-blue-400';
 
             btn.disabled = true;
             btn.classList.add('opacity-50', 'cursor-not-allowed');
@@ -2490,7 +2523,7 @@
             } catch (error) {
                 console.error('Avatar generation error:', error);
                 statusEl.textContent = `錯誤: ${error.message}`;
-                statusEl.className = 'mt-4 p-4 rounded-xl text-center bg-red-500/10 text-red-400';
+                statusEl.className = 'mt-4 p-4 rounded-xl text-center min-h-[60px] flex items-center justify-center bg-red-500/10 text-red-400';
                 btn.disabled = false;
                 btn.classList.remove('opacity-50', 'cursor-not-allowed');
                 btn.innerHTML = originalHTML;
@@ -2507,7 +2540,7 @@
                 if (pollCount > maxPolls) {
                     clearInterval(interval);
                     statusEl.textContent = '生成超時';
-                    statusEl.className = 'mt-4 p-4 rounded-xl text-center bg-red-500/10 text-red-400';
+                    statusEl.className = 'mt-4 p-4 rounded-xl text-center min-h-[60px] flex items-center justify-center bg-red-500/10 text-red-400';
                     btn.disabled = false;
                     btn.classList.remove('opacity-50', 'cursor-not-allowed');
                     btn.innerHTML = originalHTML;
@@ -2523,7 +2556,7 @@
                     if (data.status === 'finished') {
                         clearInterval(interval);
                         statusEl.textContent = '生成完成！';
-                        statusEl.className = 'mt-4 p-4 rounded-xl text-center bg-green-500/10 text-green-400';
+                        statusEl.className = 'mt-4 p-4 rounded-xl text-center min-h-[60px] flex items-center justify-center bg-green-500/10 text-green-400';
 
                         // 🔧 修復：後端返回 image_url，需要處理完整路徑
                         const outputPath = data.image_url || data.output_path || data.result;
@@ -2537,7 +2570,7 @@
                             showAvatarResult(fullVideoUrl);
                         } else {
                             statusEl.textContent = '⚠️ 生成完成但未返回輸出路徑';
-                            statusEl.className = 'mt-4 p-4 rounded-xl text-center bg-yellow-500/10 text-yellow-400';
+                            statusEl.className = 'mt-4 p-4 rounded-xl text-center min-h-[60px] flex items-center justify-center bg-yellow-500/10 text-yellow-400';
                         }
 
                         btn.disabled = false;
@@ -2546,7 +2579,7 @@
                     } else if (data.status === 'failed') {
                         clearInterval(interval);
                         statusEl.textContent = `生成失敗: ${data.error || '未知錯誤'}`;
-                        statusEl.className = 'mt-4 p-4 rounded-xl text-center bg-red-500/10 text-red-400';
+                        statusEl.className = 'mt-4 p-4 rounded-xl text-center min-h-[60px] flex items-center justify-center bg-red-500/10 text-red-400';
                         btn.disabled = false;
                         btn.classList.remove('opacity-50', 'cursor-not-allowed');
                         btn.innerHTML = originalHTML;
@@ -2908,7 +2941,8 @@
             if (!statusDiv) return;
 
             statusDiv.textContent = message;
-            statusDiv.className = 'text-sm text-center transition-opacity';
+            // 保留固定高度和 flex classes，只更新顏色
+            statusDiv.className = 'text-sm text-center min-h-[32px] flex items-center justify-center transition-opacity';
 
             switch (type) {
                 case 'warning':
@@ -2924,12 +2958,18 @@
                     statusDiv.classList.add('text-gray-400');
             }
 
-            statusDiv.classList.remove('hidden');
+            // 使用 visibility 而不是 hidden class
+            statusDiv.style.visibility = 'visible';
 
-            if (type !== 'error') {
+            // 算完圖後隱藏（success 類型延遲隱藏）
+            if (type === 'success') {
                 setTimeout(() => {
-                    statusDiv.classList.add('hidden');
-                }, 5000);
+                    statusDiv.style.visibility = 'hidden';
+                }, 3000);
+            } else if (type === 'error') {
+                // 錯誤訊息保持顯示，不自動隱藏
+            } else {
+                // info 和 warning 在算圖時保持顯示，不自動隱藏
             }
         }
 
