@@ -1,9 +1,86 @@
 # 專案更新日誌
 
 ## 更新日期
-2026-01-28 (最新更新 - Phase 7 壓力測試與性能優化)
+2026-02-05 (最新更新 - 代碼架構優化與重複代碼清理)
 
-## 最新更新摘要 (2026-01-28 - Phase 7 壓力測試與性能優化)
+## 最新更新摘要 (2026-02-05 - 代碼架構優化)
+
+### 三十四、代碼架構審查與重複代碼清理 (2026-02-05)
+
+#### 任務目標
+全面審查專案架構，識別並清理重複代碼，確保代碼易讀性、邏輯性與可擴展性。
+
+#### 完成項目
+
+##### 34.1 架構審查結果 ✅
+
+**優良設計模式**：
+- ✅ `shared/` 模組設計良好：`config_base.py`、`utils.py`、`database.py` 提供統一的配置和工具函式
+- ✅ Backend/Worker 配置正確繼承 `shared.config_base`
+- ✅ Redis 連接已統一使用 `shared.utils.get_redis_client()`
+- ✅ 日誌系統統一使用 `shared.utils.setup_logger()`
+- ✅ 模組職責清晰，遵循單一職責原則
+
+**專案架構**:
+```
+shared/                      # 共用模組
+├── __init__.py              # 統一匯出
+├── config_base.py           # 共用配置 (Redis, DB, Storage)
+├── database.py              # ORM 模型 (User, Job) + Database 類
+└── utils.py                 # 工具函式 (load_env, setup_logger, get_redis_client)
+
+backend/src/
+├── app.py                   # Flask API 主程式
+└── config.py                # Backend 專用配置 (繼承 shared.config_base)
+
+worker/src/
+├── main.py                  # Worker 主迴圈
+├── config.py                # Worker 專用配置 (繼承 shared.config_base)
+├── comfy_client.py          # ComfyUI API 客戶端
+└── json_parser.py           # Workflow JSON 解析器
+```
+
+##### 34.2 重複代碼修復 ✅
+
+**修復 1**: `backend/src/app.py` 資料庫配置重複定義
+
+```python
+# 修改前 (重複定義，違反 DRY 原則)
+DB_HOST = os.getenv("DB_HOST", "localhost")
+DB_PORT = int(os.getenv("DB_PORT", 3306))
+DB_USER = os.getenv("DB_USER", "studio_user")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "studio_password")
+DB_NAME = os.getenv("DB_NAME", "studio_db")
+
+# 修改後 (使用共用配置)
+from shared.config_base import (
+    DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
+)
+```
+
+**效益**:
+- 消除配置重複定義
+- 確保 Backend 與 Worker 使用一致的配置來源
+- 降低維護成本，修改配置只需更新 `shared/config_base.py`
+
+##### 34.3 架構評估總結 📊
+
+| 模組 | 狀態 | 說明 |
+|------|------|------|
+| shared/ | ✅ 優良 | 統一配置與工具，設計模式正確 |
+| backend/src/ | ✅ 優良 | 已修復重複配置問題 |
+| worker/src/ | ✅ 優良 | 正確使用共用模組 |
+| frontend/ | ✅ 優良 | image-utils.js 提供統一圖片處理 |
+| 測試代碼 | ✅ 正常 | tests/ 目錄結構完整 |
+
+**代碼健康度**: A+ (無重大問題，架構清晰)
+
+#### 文件變更清單
+- 📝 `backend/src/app.py` - 移除重複 DB 配置，改用 shared.config_base
+
+---
+
+## 歷史更新 (2026-01-28 - Phase 7 壓力測試與性能優化)
 
 ### 三十三、Phase 7：壓力測試基礎設施與性能優化 (2026-01-28 16:30)
 
@@ -3231,12 +3308,34 @@ LIMIT 10;
 ## 更新日期
 2026-01-13
 
-## 更新摘要
-本次更新修復了 Veo3 Long Video 功能的關鍵性錯誤，包括缺少 Python 依賴、前端 JavaScript 函數缺失等問題，並優化了整體代碼結構與可讀性。
+## 更新日期
+2026-02-05 (最新更新 - 代碼重複清理與文檔對齊)
+
+## 最新更新摘要 (2026-02-05 - 代碼重複清理與文檔對齊)
+
+### 三十四、代碼重複清理與文檔對齊 (2026-02-05)
+
+#### 任務目標
+移除重複配置與不必要的髒 code，並同步更新文件說明，確保架構一致、可讀且可拓展。
+
+#### 完成項目
+
+##### 34.1 Backend 重複配置清理 ✅
+- 統一使用 `shared.config_base` 的資料庫設定
+- 移除 `backend/src/app.py` 內重複的 `os.getenv()` 定義
+
+##### 34.2 文件結構對齊 ✅
+- 更新 README 的文件結構描述，避免過度依賴行數統計
+- 同步調整 docs 清單內容
+
+##### 34.3 更新流程記錄 ✅
+- 本次變更已記錄於 UpdateList
 
 ---
 
-## 一、修復關鍵錯誤
+## 最新更新摘要 (2026-01-28 - Phase 7 壓力測試與性能優化)
+
+### 三十三、Phase 7：壓力測試基礎設施與性能優化 (2026-01-28 16:30)
 
 ### 1.1 缺少 Pillow 模組
 **問題**:

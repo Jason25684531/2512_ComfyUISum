@@ -440,15 +440,14 @@ curl http://localhost:5000/api/health
 ComfyUISum/
 ├── shared/                     # 共用模組 (核心 - Phase 10 優化)
 │   ├── __init__.py            # 模組導出 (18 個配置項)
-│   ├── utils.py               # load_env(), get_project_root(), setup_logger(), 
-│   │                          # JobLogAdapter, get_redis_client() ⭐ 新增統一 Redis 連接
+│   ├── utils.py               # load_env(), setup_logger(), get_redis_client() 等
 │   ├── config_base.py         # 共用配置 (Redis, DB, Storage, ComfyUI)
-│   └── database.py            # Database 類 + ORM 模型 (User, Job) - 558 行
+│   └── database.py            # Database 類 + ORM 模型 (User, Job)
 │
 ├── backend/                    # Flask 後端服務
 │   ├── src/
-│   │   ├── app.py             # 主應用 (1318 行, API + 靜態服務 + 會員系統)
-│   │   │                      # ⭐ 已使用 shared.utils.get_redis_client()
+│   │   ├── app.py             # 主應用 (API + 會員系統)
+│   │   │                      # ⭐ 使用 shared.config_base 統一配置
 │   │   └── config.py          # 配置管理 (繼承 shared.config_base)
 │   ├── Readme/                # 文檔目錄
 │   │   ├── README.md          # Backend 使用指南
@@ -457,24 +456,24 @@ ComfyUISum/
 │
 ├── worker/                     # 任務處理器
 │   ├── src/
-│   │   ├── main.py            # Worker 主邏輯 (723 行)
-│   │   │                      # ⭐ 已使用 shared.utils.get_redis_client()
-│   │   ├── json_parser.py     # Workflow 解析 (631 行)
+│   │   ├── main.py            # Worker 主邏輯
+│   │   │                      # ⭐ 使用 shared.utils.get_redis_client()
+│   │   ├── json_parser.py     # Workflow 解析
 │   │   ├── comfy_client.py    # ComfyUI 客戶端 (525 行)
 │   │   ├── check_comfy_connection.py  # 連線檢查工具
 │   │   └── config.py          # 配置管理 (繼承 shared.config_base)
 │   └── Dockerfile             # Worker 容器定義
 │
 ├── frontend/                   # Web 前端
-│   ├── index.html             # 主頁面 (SPA + 會員狀態切換) - 157KB
-│   ├── login.html             # 登入/註冊頁面 (會員系統) - 18KB
-│   ├── profile.html           # 會員中心 - 28KB
-│   ├── dashboard.html         # 儀表板 (Phase 9 整合完成) - 158KB
-│   ├── motion-workspace.js    # Video Studio 邏輯 - 696 行
-│   ├── image-utils.js         # ⭐ 新增統一圖片處理模組 - 220 行
+│   ├── index.html             # 主頁面 (SPA + 會員狀態切換)
+│   ├── login.html             # 登入/註冊頁面 (會員系統)
+│   ├── profile.html           # 會員中心
+│   ├── dashboard.html         # 儀表板 (Phase 9 整合完成)
+│   ├── motion-workspace.js    # Video Studio 邏輯
+│   ├── image-utils.js         # ⭐ 統一圖片處理模組
 │   ├── style.css              # 擴展樣式
 │   ├── config.js              # API 配置 (自動生成)
-│   └── NAVIGATION_FLOW.md     # 導航流程文檔
+│   └── backups/               # 備份文件目錄
 │
 ├── ComfyUIworkflow/           # Workflow 模板
 │   ├── config.json            # Workflow 配置映射 (含 image_map)
@@ -496,13 +495,18 @@ ComfyUISum/
 │       └── Stability Refactor/
 │           └── Stability Refactor.md  # 穩定性重構任務
 │
-├── docs/                       # 文檔目錄 (6 個檔案)
-│   ├── UpdateList.md          # 詳細更新日誌 (2900+ 行, Phase 10 更新)
+├── docs/                       # 文檔目錄 (11 個檔案)
+│   ├── UpdateList.md          # 詳細更新日誌
+│   ├── BEST_PRACTICES.md      # 開發最佳實踐
 │   ├── HYBRID_DEPLOYMENT_STRATEGY.md  # 混合部署策略指南
+│   ├── NAVIGATION_FLOW.md     # 導航流程文檔
 │   ├── Phase8C_Monitoring_Guide.md    # 監控指南
 │   ├── Phase9_Completion_Report.md    # Phase 9 完成報告
 │   ├── PersonalGallery_Debug_Guide.md # Gallery 除錯指南
-│   └── Veo3_LongVideo_Guide.md        # Veo3 長片指南
+│   ├── Stability_Refactor_Validation_Guide.md  # 穩定性驗證指南
+│   ├── Veo3_LongVideo_Guide.md        # Veo3 長片指南
+│   ├── VEO3_TEST_MODE_DEBUG.md        # Veo3 測試模式除錯
+│   └── VEO3_TEST_MODE_README.md       # Veo3 測試模式說明
 │
 ├── storage/                    # 數據存儲
 │   ├── inputs/                # 上傳圖片暫存

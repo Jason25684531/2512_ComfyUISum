@@ -172,15 +172,11 @@ REDIS_QUEUE_NAME = JOB_QUEUE
 # Database Connection Setup
 # ============================================
 from shared.database import Database, User, get_db_session, init_db
+from shared.config_base import (
+    DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
+)
 
-# 載入資料庫配置
-DB_HOST = os.getenv("DB_HOST", "localhost")
-DB_PORT = int(os.getenv("DB_PORT", 3306))
-DB_USER = os.getenv("DB_USER", "studio_user")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "studio_password")
-DB_NAME = os.getenv("DB_NAME", "studio_db")
-
-# 初始化資料庫連接
+# 初始化資料庫連接 (使用 shared.config_base 統一配置)
 db_client = None
 try:
     db_client = Database(

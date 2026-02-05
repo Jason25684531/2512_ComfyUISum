@@ -25,7 +25,7 @@ services:
     image: mysql:8.0
     container_name: studio-mysql
     ports:
-      - "3307:3306"  # 映射到本地 3307 避免冲突
+      - "3307:3306" # 映射到本地 3307 避免冲突
     environment:
       - MYSQL_ROOT_PASSWORD=rootpassword
       - MYSQL_DATABASE=studio_db
@@ -37,7 +37,7 @@ services:
     networks:
       - studio-net
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword" ]
       interval: 10s
       timeout: 5s
       retries: 5
