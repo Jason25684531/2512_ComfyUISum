@@ -1,0 +1,147 @@
+---
+# Worker Deployment
+# 任務處理器，從 Redis 佇列消費任務並調用 ComfyUI 生成圖片/影片
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  namespace: default
+  labels:
+    app: worker
+    component: processor
+spec:
+  # WARNING: Keep replicas at 1. Multiple workers will overload the single Host ComfyUI instance.
+  replicas: 1  # 單副本（本地開發）
+  selector:
+    matchLabels:
+      app: worker
+  template:
+    metadata:
+      labels:
+        app: worker
+        component: processor
+    spec:
+      containers:
+      - name: worker
+        image: studio-worker:latest
+        imagePullPolicy: Never  # 使用本地 Docker 鏡像
+        env:
+        # 從 ConfigMap 載入環境變數
+        - name: STORAGE_TYPE
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: STORAGE_TYPE
+        - name: REDIS_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: REDIS_HOST
+        - name: REDIS_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: REDIS_PORT
+        - name: REDIS_PASSWORD
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: REDIS_PASSWORD
+        - name: JOB_QUEUE
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: JOB_QUEUE
+        - name: JOB_STATUS_EXPIRE_SECONDS
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: JOB_STATUS_EXPIRE_SECONDS
+        - name: S3_ENDPOINT_URL
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: S3_ENDPOINT_URL
+        - name: S3_BUCKET_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: S3_BUCKET_NAME
+        - name: S3_REGION
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: S3_REGION
+        - name: COMFYUI_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: COMFYUI_HOST
+        - name: COMFYUI_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: COMFYUI_PORT
+        - name: WORKER_TIMEOUT
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: WORKER_TIMEOUT
+        - name: COMFY_POLLING_INTERVAL
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: COMFY_POLLING_INTERVAL
+        - name: TEMP_FILE_MAX_AGE_HOURS
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: TEMP_FILE_MAX_AGE_HOURS
+        - name: DB_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: DB_HOST
+        - name: DB_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: DB_PORT
+        - name: DB_USER
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: DB_USER
+        - name: DB_PASSWORD
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: DB_PASSWORD
+        - name: DB_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: DB_NAME
+        # 從 Secret 載入 S3 憑證
+        - name: S3_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: minio-creds
+              key: rootUser
+        - name: S3_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: minio-creds
+              key: rootPassword
+        # Worker 無需健康檢查探針（無 HTTP 端點）
+        # 可選：使用 livenessProbe 檢查進程是否存活
+        # 資源限制 (生產環境建議設定)
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        # 重啟策略：Worker 崩潰時自動重啟
+      restartPolicy: Always

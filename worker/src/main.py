@@ -20,7 +20,10 @@ from datetime import datetime, timedelta
 # ============================================
 # 添加 shared 模組路徑
 # ============================================
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+# 本地開發環境需要設置路徑，容器環境通過 PYTHONPATH 處理
+if not Path("/app").exists():
+    # 本地環境：shared 在專案根目錄
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 # ==========================================
 # Phase 8C: 使用新的結構化日誌系統

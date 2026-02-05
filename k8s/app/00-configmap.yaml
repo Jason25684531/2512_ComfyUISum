@@ -1,0 +1,62 @@
+---
+# Application Configuration - ConfigMap
+# 統一管理 Backend 和 Worker 的環境變數
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: default
+  labels:
+    app: comfyui-studio
+data:
+  # ==========================================
+  # 儲存配置 (S3 模式)
+  # ==========================================
+  STORAGE_TYPE: "s3"
+  S3_ENDPOINT_URL: "http://minio-service:9000"
+  S3_BUCKET_NAME: "comfyui-outputs"
+  S3_REGION: "us-east-1"
+  
+  # ==========================================
+  # Redis 配置 (任務佇列)
+  # ==========================================
+  REDIS_HOST: "redis-service"
+  REDIS_PORT: "6379"
+  REDIS_PASSWORD: "mysecret"
+  JOB_QUEUE: "job_queue"
+  JOB_STATUS_EXPIRE_SECONDS: "3600"
+  
+  # ==========================================
+  # ComfyUI 配置 (連接主機)
+  # ==========================================
+  COMFYUI_HOST: "comfyui-bridge"
+  COMFYUI_PORT: "8188"
+  
+  # ==========================================
+  # Backend 專用配置
+  # ==========================================
+  FLASK_HOST: "0.0.0.0"
+  FLASK_PORT: "5001"
+  FLASK_DEBUG: "false"
+  SECRET_KEY: "dev-secret-key-change-in-production"
+  
+  # ==========================================
+  # Worker 專用配置
+  # ==========================================
+  WORKER_TIMEOUT: "2400"  # 40 分鐘
+  COMFY_POLLING_INTERVAL: "0.5"
+  TEMP_FILE_MAX_AGE_HOURS: "1"
+  
+  # ==========================================
+  # 資料庫配置 (MySQL - Phase 4)
+  # ==========================================
+  DB_TYPE: "mysql"              # 資料庫類型
+  DB_HOST: "mysql-service"      # MySQL Service 名稱
+  DB_PORT: "3306"               # MySQL 標準端口
+  DB_NAME: "studiocore"         # 資料庫名稱
+  DB_USER: "studiouser"         # 資料庫用戶（密碼從 Secret 載入）
+  
+  # ==========================================
+  # 日誌配置
+  # ==========================================
+  LOG_LEVEL: "INFO"

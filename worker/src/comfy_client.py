@@ -13,13 +13,23 @@ import time
 import shutil
 import requests
 import websocket
+import sys
 from pathlib import Path
 from typing import Optional, Callable
+
+# 添加 shared 模組路徑
+# 本地開發環境需要設置路徑，容器環境通過 PYTHONPATH 處理
+if not Path("/app").exists():
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from config import (
     COMFY_HOST, COMFY_PORT, COMFY_HTTP_URL, COMFY_WS_URL,
     COMFYUI_OUTPUT_DIR, STORAGE_OUTPUT_DIR
 )
+
+# K8s Phase 2: S3 儲存整合
+from shared.config_base import STORAGE_TYPE
+from shared.storage import get_storage_client
 
 # 為了向後相容，保留模組級別的別名
 COMFY_OUTPUT_DIR = COMFYUI_OUTPUT_DIR
@@ -39,6 +49,11 @@ class ComfyClient:
         
         # 確保輸出目錄存在
         STORAGE_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        
+        # K8s Phase 2: 初始化 S3 客戶端（如果啟用）
+        self.s3_client = get_storage_client() if STORAGE_TYPE == "s3" else None
+        if self.s3_client:
+            print(f"[ComfyClient] ✓ S3 儲存模式已啟用")
     
     def check_connection(self, retry: int = 1) -> bool:
         """
@@ -414,6 +429,16 @@ class ComfyClient:
         try:
             shutil.copy2(source_path, dest_path)
             print(f"[ComfyClient] ✓ 已複製檔案: {source_path} -> {dest_path}")
+            
+            # K8s Phase 2: 上傳到 S3（如果啟用）
+            if self.s3_client and STORAGE_TYPE == "s3":
+                object_key = f"outputs/{new_filename}"
+                success = self.s3_client.upload_file(dest_path, object_key)
+                if success:
+                    print(f"[ComfyClient] ✓ 已上傳至 S3: {object_key}")
+                else:
+                    print(f"[ComfyClient] ⚠️ S3 上傳失敗，但本地檔案已保存")
+            
             return new_filename
         except Exception as e:
             print(f"[ComfyClient] ✗ 複製檔案失敗: {e}")

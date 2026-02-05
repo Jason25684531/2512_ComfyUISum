@@ -42,6 +42,16 @@ STORAGE_INPUT_DIR.mkdir(parents=True, exist_ok=True)
 STORAGE_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # ==========================================
+# S3/MinIO 儲存配置 (K8s Phase 2)
+# ==========================================
+STORAGE_TYPE = os.getenv("STORAGE_TYPE", "local")  # 'local' 或 's3'
+S3_ENDPOINT_URL = os.getenv("S3_ENDPOINT_URL", "http://minio-service:9000")
+S3_ACCESS_KEY = os.getenv("S3_ACCESS_KEY", "minioadmin")
+S3_SECRET_KEY = os.getenv("S3_SECRET_KEY", "minioadmin")
+S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME", "comfyui-outputs")
+S3_REGION = os.getenv("S3_REGION", "us-east-1")
+
+# ==========================================
 # Workflow 配置 (共用)
 # ==========================================
 WORKFLOW_DIR = PROJECT_ROOT / "ComfyUIworkflow"

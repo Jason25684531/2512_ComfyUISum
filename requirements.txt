@@ -38,6 +38,7 @@ Flask-SQLAlchemy==3.1.1       # ORM 框架
 python-dotenv==1.0.0          # 環境變數管理
 colorlog==6.8.0               # Phase 2: 彩色日誌輸出
 rich==13.7.0                  # Phase 6: 終端美化與 RichHandler
+boto3==1.34.0                 # AWS S3 / MinIO 對象存儲客戶端
 
 # ============================================
 # 測試依賴 (可選，用於 tests/)

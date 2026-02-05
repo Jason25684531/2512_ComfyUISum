@@ -1,0 +1,132 @@
+---
+# MySQL StatefulSet & Service
+# 提供持久化關聯式資料庫服務
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mysql-creds
+  namespace: default
+  labels:
+    app: mysql
+type: Opaque
+data:
+  # Base64 編碼的敏感資料
+  # 使用方式: echo -n "your-password" | base64
+  MYSQL_ROOT_PASSWORD: U3R1ZGlvQ29yZVJvb3QyMDI2IQ==  # StudioCoreRoot2026!
+  MYSQL_DATABASE: c3R1ZGlvY29yZQ==                  # studiocore
+  MYSQL_USER: c3R1ZGlvdXNlcg==                      # studiouser
+  MYSQL_PASSWORD: U3R1ZGlvUGFzczIwMjYh              # StudioPass2026!
+
+---
+# MySQL Service - ClusterIP 內部訪問
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-service
+  namespace: default
+  labels:
+    app: mysql
+spec:
+  type: ClusterIP
+  ports:
+  - port: 3306
+    targetPort: 3306
+    protocol: TCP
+    name: mysql
+  selector:
+    app: mysql
+
+---
+# MySQL StatefulSet - 確保數據持久性
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mysql
+  namespace: default
+  labels:
+    app: mysql
+spec:
+  serviceName: mysql-service
+  replicas: 1  # 單副本（開發環境）
+  selector:
+    matchLabels:
+      app: mysql
+  template:
+    metadata:
+      labels:
+        app: mysql
+    spec:
+      containers:
+      - name: mysql
+        image: mysql:8.0
+        ports:
+        - containerPort: 3306
+          name: mysql
+          protocol: TCP
+        env:
+        # 從 Secret 載入環境變數
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-creds
+              key: MYSQL_ROOT_PASSWORD
+        - name: MYSQL_DATABASE
+          valueFrom:
+            secretKeyRef:
+              name: mysql-creds
+              key: MYSQL_DATABASE
+        - name: MYSQL_USER
+          valueFrom:
+            secretKeyRef:
+              name: mysql-creds
+              key: MYSQL_USER
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-creds
+              key: MYSQL_PASSWORD
+        # MySQL 配置優化
+        - name: MYSQL_ROOT_HOST
+          value: "%"  # 允許任何主機連接 root（僅開發環境）
+        volumeMounts:
+        - name: mysql-storage
+          mountPath: /var/lib/mysql
+        # 就緒探針 - 確保 MySQL 完全啟動
+        readinessProbe:
+          tcpSocket:
+            port: 3306
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        # 存活探針 - 自動重啟失敗的 Pod
+        livenessProbe:
+          exec:
+            command:
+            - mysqladmin
+            - ping
+            - -h
+            - localhost
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        # 資源限制
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+  # VolumeClaimTemplate - StatefulSet 自動創建 PVC
+  volumeClaimTemplates:
+  - metadata:
+      name: mysql-storage
+      labels:
+        app: mysql
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 5Gi  # 開發環境 5GB 足夠

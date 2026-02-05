@@ -25,7 +25,11 @@ from werkzeug.utils import secure_filename
 # ============================================
 # 添加 shared 模組路徑並載入 .env
 # ============================================
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+# 本地開發環境需要設置路徑，容器環境通過 PYTHONPATH 處理
+if not Path("/app").exists():
+    # 本地環境：shared 在專案根目錄
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
 from shared.utils import load_env
 load_env()
 
@@ -1487,7 +1491,9 @@ if __name__ == '__main__':
             )
         else:
             # Linux/Mac: 正常使用 reloader
-            app.run(host='0.0.0.0', port=5000, debug=True)
+            flask_port = int(os.getenv('FLASK_PORT', 5001))
+            flask_host = os.getenv('FLASK_HOST', '0.0.0.0')
+            app.run(host=flask_host, port=flask_port, debug=True)
     except KeyboardInterrupt:
         logger.info("\n⏹️ 正在關閉 Backend...")
         logger.info("✓ Backend 已優雅關閉")

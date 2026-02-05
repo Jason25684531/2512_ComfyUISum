@@ -1,0 +1,20 @@
+---
+# ComfyUI Bridge - 允許 K8s Pod 連接到主機 Windows 上的 ComfyUI 實例
+# 使用 ExternalName 類型將流量路由到 host.docker.internal
+apiVersion: v1
+kind: Service
+metadata:
+  name: comfyui-bridge
+  namespace: default
+  labels:
+    app: comfyui-bridge
+  annotations:
+    description: "Bridge service to connect K8s pods to host ComfyUI instance running on Windows"
+spec:
+  type: ExternalName
+  externalName: host.docker.internal  # Docker Desktop 特定：允許從容器訪問主機
+  ports:
+  - port: 8188
+    targetPort: 8188
+    protocol: TCP
+    name: comfyui-api

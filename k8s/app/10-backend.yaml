@@ -1,0 +1,172 @@
+---
+# Backend Deployment & Service
+# Flask API 服務，提供 REST API 端點
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: default
+  labels:
+    app: backend
+    component: api
+spec:
+  replicas: 1  # 單副本（本地開發）
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+        component: api
+    spec:
+      containers:
+      - name: backend
+        image: studio-backend:latest
+        imagePullPolicy: Never  # 使用本地 Docker 鏡像
+        ports:
+        - containerPort: 5001
+          name: http
+          protocol: TCP
+        env:
+        # 從 ConfigMap 載入環境變數
+        - name: STORAGE_TYPE
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: STORAGE_TYPE
+        - name: REDIS_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: REDIS_HOST
+        - name: REDIS_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: REDIS_PORT
+        - name: REDIS_PASSWORD
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: REDIS_PASSWORD
+        - name: S3_ENDPOINT_URL
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: S3_ENDPOINT_URL
+        - name: S3_BUCKET_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: S3_BUCKET_NAME
+        - name: S3_REGION
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: S3_REGION
+        - name: FLASK_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: FLASK_HOST
+        - name: FLASK_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: FLASK_PORT
+        - name: FLASK_DEBUG
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: FLASK_DEBUG
+        - name: SECRET_KEY
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: SECRET_KEY
+        - name: DB_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: DB_HOST
+        - name: DB_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: DB_PORT
+        - name: DB_USER
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: DB_USER
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-creds
+              key: MYSQL_PASSWORD
+        - name: DB_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: DB_NAME
+        - name: DB_TYPE
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: DB_TYPE
+        # 從 Secret 載入 S3 憑證
+        - name: S3_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: minio-creds
+              key: rootUser
+        - name: S3_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: minio-creds
+              key: rootPassword
+        # 健康檢查探針
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5001
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5001
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+        # 資源限制 (生產環境建議設定)
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+
+---
+# Backend Service - 暴露 API 端點
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+  namespace: default
+  labels:
+    app: backend
+spec:
+  type: ClusterIP  # 本地開發使用 Port-Forward
+  ports:
+  - port: 5001
+    targetPort: 5001
+    protocol: TCP
+    name: http
+  selector:
+    app: backend
