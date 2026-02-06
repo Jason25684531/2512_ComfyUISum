@@ -72,7 +72,12 @@ class S3StorageClient:
             if error_code == '404':
                 # 儲存桶不存在，創建它
                 try:
-                    self.s3_client.create_bucket(Bucket=self.bucket_name)
+                    create_kwargs = {"Bucket": self.bucket_name}
+                    if (not self.endpoint_url) and self.region and self.region != "us-east-1":
+                        create_kwargs["CreateBucketConfiguration"] = {
+                            "LocationConstraint": self.region
+                        }
+                    self.s3_client.create_bucket(**create_kwargs)
                     logger.info(f"✓ 已創建儲存桶: {self.bucket_name}")
                 except Exception as create_error:
                     logger.error(f"✗ 創建儲存桶失敗: {create_error}")

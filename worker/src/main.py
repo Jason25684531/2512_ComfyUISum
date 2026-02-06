@@ -20,15 +20,16 @@ from datetime import datetime, timedelta
 # ============================================
 # 添加 shared 模組路徑
 # ============================================
-# 本地開發環境需要設置路徑，容器環境通過 PYTHONPATH 處理
-if not Path("/app").exists():
-    # 本地環境：shared 在專案根目錄
+# 優先嘗試直接匯入，失敗時再補上專案根目錄
+try:
+    from shared.utils import load_env, setup_logger, JobLogAdapter, get_redis_client
+except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+    from shared.utils import load_env, setup_logger, JobLogAdapter, get_redis_client
 
 # ==========================================
 # Phase 8C: 使用新的結構化日誌系統
 # ==========================================
-from shared.utils import load_env, setup_logger, JobLogAdapter, get_redis_client
 
 load_env()
 

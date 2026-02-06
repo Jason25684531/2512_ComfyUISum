@@ -25,12 +25,12 @@ from werkzeug.utils import secure_filename
 # ============================================
 # 添加 shared 模組路徑並載入 .env
 # ============================================
-# 本地開發環境需要設置路徑，容器環境通過 PYTHONPATH 處理
-if not Path("/app").exists():
-    # 本地環境：shared 在專案根目錄
+# 優先嘗試直接匯入，失敗時再補上專案根目錄
+try:
+    from shared.utils import load_env
+except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
-from shared.utils import load_env
+    from shared.utils import load_env
 load_env()
 
 # ============================================

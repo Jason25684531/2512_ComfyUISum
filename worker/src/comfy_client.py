@@ -17,19 +17,19 @@ import sys
 from pathlib import Path
 from typing import Optional, Callable
 
-# 添加 shared 模組路徑
-# 本地開發環境需要設置路徑，容器環境通過 PYTHONPATH 處理
-if not Path("/app").exists():
-    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
 from config import (
     COMFY_HOST, COMFY_PORT, COMFY_HTTP_URL, COMFY_WS_URL,
     COMFYUI_OUTPUT_DIR, STORAGE_OUTPUT_DIR
 )
 
 # K8s Phase 2: S3 儲存整合
-from shared.config_base import STORAGE_TYPE
-from shared.storage import get_storage_client
+try:
+    from shared.config_base import STORAGE_TYPE
+    from shared.storage import get_storage_client
+except ModuleNotFoundError:
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+    from shared.config_base import STORAGE_TYPE
+    from shared.storage import get_storage_client
 
 # 為了向後相容，保留模組級別的別名
 COMFY_OUTPUT_DIR = COMFYUI_OUTPUT_DIR
