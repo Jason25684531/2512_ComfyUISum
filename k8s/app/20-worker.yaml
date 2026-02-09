@@ -114,9 +114,9 @@ spec:
               key: DB_USER
         - name: DB_PASSWORD
           valueFrom:
-            configMapKeyRef:
-              name: app-config
-              key: DB_PASSWORD
+            secretKeyRef:
+              name: mysql-creds
+              key: MYSQL_PASSWORD  # <--- 這才是正確的 Key
         - name: DB_NAME
           valueFrom:
             configMapKeyRef:
