@@ -2270,7 +2270,7 @@
 
                 payload.workflow = workflow;
 
-                const response = await fetch(`${API_URL}/api/generate`, {
+                const response = await fetch(`${API_BASE}/api/generate`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),
@@ -2317,7 +2317,7 @@
                 }
 
                 try {
-                    const response = await fetch(`${API_URL}/api/status/${jobId}`, {
+                    const response = await fetch(`${API_BASE}/api/status/${jobId}`, {
                         credentials: 'include'
                     });
                     const data = await response.json();
@@ -2333,7 +2333,7 @@
                             let fullVideoUrl = outputPath;
                             if (!outputPath.startsWith('http')) {
                                 const filename = outputPath.split('/').pop().split('\\').pop();
-                                fullVideoUrl = `${API_URL}/outputs/${filename}`;
+                                fullVideoUrl = `${API_BASE}/outputs/${filename}`;
                             }
                             showMotionResult(fullVideoUrl);
                         } else {
@@ -2501,7 +2501,7 @@
                     audio: audioBase64
                 };
 
-                const response = await fetch(`${API_URL}/api/generate`, {
+                const response = await fetch(`${API_BASE}/api/generate`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),
@@ -2548,7 +2548,7 @@
                 }
 
                 try {
-                    const response = await fetch(`${API_URL}/api/status/${jobId}`, {
+                    const response = await fetch(`${API_BASE}/api/status/${jobId}`, {
                         credentials: 'include'
                     });
                     const data = await response.json();
@@ -2561,11 +2561,11 @@
                         // 🔧 修復：後端返回 image_url，需要處理完整路徑
                         const outputPath = data.image_url || data.output_path || data.result;
                         if (outputPath) {
-                            // 處理路徑：如果是相對路徑，加上 API_URL 前綴
+                            // 處理路徑：如果是相對路徑，加上 API_BASE 前綴
                             let fullVideoUrl = outputPath;
                             if (!outputPath.startsWith('http')) {
                                 const filename = outputPath.split('/').pop().split('\\').pop();
-                                fullVideoUrl = `${API_URL}/outputs/${filename}`;
+                                fullVideoUrl = `${API_BASE}/outputs/${filename}`;
                             }
                             showAvatarResult(fullVideoUrl);
                         } else {

@@ -1362,8 +1362,8 @@
         // ==========================================
         // 全域狀態
         // ==========================================
-        // API_BASE 已在 config.js 中定義 (支援 Ngrok 自動更新)
-        // const API_BASE = 'http://127.0.0.1:5000'; // 舊版硬編碼配置
+        // API_BASE 從 config.js 的 window.API_URL 取得（支援 K8s/Ngrok/本地開發）
+        const API_BASE = window.API_URL || '';
         let currentTool = 'text_to_image';
         let currentRatio = '1:1';
         let currentBatchSize = 1;
@@ -2964,7 +2964,7 @@
          * Member System: 檢查登入狀態並更新側邊欄 UI
          */
         async function checkLoginStatus() {
-            const API_BASE = window.API_URL || '';
+            // API_BASE 已在外層全域定義
             const authGuest = document.getElementById('auth-guest');
             const authUser = document.getElementById('auth-user');
 

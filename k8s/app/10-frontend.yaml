@@ -1,0 +1,87 @@
+---
+# ============================================
+# StudioCore Frontend - Kubernetes Deployment & Service
+# 用途：部署 Nginx 前端容器至 K8s 叢集
+# ============================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: default
+  labels:
+    app: frontend
+    component: web
+spec:
+  replicas: 1  # 開發環境單副本，生產可擴展
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+        component: web
+    spec:
+      containers:
+      - name: frontend
+        image: studiocore-frontend:latest
+        imagePullPolicy: Never  # 使用本地 Docker 鏡像
+        ports:
+        - containerPort: 80
+          name: http
+          protocol: TCP
+        env:
+        # API 基礎路徑（空字串 = 使用 Nginx 反向代理的相對路徑）
+        - name: API_BASE_URL
+          value: ""
+        # Feature Flags（未來擴展）
+        - name: FEATURE_FLAGS
+          value: ""
+        # 健康檢查探針
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 80
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          timeoutSeconds: 3
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+        # 資源限制
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+
+---
+# ============================================
+# StudioCore Frontend - Service
+# 用途：暴露前端服務供 Ingress 路由
+# ============================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+  namespace: default
+  labels:
+    app: frontend
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 80
+    protocol: TCP
+    name: http
+  selector:
+    app: frontend

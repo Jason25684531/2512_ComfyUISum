@@ -1,7 +1,81 @@
 # 專案更新日誌
 
 ## 更新日期
-2026-02-10 (最新更新 - Kubernetes Phase 5 監控系統與台智雲遷移準備完成 ✅)
+2026-02-11 (最新更新 - Frontend K8s 容器化部署完成 ✅)
+
+## 最新更新摘要 (2026-02-11 - Frontend Containerization: infra-frontend-k8s)
+
+### 四十一、前端 Kubernetes 容器化部署 (2026-02-11)
+
+#### 任務目標
+將靜態 HTML/JS 前端遷移至 Kubernetes 原生部署，使用 Nginx Alpine 容器提供靜態檔案服務與 API 反向代理，為未來域名映射、SSL 終端和安全 API Key 注入做準備。
+
+#### 完成項目
+
+##### 41.1 Nginx 反向代理設定 ✅
+
+**新增檔案**: `frontend/nginx.conf`
+
+**功能**:
+- ✅ 靜態檔案服務根目錄 (`/usr/share/nginx/html`)
+- ✅ `/api/` 反向代理至 `backend-service:5001`（使用 FQDN + resolver 延遲 DNS 解析）
+- ✅ `/outputs/` 靜態輸出檔案代理
+- ✅ SPA 路由回退 (`try_files $uri /login.html`)
+- ✅ Gzip 壓縮、安全標頭、靜態資源快取
+- ✅ `/healthz` 健康檢查端點
+- ✅ WebSocket 支援標頭（未來擴展）
+
+##### 41.2 Docker 容器化 ✅
+
+**新增檔案**:
+- `frontend/Dockerfile` - 基於 `nginx:alpine` 的多階段建構
+- `frontend/docker-entrypoint.sh` - 環境變數注入腳本
+- `frontend/config.js.template` - 動態設定模板
+
+**架構特點**:
+- ✅ 使用 `envsubst` 在容器啟動時注入環境變數
+- ✅ 支援透過 K8s ConfigMap/Secret 覆蓋設定（不需重建映像）
+- ✅ 內建 HEALTHCHECK 指令
+- ✅ 映像大小僅 ~125MB
+
+##### 41.3 Kubernetes Manifests ✅
+
+**新增檔案**:
+- `k8s/app/10-frontend.yaml` - Deployment (1 replica) + Service (ClusterIP:80)
+- `k8s/base/99-ingress.yaml` - 統一 Ingress 路由
+
+**Ingress 路由策略**:
+```yaml
+studiocore.local/      → frontend-service:80  (Nginx 靜態 + 反向代理)
+studiocore.local/api/  → backend-service:5001 (備援直連)
+```
+
+##### 41.4 前端程式碼重構 ✅
+
+**修改檔案**:
+- `frontend/config.js` - 重構為環境自動偵測模式（K8s/Flask/Ngrok/Local Dev）
+- `frontend/index.html` - 🐛 修復全域 `API_BASE` 未定義 bug
+- `frontend/dashboard.html` - 統一 `API_URL` → `API_BASE` 變數名（6 處）
+- `frontend/motion-workspace.js` - 移除硬編碼 `http://127.0.0.1:5000` 回退
+
+**Bug 修復**:
+- `index.html` 中 `API_BASE` 在全域 scope 未定義，約 11 處 fetch 調用使用了未定義變數
+- `dashboard.html` 混用 `API_URL` 和 `API_BASE`，造成不一致
+- `motion-workspace.js` 硬編碼 localhost URL 作為回退值
+
+##### 41.5 驗證結果 ✅
+
+| 測試項目 | 結果 |
+|---------|------|
+| Docker 映像建構 | ✅ `studiocore-frontend:latest` (125MB) |
+| K8s YAML dry-run | ✅ 語法正確 |
+| Pod 狀態 | ✅ `1/1 Running` |
+| `/healthz` 端點 | ✅ `{"status":"ok"}` |
+| 靜態頁面 `/login.html` | ✅ 200 (22321 bytes) |
+| API 代理 `/api/me` | ✅ `{"logged_in":false,"user":null}` |
+| Ingress 建立 | ✅ `studiocore-ingress` (studiocore.local) |
+
+---
 
 ## 最新更新摘要 (2026-02-10 - K8s Phase 5: 監控與雲端遷移準備)
 

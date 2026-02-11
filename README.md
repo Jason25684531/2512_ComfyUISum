@@ -48,6 +48,7 @@ ComfyUI Studio 是一個現代化的 AI 圖像生成平台，提供直觀的 Web
 - 🌐 **公網訪問** - 內建 Ngrok 支持，一鍵分享給任何人
 - 🐳 **容器化** - Docker Compose 一鍵部署基礎服務
 - 🔄 **自動化** - 從配置到部署的完整自動化流程
+- ☸️ **K8s 原生** - Frontend Nginx + Backend + Redis + MySQL 完整 K8s 部署
 - 🛡️ **安全加固** - Rate Limiting、Input Validation、Path Traversal Protection (Phase 6)
 - 📊 **系統監控** - Real-time HUD、Metrics API、Worker Heartbeat (Phase 6)
 
@@ -464,7 +465,7 @@ ComfyUISum/
 │   │   └── config.py          # 配置管理 (繼承 shared.config_base)
 │   └── Dockerfile             # Worker 容器定義
 │
-├── frontend/                   # Web 前端
+├── frontend/                   # Web 前端 (Nginx + 靜態檔案)
 │   ├── index.html             # 主頁面 (SPA + 會員狀態切換)
 │   ├── login.html             # 登入/註冊頁面 (會員系統)
 │   ├── profile.html           # 會員中心
@@ -472,7 +473,11 @@ ComfyUISum/
 │   ├── motion-workspace.js    # Video Studio 邏輯
 │   ├── image-utils.js         # ⭐ 統一圖片處理模組
 │   ├── style.css              # 擴展樣式
-│   ├── config.js              # API 配置 (自動生成)
+│   ├── config.js              # API 配置 (環境自動偵測)
+│   ├── config.js.template     # ⭐ 動態設定模板 (envsubst 注入)
+│   ├── nginx.conf             # ⭐ Nginx 反向代理設定
+│   ├── docker-entrypoint.sh   # ⭐ 容器啟動腳本
+│   ├── Dockerfile             # ⭐ Nginx Alpine 容器定義
 │   └── backups/               # 備份文件目錄
 │
 ├── ComfyUIworkflow/           # Workflow 模板
@@ -1103,6 +1108,62 @@ Select-String -Path logs\*.log -Pattern "ERROR" | Select-Object -Last 20
 
 ---
 ## 📊 系統監控
+
+### Phase 6: Frontend K8s 容器化 (2026-02-11)
+
+前端已遷移至 Kubernetes 原生部署，使用 Nginx Alpine 容器。
+
+#### 前端 K8s 架構
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Ingress (studiocore.local)                │
+│                                                              │
+│  /         → frontend-service:80  (Nginx)                   │
+│  /api/*    → backend-service:5001 (備援直連)                │
+└────────────────┬──────────────────────┬─────────────────────┘
+                 │                      │
+                 ▼                      │
+┌────────────────────────────┐          │
+│  Frontend (Nginx Alpine)   │          │
+│  ┌──────────────────────┐  │          │
+│  │  Static Files        │  │          │
+│  │  (html/css/js/image) │  │          │
+│  └──────────────────────┘  │          │
+│  ┌──────────────────────┐  │          │
+│  │  Reverse Proxy       │  │          │
+│  │  /api/ → backend:5001│──┼──────────┤
+│  │  /outputs/ → backend │  │          │
+│  └──────────────────────┘  │          │
+│  ┌──────────────────────┐  │          │
+│  │  /healthz endpoint   │  │          │
+│  └──────────────────────┘  │          │
+└────────────────────────────┘          │
+                                        ▼
+                              ┌──────────────────┐
+                              │ Backend (Flask)   │
+                              │ :5001             │
+                              └──────────────────┘
+```
+
+#### 前端部署指令
+
+```bash
+# 1. 建構映像
+docker build -t studiocore-frontend:latest ./frontend
+
+# 2. 部署到 K8s
+kubectl apply -f k8s/app/10-frontend.yaml
+kubectl apply -f k8s/base/99-ingress.yaml
+
+# 3. 驗證
+kubectl get pods -l app=frontend
+kubectl port-forward svc/frontend-service 8080:80
+
+# 4. 測試
+curl http://localhost:8080/healthz       # → {"status":"ok"}
+curl http://localhost:8080/api/me        # → {"logged_in":false}
+```
 
 ### Phase 5: Kubernetes 監控基礎設施 (2026-02-10)
 

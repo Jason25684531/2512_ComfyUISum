@@ -504,7 +504,7 @@ function handleMotionGenerate() {
         return;
     }
 
-    var apiBase = (typeof API_BASE !== 'undefined') ? API_BASE : 'http://127.0.0.1:5000';
+    var apiBase = (typeof window.API_URL !== 'undefined') ? window.API_URL : '';
 
 
     fetch(apiBase + '/api/generate', {

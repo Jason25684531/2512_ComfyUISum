@@ -1,0 +1,14 @@
+// ============================================
+// StudioCore Frontend - Config Template
+// 用途：透過 envsubst 在容器啟動時注入環境變數
+// 使用方式：docker-entrypoint.sh 會將此檔案轉換為 config.js
+// ============================================
+
+// API 基礎路徑（K8s 環境使用相對路徑，由 Nginx 反向代理）
+window.API_URL = '${API_BASE_URL}';
+
+// Feature Flags（未來擴展用）
+window.FEATURE_FLAGS = '${FEATURE_FLAGS}';
+
+console.log('[Config] API Base URL:', window.API_URL || '(relative path - Nginx proxy)');
+console.log('[Config] Feature Flags:', window.FEATURE_FLAGS || '(none)');

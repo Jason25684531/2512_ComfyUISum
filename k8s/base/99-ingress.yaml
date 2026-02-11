@@ -1,0 +1,53 @@
+---
+# ============================================
+# StudioCore Unified Ingress
+# 用途：統一域名路由 - 前端 + API 備援路由
+# 域名：studiocore.local
+# ============================================
+# 架構說明：
+#   studiocore.local/      -> frontend-service:80 (Nginx 靜態 + 反向代理)
+#   studiocore.local/api/  -> backend-service:5001 (備援直連，優先級高於 Nginx 代理)
+#
+# 主要 API 流量路徑：
+#   瀏覽器 -> Ingress -> frontend-service (Nginx) -> proxy_pass -> backend-service
+# 備援 API 流量路徑：
+#   瀏覽器 -> Ingress -> backend-service (直連，跳過 Nginx)
+# ============================================
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: studiocore-ingress
+  namespace: default
+  labels:
+    app: studiocore
+    component: ingress
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"  # 開發環境使用 HTTP
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"  # 支援大檔案上傳
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"  # 長時間生成任務
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: studiocore.local
+    http:
+      paths:
+      # --- API 備援直連路由（優先匹配） ---
+      # 如果 Nginx 代理出現問題，可透過此路由直接存取後端
+      # 註：目前前端 Nginx 已處理 /api/ 代理，此為備援
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: backend-service
+            port:
+              number: 5001
+      # --- 前端路由（預設捕獲所有其他請求）---
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend-service
+            port:
+              number: 80
