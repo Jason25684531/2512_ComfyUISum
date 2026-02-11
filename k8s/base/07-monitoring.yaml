@@ -1,0 +1,233 @@
+# Phase 5: Monitoring Infrastructure
+# 輕量級 Prometheus + Grafana 監控堆棧
+# 適用於本地開發和台智雲遷移準備
+
+# ==========================================
+# Prometheus ConfigMap
+# ==========================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: default
+  labels:
+    app: prometheus
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+      external_labels:
+        cluster: 'studiocore-local'
+        environment: 'development'
+
+    scrape_configs:
+      # Prometheus 自身監控
+      - job_name: 'prometheus'
+        static_configs:
+          - targets: ['localhost:9090']
+
+      # Backend Flask 應用 (暫時停用 - /api/metrics 返回 JSON 而非 Prometheus 格式)
+      # 未來需要整合 prometheus-flask-exporter 才能啟用
+      # - job_name: 'backend'
+      #   static_configs:
+      #     - targets: ['backend-service:5001']
+      #   metrics_path: '/api/metrics'
+      #   scrape_interval: 10s
+
+      # Kube State Metrics (修復重點：正確的縮排與目標)
+      - job_name: 'kube-state-metrics'
+        static_configs:
+          - targets: ['kube-state-metrics.kube-system.svc.cluster.local:8080']
+
+---
+# ==========================================
+# Prometheus Deployment
+# ==========================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: default
+  labels:
+    app: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      containers:
+      - name: prometheus
+        image: prom/prometheus:v2.47.0
+        args:
+          - '--config.file=/etc/prometheus/prometheus.yml'
+          - '--storage.tsdb.path=/prometheus'
+          - '--storage.tsdb.retention.time=7d'
+        ports:
+        - containerPort: 9090
+          name: http
+        volumeMounts:
+        - name: prometheus-config
+          mountPath: /etc/prometheus
+        - name: prometheus-storage
+          mountPath: /prometheus
+      volumes:
+      - name: prometheus-config
+        configMap:
+          name: prometheus-config
+      - name: prometheus-storage
+        emptyDir: {}
+
+---
+# ==========================================
+# Prometheus Service
+# ==========================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus-service
+  namespace: default
+  labels:
+    app: prometheus
+spec:
+  type: ClusterIP
+  ports:
+  - port: 9090
+    targetPort: 9090
+    name: http
+  selector:
+    app: prometheus
+
+---
+# ==========================================
+# Grafana ConfigMap (Datasources)
+# ==========================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: default
+  labels:
+    app: grafana
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus-service:9090
+        isDefault: true
+        editable: true
+
+---
+# ==========================================
+# Grafana Deployment
+# ==========================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: default
+  labels:
+    app: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+      - name: grafana
+        image: grafana/grafana:10.2.0
+        ports:
+        - containerPort: 3000
+          name: http
+        env:
+        - name: GF_SECURITY_ADMIN_USER
+          value: "admin"
+        - name: GF_SECURITY_ADMIN_PASSWORD
+          value: "admin123"
+        - name: GF_SERVER_ROOT_URL
+          value: "http://monitor.studiocore.local"
+        volumeMounts:
+        - name: grafana-datasources
+          mountPath: /etc/grafana/provisioning/datasources
+        - name: grafana-storage
+          mountPath: /var/lib/grafana
+      volumes:
+      - name: grafana-datasources
+        configMap:
+          name: grafana-datasources
+      - name: grafana-storage
+        emptyDir: {}
+
+---
+# ==========================================
+# Grafana Service
+# ==========================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana-service
+  namespace: default
+  labels:
+    app: grafana
+spec:
+  type: ClusterIP
+  ports:
+  - port: 3000
+    targetPort: 3000
+    name: http
+  selector:
+    app: grafana
+
+---
+# ==========================================
+# Ingress for Grafana
+# ==========================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: monitoring-ingress
+  namespace: default
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: monitor.studiocore.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: grafana-service
+            port:
+              number: 3000     - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: grafana-service
+            port:
+              number: 3000
+t: monitor.studiocore.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: grafana-service
+            port:
+              number: 3000

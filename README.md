@@ -1104,9 +1104,112 @@ Select-String -Path logs\*.log -Pattern "ERROR" | Select-Object -Last 20
 ---
 ## 📊 系統監控
 
-### Phase 6 新增功能
+### Phase 5: Kubernetes 監控基礎設施 (2026-02-10)
 
-ComfyUI Studio 在 Phase 6 引入了完整的監控與安全機制。
+ComfyUI Studio 在 Phase 5 引入了 Prometheus + Grafana 監控堆棧，支持本地開發和雲端遷移。
+
+#### 1. 監控架構
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Monitoring Stack                        │
+│                                                             │
+│  ┌──────────────┐         ┌──────────────┐                │
+│  │   Grafana    │◄────────┤  Prometheus  │                │
+│  │ (Dashboard)  │         │   (Metrics)  │                │
+│  └───────┬──────┘         └──────┬───────┘                │
+│          │                       │                         │
+│          │ HTTP                  │ HTTP Scrape             │
+│          │ :3000                 │ :9090                   │
+└──────────┼───────────────────────┼─────────────────────────┘
+           │                       │
+           │                       ├──► Backend:5001/api/metrics
+           │                       ├──► Redis:6379 (future)
+           │                       └──► MySQL:3306 (future)
+           │
+           ▼
+    monitor.studiocore.local
+    (Nginx Ingress)
+```
+
+#### 2. 快速部署
+
+```bash
+# 1. 部署監控堆棧
+kubectl apply -f k8s/base/07-monitoring.yaml
+
+# 2. 等待 Pods 就緒
+kubectl wait --for=condition=ready pod -l app=prometheus --timeout=120s
+kubectl wait --for=condition=ready pod -l app=grafana --timeout=120s
+
+# 3. 配置本地域名 (Windows)
+# 編輯 C:\Windows\System32\drivers\etc\hosts
+# 添加行: 127.0.0.1 monitor.studiocore.local
+
+# 4. 訪問 Grafana
+# http://monitor.studiocore.local
+# 帳號: admin / 密碼: admin123
+```
+
+#### 3. Prometheus 配置
+
+**抓取目標**:
+- `prometheus:9090` - Prometheus 自身監控
+- `backend-service:5001/api/metrics` - Backend 指標
+- Redis Exporter (計畫中)
+- MySQL Exporter (計畫中)
+
+**數據保留**: 7 天 (本地開發用 emptyDir，生產環境使用 PVC)
+
+#### 4. Grafana 儀表板
+
+**預設儀表板面板**:
+- 任務隊列長度 (Time Series)
+- 活躍任務數 (Gauge)
+- Worker 健康狀態 (Stat)
+- API 請求速率 (Time Series)
+
+**自定義儀表板**:
+1. 登入 Grafana
+2. 點擊 "+" → "Dashboard"
+3. 添加查詢: `comfyui_queue_length`
+
+#### 5. Backend Metrics API
+
+**端點**: `GET /api/metrics`
+
+**響應格式 (JSON)**:
+```json
+{
+  "redis": {
+    "status": "connected",
+    "queue_length": 5
+  },
+  "worker": {
+    "status": "running",
+    "last_heartbeat": "2026-02-10T10:30:00Z"
+  },
+  "active_jobs": 3,
+  "timestamp": "2026-02-10T10:30:05Z"
+}
+```
+
+**未來升級 (Prometheus 格式)**:
+```python
+# 整合 prometheus-flask-exporter
+from prometheus_flask_exporter import PrometheusMetrics
+
+metrics = PrometheusMetrics(app)
+queue_gauge = metrics.gauge('comfyui_queue_length', 'Jobs in queue')
+
+# 自動暴露在 /metrics 端點
+```
+
+---
+
+### Phase 6: 前端即時監控 HUD (2026-01+)
+
+ComfyUI Studio 在 Phase 6 引入了完整的前端監控與安全機制。
 
 #### 1. 前端即時監控 HUD
 

@@ -9,6 +9,10 @@ metadata:
   labels:
     app: worker
     component: processor
+  annotations:
+    # Phase 5: TWCC 遷移準備註記
+    twcc.io/gpu-ready: "true"  # 標記此服務需要 GPU
+    twcc.io/gpu-type: "nvidia-v100"  # 推薦的 GPU 類型
 spec:
   # WARNING: Keep replicas at 1. Multiple workers will overload the single Host ComfyUI instance.
   replicas: 1  # 單副本（本地開發）
@@ -21,10 +25,39 @@ spec:
         app: worker
         component: processor
     spec:
+      # ==========================================
+      # Phase 5: GPU 節點選擇器（台智雲遷移準備）
+      # ==========================================
+      # 取消註解以下行以啟用 GPU 調度
+      # nodeSelector:
+      #   cloud.google.com/gke-accelerator: nvidia-tesla-v100  # GKE
+      #   twcc.io/gpu: "true"  # TWCC 自定義標籤
+      # 
+      # tolerations:
+      # - key: nvidia.com/gpu
+      #   operator: Exists
+      #   effect: NoSchedule
+      # ==========================================
+      
       containers:
       - name: worker
         image: studio-worker:latest
         imagePullPolicy: Never  # 使用本地 Docker 鏡像
+        
+        # ==========================================
+        # Phase 5: GPU 資源限制（台智雲準備）
+        # ==========================================
+        # 本地開發時保持註解，遷移到 TWCC 時取消註解
+        # resources:
+        #   requests:
+        #     memory: "4Gi"
+        #     cpu: "2000m"
+        #     nvidia.com/gpu: 1  # 請求 1 張 GPU
+        #   limits:
+        #     memory: "8Gi"
+        #     cpu: "4000m"
+        #     nvidia.com/gpu: 1  # 限制 1 張 GPU
+        # ==========================================
         env:
         # 從 ConfigMap 載入環境變數
         - name: STORAGE_TYPE
@@ -44,8 +77,8 @@ spec:
               key: REDIS_PORT
         - name: REDIS_PASSWORD
           valueFrom:
-            configMapKeyRef:
-              name: app-config
+            secretKeyRef:
+              name: redis-creds
               key: REDIS_PASSWORD
         - name: JOB_QUEUE
           valueFrom:

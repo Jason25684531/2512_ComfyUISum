@@ -1,4 +1,19 @@
 ---
+# Redis Secret
+# 敏感資料存儲（密碼）
+apiVersion: v1
+kind: Secret
+metadata:
+  name: redis-creds
+  namespace: default
+  labels:
+    app: redis
+type: Opaque
+data:
+  # Base64 編碼: echo -n "mysecret" | base64
+  REDIS_PASSWORD: bXlzZWNyZXQ=  # mysecret
+
+---
 # Redis Deployment - 任務佇列與狀態存儲
 apiVersion: apps/v1
 kind: Deployment
@@ -22,11 +37,18 @@ spec:
         image: redis:7-alpine
         args:
           - "--requirepass"
-          - "mysecret"
+          - "$(REDIS_PASSWORD)"  # 從環境變數讀取密碼
         ports:
         - containerPort: 6379
           name: redis
           protocol: TCP
+        env:
+        # Redis 密碼配置（從 Secret 載入）
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-creds
+              key: REDIS_PASSWORD
         resources:
           requests:
             memory: "128Mi"

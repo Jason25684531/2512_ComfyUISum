@@ -47,8 +47,8 @@ spec:
               key: REDIS_PORT
         - name: REDIS_PASSWORD
           valueFrom:
-            configMapKeyRef:
-              name: app-config
+            secretKeyRef:
+              name: redis-creds
               key: REDIS_PASSWORD
         - name: S3_ENDPOINT_URL
           valueFrom:

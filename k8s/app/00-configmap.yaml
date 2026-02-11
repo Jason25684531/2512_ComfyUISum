@@ -22,7 +22,7 @@ data:
   # ==========================================
   REDIS_HOST: "redis-service"
   REDIS_PORT: "6379"
-  REDIS_PASSWORD: "mysecret"
+  # REDIS_PASSWORD: 已遷移到 Secret (redis-creds)
   JOB_QUEUE: "job_queue"
   JOB_STATUS_EXPIRE_SECONDS: "3600"
   
