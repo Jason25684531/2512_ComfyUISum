@@ -19,6 +19,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+COPY ComfyUIworkflow /app/ComfyUIworkflow
+
+COPY worker/src /app/src
+
 # 複製共用模組 (關鍵：Worker 依賴 shared/)
 COPY shared/ shared/
 

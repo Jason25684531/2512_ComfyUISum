@@ -35,8 +35,9 @@ from shared.config_base import (
 # ==========================================
 
 # ComfyUI 連線配置
-COMFY_HOST = os.getenv("COMFY_HOST", "127.0.0.1")
-COMFY_PORT = int(os.getenv("COMFY_PORT", "8188"))
+# 修正：使用 COMFYUI_HOST 以匹配 K8s ConfigMap 和 Backend 配置
+COMFY_HOST = os.getenv("COMFYUI_HOST", os.getenv("COMFY_HOST", "127.0.0.1"))
+COMFY_PORT = int(os.getenv("COMFYUI_PORT", os.getenv("COMFY_PORT", "8188")))
 COMFY_HTTP_URL = f"http://{COMFY_HOST}:{COMFY_PORT}"
 COMFY_WS_URL = f"ws://{COMFY_HOST}:{COMFY_PORT}/ws"
 

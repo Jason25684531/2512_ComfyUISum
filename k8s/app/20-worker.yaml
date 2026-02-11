@@ -41,7 +41,7 @@ spec:
       
       containers:
       - name: worker
-        image: studio-worker:latest
+        image: studiocore-worker:latest
         imagePullPolicy: Never  # 使用本地 Docker 鏡像
         
         # ==========================================

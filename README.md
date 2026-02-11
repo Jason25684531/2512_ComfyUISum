@@ -1443,7 +1443,37 @@ curl http://localhost:5000/api/metrics
 ---
 ## 📝 更新日誌
 
-### Phase 12 - 架構審查與代碼清理 (2026-01-28) ⭐ 最新
+### Phase 14 - K8s Worker ComfyUI Connection Fix (2026-02-11) ⭐ 最新
+- ✅ 修正 Worker 環境變數名稱不匹配問題（`COMFY_HOST` → `COMFYUI_HOST`）
+- ✅ 統一 Backend 和 Worker 的 ComfyUI 配置變數命名
+- ✅ 重新建立 Docker 映像檔並更新 Pod
+- ✅ 驗證 ComfyUI 連接成功（`comfyui-bridge:8188`）
+- ✅ Worker 所有依賴服務連接正常（Redis、MySQL、ComfyUI）
+- ✅ 更新 docs/UpdateList.md 與 README.md
+
+**問題根因**:
+- K8s ConfigMap 使用 `COMFYUI_HOST`，但 Worker config.py 讀取 `COMFY_HOST`
+- 導致 Worker 使用預設值 `127.0.0.1` 而非 Service 名稱 `comfyui-bridge`
+
+**解決方案**:
+- 修改 `worker/src/config.py` 優先讀取 `COMFYUI_HOST`，向後相容 `COMFY_HOST`
+- 重建映像檔並強制 Pod 重啟
+
+### Phase 13 - K8s Worker Image Fix (2026-02-11)
+- ✅ 修正 K8s Worker Deployment 映像檔名稱（`studio-worker` → `studiocore-worker`）
+- ✅ 確認 `imagePullPolicy: Never` 配置以使用本地映像檔
+- ✅ 強制 Pod 重啟並驗證 ComfyUIworkflow 檔案已正確載入
+- ✅ 解決 "Workflow 檔案不存在" 錯誤
+- ✅ 架構審查：確認無重複程式碼，模組化設計完善
+- ✅ 配置繼承模式評估：`shared/config_base.py` → `backend/worker` 配置
+- ✅ 更新 docs/UpdateList.md 與 README.md
+
+**技術要點**:
+- Docker Desktop Kubernetes 使用 `imagePullPolicy: Never` 確保使用本地建立的映像檔
+- 映像檔名稱必須與 manifest 中的 `image` 標籤完全匹配
+- 刪除 Pod 後由 Deployment Controller 自動重建以載入新映像檔
+
+### Phase 12 - 架構審查與代碼清理 (2026-01-28)
 - ✅ 執行 OpenSpec Apply 工作流程
 - ✅ 全面審查 Backend、Worker、Shared、Frontend 代碼
 - ✅ 確認無核心代碼重複（共用函式統一位於 `shared/` 模組）

@@ -1,9 +1,284 @@
 # 專案更新日誌
 
 ## 更新日期
-2026-02-11 (最新更新 - Frontend K8s 容器化部署完成 ✅)
+2026-02-11 (最新更新 - Worker ComfyUI 連接修正完成 ✅)
 
-## 最新更新摘要 (2026-02-11 - Frontend Containerization: infra-frontend-k8s)
+## 最新更新摘要 (2026-02-11 - K8s Worker ComfyUI Connection Fix)
+
+### 四十三、Worker ComfyUI 連接修正 (2026-02-11)
+
+#### 問題描述
+Worker Pod 無法連接 ComfyUI 服務，錯誤訊息：
+```
+[08:23:15] [ERROR] [worker] [Job: 01d06a63-1511-4d33-b5f8-008286c5c74c] ❌ 處理錯誤: 無法連接 ComfyUI，請確認是否已啟動
+```
+
+**環境資訊**:
+- ComfyUI 運行在 Windows 主機上（`0.0.0.0:8188`）
+- K8s Service `comfyui-bridge:8188` 可以訪問 ComfyUI（測試成功）
+- Worker Pod 內部連接失敗
+
+#### 根本原因
+**環境變數名稱不匹配**：
+- K8s ConfigMap: `COMFYUI_HOST: comfyui-bridge`
+- Worker config.py: 讀取 `COMFY_HOST`（預設值 `127.0.0.1`）
+
+```python
+# worker/src/config.py (修正前)
+COMFY_HOST = os.getenv("COMFY_HOST", "127.0.0.1")  # ❌ 錯誤：變數名不匹配
+COMFY_PORT = int(os.getenv("COMFY_PORT", "8188"))
+```
+
+在 K8s 環境中，Worker 讀取不到 `COMFY_HOST` 環境變數，回退到預設值 `127.0.0.1`，導致無法連接到 `comfyui-bridge` 服務。
+
+#### 解決方案
+
+##### 43.1 修正 Worker 配置 ✅
+
+**修改檔案**: `worker/src/config.py`
+
+**變更內容**:
+```python
+# ComfyUI 連線配置
+# 修正：使用 COMFYUI_HOST 以匹配 K8s ConfigMap 和 Backend 配置
+COMFY_HOST = os.getenv("COMFYUI_HOST", os.getenv("COMFY_HOST", "127.0.0.1"))
+COMFY_PORT = int(os.getenv("COMFYUI_PORT", os.getenv("COMFY_PORT", "8188")))
+COMFY_HTTP_URL = f"http://{COMFY_HOST}:{COMFY_PORT}"
+COMFY_WS_URL = f"ws://{COMFY_HOST}:{COMFY_PORT}/ws"
+```
+
+**說明**:
+- ✅ 優先讀取 `COMFYUI_HOST`（匹配 K8s ConfigMap）
+- ✅ 回退到 `COMFY_HOST`（向後相容本地開發）
+- ✅ 最終回退到 `127.0.0.1`（本地預設值）
+- ✅ 同樣處理 `COMFYUI_PORT`
+
+##### 43.2 重新建立 Docker 映像檔 ✅
+
+**執行步驟**:
+```bash
+# 從專案根目錄建立（避免路徑問題）
+docker build -f worker/Dockerfile -t studiocore-worker:latest .
+```
+
+**建構結果**:
+```
+[+] Building 1.3s (14/14) FINISHED
+ => exporting to image                                                     0.3s
+ => => exporting layers                                                    0.1s
+ => => naming to docker.io/library/studiocore-worker:latest                0.0s
+```
+
+##### 43.3 強制 Pod 重啟 ✅
+
+**執行步驟**:
+```bash
+# 刪除 Pod，讓 Deployment 自動重建
+kubectl delete pod -l app=worker
+
+# 等待新 Pod 啟動
+kubectl get pods -l app=worker
+```
+
+**結果**:
+```
+NAME                     READY   STATUS    RESTARTS   AGE
+worker-bbf58784d-jk9tt   1/1     Running   0          90s
+```
+
+##### 43.4 驗證連接成功 ✅
+
+**日誌檢查**:
+```bash
+kubectl logs worker-bbf58784d-jk9tt --tail=20
+```
+
+**輸出**:
+```
+[08:38:31] [INFO] [worker] 🚀 Worker 啟動中...
+[08:38:31] [INFO] [worker] ✅ Redis 連接成功 (redis-service:6379)
+[08:38:32] [INFO] [worker] ✅ 資料庫連接成功 (mysql-service:3306/studiocore)
+[08:38:32] [INFO] [worker] ✅ ComfyUI 連接成功  ← 🎉 問題解決！
+[08:38:32] [INFO] [worker] 💓 啟動 Worker 心跳線程...
+[08:38:32] [INFO] [worker] 監聽佇列: job_queue
+[08:38:32] [INFO] [worker] 等待任務中...
+```
+
+**環境變數驗證**:
+```bash
+kubectl exec -it worker-bbf58784d-jk9tt -- python -c "import os; print('COMFYUI_HOST:', os.getenv('COMFYUI_HOST')); print('COMFYUI_PORT:', os.getenv('COMFYUI_PORT'))"
+```
+
+**輸出**:
+```
+COMFYUI_HOST: comfyui-bridge
+COMFYUI_PORT: 8188
+```
+
+#### 技術要點
+
+##### 環境變數命名統一
+
+| 模組 | 變數名稱 | 說明 |
+|------|---------|------|
+| K8s ConfigMap | `COMFYUI_HOST` | ✅ 標準命名 |
+| Backend | `COMFYUI_HOST` | ✅ 統一 |
+| Worker (修正前) | `COMFY_HOST` | ❌ 不一致 |
+| Worker (修正後) | `COMFYUI_HOST` (回退 `COMFY_HOST`) | ✅ 匹配 + 相容 |
+
+##### K8s Service Discovery
+```yaml
+# K8s ConfigMap
+COMFYUI_HOST: comfyui-bridge  # Service 名稱
+COMFYUI_PORT: 8188             # 服務端口
+
+# Worker Pod 內部 DNS 解析
+comfyui-bridge → 10.x.x.x (ClusterIP)
+```
+
+##### Dockerfile 建構最佳實踐
+```bash
+# ❌ 從子目錄建立（路徑問題）
+cd worker
+docker build -t studiocore-worker:latest .
+
+# ✅ 從根目錄建立（正確）
+docker build -f worker/Dockerfile -t studiocore-worker:latest .
+```
+
+#### 影響範圍
+- ✅ **Worker Pod**: 成功連接 ComfyUI 服務
+- ✅ **任務處理**: 修正 "無法連接 ComfyUI" 錯誤
+- ✅ **配置統一**: Backend 和 Worker 環境變數命名一致
+- ✅ **向後相容**: 本地開發環境仍可使用 `COMFY_HOST`
+
+#### 測試驗證
+
+| 測試項目 | 結果 |
+|---------|------|
+| Redis 連接 | ✅ `redis-service:6379` |
+| MySQL 連接 | ✅ `mysql-service:3306` |
+| ComfyUI 連接 | ✅ `comfyui-bridge:8188` |
+| 環境變數載入 | ✅ `COMFYUI_HOST=comfyui-bridge` |
+| Pod 健康狀態 | ✅ `1/1 Running` |
+| Worker 監聽狀態 | ✅ "等待任務中..." |
+
+#### 後續建議
+1. **統一配置檢查**: 審查其他模組是否有類似的環境變數命名不一致
+2. **配置文件範本**: 為 K8s 和本地開發環境提供 `.env.example`
+3. **自動化測試**: 添加環境變數配置驗證測試
+4. **監控告警**: 整合 Prometheus 監控 Worker-ComfyUI 連接狀態
+
+---
+
+## 歷史更新摘要 (2026-02-11 - K8s Worker Image Fix)
+
+### 四十二、Worker Kubernetes 映像檔修正 (2026-02-11)
+
+#### 問題描述
+Worker Pod 無法找到 ComfyUIworkflow 配置檔案，錯誤訊息：
+```
+[ERROR] [worker] [Job: 7a335e44-4a4f-4ede-ab26-264a11096614] ❌ 處理錯誤: Workflow 檔案不存在: /app/ComfyUIworkflow/text_to_image_z_image_turbo_fp8_1222.json
+```
+
+#### 根本原因
+1. **映像檔名稱不匹配**: `k8s/app/20-worker.yaml` 使用 `studio-worker:latest`，但本地建立的映像檔名稱為 `studiocore-worker:latest`
+2. **K8s 快取問題**: Pod 使用舊版映像檔，未載入最新建立包含 ComfyUIworkflow 的映像檔
+
+#### 解決方案
+
+##### 42.1 修正 K8s Manifest ✅
+
+**修改檔案**: `k8s/app/20-worker.yaml`
+
+**變更內容**:
+```yaml
+containers:
+  - name: worker
+    image: studiocore-worker:latest  # 修正: studio-worker -> studiocore-worker
+    imagePullPolicy: Never           # 已存在，確保使用本地映像檔
+```
+
+**說明**:
+- ✅ 修正映像檔名稱以匹配本地建立的映像檔
+- ✅ `imagePullPolicy: Never` 確保 K8s 使用本地 Docker daemon 的映像檔
+- ✅ 適用於 Docker Desktop Kubernetes 環境
+
+##### 42.2 強制 Pod 重啟 ✅
+
+**執行步驟**:
+```bash
+# 1. 應用更新的 manifest
+kubectl apply -f k8s/app/20-worker.yaml
+
+# 2. 刪除現有 pod 以強制重新建立
+kubectl delete pod -l app=worker
+
+# 3. 驗證新 pod 狀態
+kubectl get pods -l app=worker
+
+# 4. 驗證 ComfyUIworkflow 檔案
+kubectl exec -it <pod-name> -- ls -l /app/ComfyUIworkflow
+```
+
+**驗證結果**:
+```
+total 60
+-rwxr-xr-x 1 root root 1351 Jan 19 02:21 FLF.json
+-rwxr-xr-x 1 root root 8877 Jan  9 08:41 InfiniteTalk_IndexTTS_2.json
+-rwxr-xr-x 1 root root  852 Jan 14 07:33 T2V.json
+-rwxr-xr-x 1 root root 4469 Jan 14 09:44 Veo3_VideoConnection.json
+-rwxr-xr-x 1 root root 2909 Jan 28 05:54 config.json
+-rwxr-xr-x 1 root root 7846 Jan  8 08:19 face_swap_qwen_2509_gguf_1222.json
+-rwxr-xr-x 1 root root 4170 Jan 14 07:41 multi_image_blend_qwen_2509_gguf_1222.json
+-rwxr-xr-x 1 root root 3854 Jan  2 05:48 single_image_edit_qwen_2509_gguf_1222.json
+-rwxr-xr-x 1 root root 3883 Jan  2 05:48 sketch_to_image_qwen_2509_gguf_1222.json
+-rwxr-xr-x 1 root root 2955 Jan  2 05:48 text_to_image_z_image_turbo_fp8_1222.json ✅
+```
+
+##### 42.3 專案架構檢查 ✅
+
+**檢查範圍**:
+- ✅ `shared/` 模組 - 共用配置、工具、儲存、資料庫
+- ✅ `backend/src/` - Backend 專用配置與 API
+- ✅ `worker/src/` - Worker 專用配置與任務處理
+
+**架構評估**:
+- ✅ **配置繼承模式**: `shared/config_base.py` → `backend/src/config.py` / `worker/src/config.py`
+- ✅ **無重複定義**: 共用函式統一在 `shared/utils.py`，無重複程式碼
+- ✅ **模組化設計**: 職責分離清晰，易於維護和擴展
+- ✅ **日誌系統**: 統一使用 `shared.utils.setup_logger` 與 `JobLogAdapter`
+
+#### 技術要點
+
+##### Docker Desktop Kubernetes ImagePullPolicy
+
+| Policy | 行為 | 適用場景 |
+|--------|------|---------|
+| `Never` | 僅使用本地映像檔，不嘗試 pull | ✅ 本地開發，確保使用剛建立的映像檔 |
+| `IfNotPresent` | 本地不存在時才 pull | ⚠️ 可能使用快取，不適合頻繁更新 |
+| `Always` | 每次都嘗試 pull | ❌ 本地映像檔環境不適用 |
+
+##### 強制更新 Local Image 最佳實踐
+1. 修改 Deployment 的 `imagePullPolicy: Never`
+2. 刪除現有 Pod (`kubectl delete pod`)
+3. 讓 Deployment Controller 自動重建 Pod
+4. 驗證新 Pod 使用正確的映像檔
+
+#### 影響範圍
+- ✅ **Worker Pod**: 成功載入所有 ComfyUIworkflow 配置檔案
+- ✅ **任務執行**: 修正 "Workflow 檔案不存在" 錯誤
+- ✅ **架構穩定性**: 確認無重複程式碼，架構清晰
+
+#### 後續建議
+1. **CI/CD 整合**: 建立自動化建構流程，統一映像檔標籤管理
+2. **映像檔版本控制**: 使用語意化版本標籤（如 `v1.2.3`），避免 `latest` 快取問題
+3. **健康檢查**: 為 Worker Pod 添加 startup/liveness probe
+4. **監控告警**: 整合 Prometheus 監控 Worker 任務處理狀態
+
+---
+
+## 歷史更新摘要 (2026-02-11 - Frontend Containerization: infra-frontend-k8s)
 
 ### 四十一、前端 Kubernetes 容器化部署 (2026-02-11)
 
