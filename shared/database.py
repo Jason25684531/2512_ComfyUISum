@@ -8,6 +8,7 @@ Phase: Member System Beta
 - 移除 output_path，改用 ID 推導檔名
 """
 import os
+import json
 import logging
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
@@ -41,13 +42,9 @@ def get_db_engine(db_url: Optional[str] = None):
     global _engine
     if _engine is None:
         if db_url is None:
-            # 從環境變數建立 URL
-            host = os.getenv("DB_HOST", "localhost")
-            port = os.getenv("DB_PORT", "3306")
-            user = os.getenv("DB_USER", "studio_user")
-            password = os.getenv("DB_PASSWORD", "studio_password")
-            database = os.getenv("DB_NAME", "studio_db")
-            db_url = f"mysql+mysqlconnector://{user}:{password}@{host}:{port}/{database}"
+            # 從 shared.config_base 取得統一配置（避免預設值不一致）
+            from shared.config_base import DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
+            db_url = f"mysql+mysqlconnector://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
         
         _engine = create_engine(
             db_url,
@@ -148,6 +145,7 @@ class Job(Base):
     batch_size = Column(Integer, default=1)
     seed = Column(Integer, default=-1)
     status = Column(String(20), default='queued')
+    output_path = Column(Text, nullable=True)  # 輸出文件路徑（可能包含多個，逗號分隔）
     input_audio_path = Column(String(255), nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
@@ -253,6 +251,7 @@ class Database:
             batch_size INT DEFAULT 1,
             seed INT DEFAULT -1,
             status VARCHAR(20),
+            output_path TEXT DEFAULT NULL,
             input_audio_path VARCHAR(255) DEFAULT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -327,8 +326,6 @@ class Database:
         Returns:
             是否成功
         """
-        import json
-        
         sql = """
         INSERT INTO jobs (id, user_id, prompt, workflow_name, workflow_data, model, aspect_ratio, batch_size, seed, status, input_audio_path)
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
@@ -355,7 +352,7 @@ class Database:
         self,
         job_id: str,
         status: str,
-        output_path: Optional[str] = None  # 保留參數相容性，但不再使用
+        output_path: Optional[str] = None
     ) -> bool:
         """
         更新任務狀態
@@ -363,13 +360,17 @@ class Database:
         Args:
             job_id: 任務 ID
             status: 新狀態 (finished, failed, cancelled)
-            output_path: [已棄用] 輸出路徑（不再儲存，改用 ID 推導）
+            output_path: 輸出路徑（用於前端顯示結果）
         
         Returns:
             是否成功
         """
-        sql = "UPDATE jobs SET status = %s WHERE id = %s"
-        params = (status, job_id)
+        if output_path:
+            sql = "UPDATE jobs SET status = %s, output_path = %s WHERE id = %s"
+            params = (status, output_path, job_id)
+        else:
+            sql = "UPDATE jobs SET status = %s WHERE id = %s"
+            params = (status, job_id)
         
         try:
             conn = self.pool.get_connection()
@@ -419,7 +420,7 @@ class Database:
         
         sql = f"""
         SELECT id, user_id, prompt, workflow_name as workflow, model, aspect_ratio, batch_size, seed,
-               status, created_at, updated_at
+               status, output_path, created_at, updated_at
         FROM jobs
         {where_clause}
         ORDER BY created_at DESC
@@ -446,8 +447,9 @@ class Database:
                 if row.get('updated_at'):
                     row['updated_at'] = row['updated_at'].isoformat()
                 
-                # 構建輸出路徑 (使用 ID 推導)
-                row['output_path'] = f"/outputs/{row['id']}.png"
+                # 如果資料庫中沒有 output_path，使用 ID 推導（向後相容）
+                if not row.get('output_path'):
+                    row['output_path'] = f"/outputs/{row['id']}.png"
             
             return results
         except Error as e:

@@ -43,6 +43,15 @@ spec:
             name: backend-service
             port:
               number: 5001
+      # --- 輸出檔案路由（直連後端） ---
+      # 生成的圖片/影片透過 Backend 提供靜態檔案服務
+      - path: /outputs
+        pathType: Prefix
+        backend:
+          service:
+            name: backend-service
+            port:
+              number: 5001
       # --- 前端路由（預設捕獲所有其他請求）---
       - path: /
         pathType: Prefix

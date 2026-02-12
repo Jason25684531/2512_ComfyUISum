@@ -31,9 +31,6 @@ except ModuleNotFoundError:
     from shared.config_base import STORAGE_TYPE
     from shared.storage import get_storage_client
 
-# 為了向後相容，保留模組級別的別名
-COMFY_OUTPUT_DIR = COMFYUI_OUTPUT_DIR
-
 
 class ComfyClient:
     """
@@ -368,9 +365,9 @@ class ComfyClient:
         """
         # 根據 file_type 決定來源根目錄
         if file_type == "temp":
-            base_dir = COMFY_OUTPUT_DIR.parent / "temp"
+            base_dir = COMFYUI_OUTPUT_DIR.parent / "temp"
         else:
-            base_dir = COMFY_OUTPUT_DIR
+            base_dir = COMFYUI_OUTPUT_DIR
         
         # 來源路徑
         if subfolder:
@@ -388,18 +385,18 @@ class ComfyClient:
             
             # 1. 嘗試直接在 output 根目錄
             if subfolder:
-                alternative_paths.append(COMFY_OUTPUT_DIR / filename)
+                alternative_paths.append(COMFYUI_OUTPUT_DIR / filename)
             
             # 2. 如果是 temp 類型，嘗試 output 目錄
             if file_type == "temp":
                 if subfolder:
-                    alternative_paths.append(COMFY_OUTPUT_DIR / subfolder / filename)
+                    alternative_paths.append(COMFYUI_OUTPUT_DIR / subfolder / filename)
                 else:
-                    alternative_paths.append(COMFY_OUTPUT_DIR / filename)
+                    alternative_paths.append(COMFYUI_OUTPUT_DIR / filename)
             
             # 3. 嘗試 temp 目錄（即使 file_type 不是 temp）
             if file_type != "temp":
-                temp_dir = COMFY_OUTPUT_DIR.parent / "temp"
+                temp_dir = COMFYUI_OUTPUT_DIR.parent / "temp"
                 if subfolder:
                     alternative_paths.append(temp_dir / subfolder / filename)
                 else:
@@ -443,9 +440,7 @@ class ComfyClient:
         except Exception as e:
             print(f"[ComfyClient] ✗ 複製檔案失敗: {e}")
             return None
-            
-    # 向後相容別名
-    copy_output_image = copy_output_file
+
     
     def interrupt(self) -> bool:
         """
@@ -470,71 +465,6 @@ class ComfyClient:
         except Exception as e:
             print(f"[ComfyClient] ✗ 中斷錯誤: {e}")
             return False
-    
-    def process_task(self, workflow: dict, job_id: str = None) -> dict:
-        """
-        完整處理一個任務
-        
-        Args:
-            workflow: 已解析的 workflow dict
-            job_id: 任務 ID
-        
-        Returns:
-            {
-                "success": bool,
-                "image_url": str or None,
-                "error": str or None
-            }
-        """
-        result = {
-            "success": False,
-            "image_url": None,
-            "error": None
-        }
-        
-        # 1. 檢查連接
-        if not self.check_connection():
-            result["error"] = "無法連接 ComfyUI，請確認是否已啟動"
-            return result
-        
-        # 2. 提交任務
-        prompt_id = self.queue_prompt(workflow)
-        if not prompt_id:
-            result["error"] = "任務提交失敗"
-            return result
-        
-        # 3. 等待完成
-        ws_result = self.wait_for_completion(prompt_id)
-        
-        if not ws_result["success"]:
-            result["error"] = ws_result.get("error", "執行失敗")
-            return result
-        
-        # 4. 複製輸出
-        output_file = None
-        
-        # 優先檢查影片/GIF
-        if ws_result["videos"]:
-            output_file = ws_result["videos"][0]
-        elif ws_result["gifs"]:
-            output_file = ws_result["gifs"][0]
-        elif ws_result["images"]:
-            output_file = ws_result["images"][0]
-            
-        if output_file:
-            new_filename = self.copy_output_file(
-                filename=output_file.get("filename"),
-                subfolder=output_file.get("subfolder", ""),
-                job_id=job_id
-            )
-            
-            if new_filename:
-                result["success"] = True
-                result["image_url"] = f"/outputs/{new_filename}"
-        else:
-            result["error"] = "沒有輸出檔案"
-        
-        return result
 
 
 # ==========================================

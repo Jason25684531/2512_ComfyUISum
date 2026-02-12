@@ -16,7 +16,7 @@ Write-Host ""
 
 # 構建 Backend 鏡像
 Write-Host "   構建 Backend 鏡像..." -ForegroundColor Cyan
-docker build -t studio-backend:latest -f backend/Dockerfile .
+docker build -t studiocore-backend:latest -f backend/Dockerfile .
 if ($LASTEXITCODE -ne 0) {
     Write-Host "   ✗ Backend 鏡像構建失敗！" -ForegroundColor Red
     exit 1
@@ -26,7 +26,7 @@ Write-Host ""
 
 # 構建 Worker 鏡像
 Write-Host "   構建 Worker 鏡像..." -ForegroundColor Cyan
-docker build -t studio-worker:latest -f worker/Dockerfile .
+docker build -t studiocore-worker:latest -f worker/Dockerfile .
 if ($LASTEXITCODE -ne 0) {
     Write-Host "   ✗ Worker 鏡像構建失敗！" -ForegroundColor Red
     exit 1

@@ -4,10 +4,24 @@ ComfyUI 連接檢查工具
 驗證 ComfyUI 是否正確啟動並接受 API 請求。
 """
 
+import os
 import sys
 import requests
+from pathlib import Path
 
-COMFY_URL = "http://127.0.0.1:8188"
+# 從 config 統一讀取 ComfyUI 配置（避免重複定義）
+try:
+    from config import COMFY_HOST, COMFY_PORT
+except ImportError:
+    sys.path.insert(0, str(Path(__file__).parent))
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+    try:
+        from config import COMFY_HOST, COMFY_PORT
+    except ImportError:
+        COMFY_HOST = os.getenv("COMFYUI_HOST", os.getenv("COMFY_HOST", "127.0.0.1"))
+        COMFY_PORT = int(os.getenv("COMFYUI_PORT", os.getenv("COMFY_PORT", "8188")))
+
+COMFY_URL = f"http://{COMFY_HOST}:{COMFY_PORT}"
 
 
 def check_comfyui():

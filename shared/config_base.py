@@ -25,7 +25,7 @@ JOB_QUEUE = os.getenv("JOB_QUEUE", "job_queue")
 # 資料庫配置 (共用)
 # ==========================================
 DB_HOST = os.getenv("DB_HOST", "localhost")
-DB_PORT = int(os.getenv("DB_PORT", 3306))
+DB_PORT = int(os.getenv("DB_PORT", "3307"))
 DB_USER = os.getenv("DB_USER", "studio_user")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "studio_password")
 DB_NAME = os.getenv("DB_NAME", "studio_db")

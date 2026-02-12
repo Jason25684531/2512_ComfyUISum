@@ -115,6 +115,16 @@ spec:
             configMapKeyRef:
               name: app-config
               key: COMFYUI_PORT
+        - name: COMFYUI_OUTPUT_DIR
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: COMFYUI_OUTPUT_DIR
+        - name: COMFYUI_INPUT_DIR
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: COMFYUI_INPUT_DIR
         - name: WORKER_TIMEOUT
           valueFrom:
             configMapKeyRef:
@@ -176,5 +186,40 @@ spec:
           limits:
             memory: "1Gi"
             cpu: "1000m"
+        # ==========================================
+        # Phase 5: Volume 掛載 (重要!)
+        # ==========================================
+        volumeMounts:
+        # 1. ComfyUI 輸出目錄 (讀取生成的圖片)
+        - name: comfyui-output
+          mountPath: /comfyui/output
+          readOnly: true  # Worker 只需讀取權限
+        # 2. storage/outputs 目錄 (儲存複製後的圖片)
+        - name: storage-outputs
+          mountPath: /app/storage/outputs
+        # 3. ComfyUI workflow 配置目錄 (讀取 workflow JSON)
+        - name: workflows
+          mountPath: /app/ComfyUIworkflow
+          readOnly: true
+        # ==========================================
         # 重啟策略：Worker 崩潰時自動重啟
       restartPolicy: Always
+      # ==========================================
+      # Volume 定義
+      # ==========================================
+      volumes:
+      # ComfyUI 輸出目錄 (主機路徑)
+      - name: comfyui-output
+        hostPath:
+          path: /run/desktop/mnt/host/c/ComfyUI_windows_portable/ComfyUI/output
+          type: Directory
+      # storage/outputs 目錄 (專案路徑)
+      - name: storage-outputs
+        hostPath:
+          path: /run/desktop/mnt/host/d/01_Project/2512_ComfyUISum/storage/outputs
+          type: DirectoryOrCreate
+      # Workflow 配置目錄
+      - name: workflows
+        hostPath:
+          path: /run/desktop/mnt/host/d/01_Project/2512_ComfyUISum/ComfyUIworkflow
+          type: Directory

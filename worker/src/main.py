@@ -10,10 +10,8 @@ import json
 import time
 import redis
 import base64
-import uuid
 import logging
 import threading
-from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from datetime import datetime, timedelta
 
@@ -44,8 +42,9 @@ from comfy_client import ComfyClient
 from config import (
     REDIS_HOST, REDIS_PORT, REDIS_PASSWORD,
     COMFYUI_INPUT_DIR, JOB_QUEUE, TEMP_FILE_MAX_AGE_HOURS,
-    JOB_STATUS_EXPIRE_SECONDS, STORAGE_INPUT_DIR, print_config,
-    WORKER_TIMEOUT
+    JOB_STATUS_EXPIRE_SECONDS, STORAGE_INPUT_DIR, STORAGE_OUTPUT_DIR,
+    print_config, WORKER_TIMEOUT,
+    CLEANUP_INTERVAL_SECONDS, OUTPUT_RETENTION_DAYS
 )
 from shared.config_base import (
     DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
@@ -217,12 +216,10 @@ def cleanup_old_output_files(db_client=None):
     Args:
         db_client: Database 客戶端實例（用於同步軟刪除）
     """
-    from config import STORAGE_OUTPUT_DIR
-    
     if not STORAGE_OUTPUT_DIR.exists():
         return
     
-    cutoff_time = datetime.now() - timedelta(days=30)
+    cutoff_time = datetime.now() - timedelta(days=OUTPUT_RETENTION_DAYS)
     deleted_count = 0
     total_size = 0
     db_synced = 0
@@ -360,8 +357,6 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
     job_id = job_data.get("job_id", "unknown")
     
     # Phase 8C: 使用 JobLogAdapter 自動注入 job_id
-    from shared.utils import JobLogAdapter
-    import logging
     base_logger = logging.getLogger("worker")
     job_logger = JobLogAdapter(base_logger, {'job_id': job_id})
     
@@ -669,12 +664,11 @@ def main():
     logger.info("等待任務中...\n")
     
     last_cleanup_time = time.time()
-    CLEANUP_INTERVAL = 3600  # 每小時清理一次
     
     while True:
         try:
             # 定期清理暫存檔案和輸出圖片
-            if time.time() - last_cleanup_time > CLEANUP_INTERVAL:
+            if time.time() - last_cleanup_time > CLEANUP_INTERVAL_SECONDS:
                 cleanup_old_temp_files()
                 cleanup_old_output_files(db_client)
                 last_cleanup_time = time.time()

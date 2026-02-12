@@ -22,7 +22,7 @@ spec:
     spec:
       containers:
       - name: backend
-        image: studio-backend:latest
+        image: studiocore-backend:latest
         imagePullPolicy: Never  # 使用本地 Docker 鏡像
         ports:
         - containerPort: 5001
@@ -151,6 +151,30 @@ spec:
           limits:
             memory: "512Mi"
             cpu: "500m"
+        # ==========================================
+        # Phase 5: Volume 掛載
+        # ==========================================
+        volumeMounts:
+        # storage 目錄 (讀取/提供輸出檔案給前端)
+        - name: storage-outputs
+          mountPath: /app/storage/outputs
+        - name: storage-inputs
+          mountPath: /app/storage/inputs
+        # ==========================================
+      # ==========================================
+      # Volume 定義
+      # ==========================================
+      volumes:
+      # storage/outputs 目錄 (專案路徑)
+      - name: storage-outputs
+        hostPath:
+          path: /run/desktop/mnt/host/d/01_Project/2512_ComfyUISum/storage/outputs
+          type: DirectoryOrCreate
+      # storage/inputs 目錄 (專案路徑)
+      - name: storage-inputs
+        hostPath:
+          path: /run/desktop/mnt/host/d/01_Project/2512_ComfyUISum/storage/inputs
+          type: DirectoryOrCreate
 
 ---
 # Backend Service - 暴露 API 端點

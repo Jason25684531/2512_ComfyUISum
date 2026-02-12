@@ -1,9 +1,154 @@
 # 專案更新日誌
 
 ## 更新日期
-2026-02-11 (最新更新 - Worker ComfyUI 連接修正完成 ✅)
+2026-02-12 (最新更新 - Hotfix: Worker COMFY_OUTPUT_DIR 錯誤修正 ✅)
 
-## 最新更新摘要 (2026-02-11 - K8s Worker ComfyUI Connection Fix)
+## 最新更新摘要 (2026-02-12 - Hotfix: Worker COMFY_OUTPUT_DIR Undefined Error)
+
+### 四十五、Hotfix: Worker COMFY_OUTPUT_DIR 錯誤修正 (2026-02-12)
+
+#### 問題描述
+K8s Worker 在處理任務時出現致命錯誤：
+```
+[ERROR] [worker] [Job: 33902df4-668d-4441-b0ae-271018b18f28] ❌ 處理錯誤: name 'COMFY_OUTPUT_DIR' is not defined
+```
+
+#### 根本原因
+在第 44 次代碼清洗中，移除了 `worker/src/comfy_client.py` 中的 `COMFY_OUTPUT_DIR` 別名定義：
+```python
+# 移除的別名
+COMFY_OUTPUT_DIR = COMFYUI_OUTPUT_DIR  # ❌ 已刪除
+```
+
+但 `copy_output_file()` 方法中仍有 **6 處**引用此變數，導致 `NameError`。
+
+#### 解決方案
+
+**修改檔案**: `worker/src/comfy_client.py`
+
+替換所有 `COMFY_OUTPUT_DIR` 引用為 `COMFYUI_OUTPUT_DIR`（已從 `config` 正確導入）：
+
+| 行號區間 | 修改前 | 修改後 |
+|---------|-------|-------|
+| 368, 370 | `base_dir = COMFY_OUTPUT_DIR...` | `base_dir = COMFYUI_OUTPUT_DIR...` |
+| 388 | `alternative_paths.append(COMFY_OUTPUT_DIR / filename)` | `alternative_paths.append(COMFYUI_OUTPUT_DIR / filename)` |
+| 393 | `alternative_paths.append(COMFY_OUTPUT_DIR / subfolder / filename)` | `alternative_paths.append(COMFYUI_OUTPUT_DIR / subfolder / filename)` |
+| 395 | `alternative_paths.append(COMFY_OUTPUT_DIR / filename)` | `alternative_paths.append(COMFYUI_OUTPUT_DIR / filename)` |
+| 399 | `temp_dir = COMFY_OUTPUT_DIR.parent / "temp"` | `temp_dir = COMFYUI_OUTPUT_DIR.parent / "temp"` |
+
+**部署流程**:
+```bash
+# 1. 編譯驗證
+python -m py_compile worker/src/comfy_client.py  # ✅ 通過
+
+# 2. 重建映像
+docker build -t studiocore-worker:latest -f worker/Dockerfile .
+
+# 3. 重啟 Worker Pod
+kubectl delete pod -l app=worker
+
+# 4. 驗證
+kubectl logs -l app=worker --tail=30
+# [10:00:10] [INFO] [worker] ✅ ComfyUI 連接成功
+# [10:00:10] [INFO] [worker] 等待任務中...
+```
+
+#### 驗證結果
+- ✅ Worker Pod 成功重啟 (Running 1/1)
+- ✅ 所有依賴連接正常 (Redis, MySQL, ComfyUI)
+- ✅ Worker 進入等待任務狀態，無錯誤
+
+#### 預防措施
+未來移除別名時，應先使用 `grep_search` 確認無其他引用：
+```bash
+grep -r "COMFY_OUTPUT_DIR" worker/src/
+```
+
+---
+
+### 四十四、代碼清洗與文檔精煉 (2026-02-12)
+
+#### 概述
+依據 OpenSpec 規範執行全面代碼清洗，分析 12 個 Python 源碼檔案，識別並修復 28 處問題（3 HIGH, 7 MEDIUM, 18 LOW）。同時精煉 K8s 測試指南與 README.md。
+
+#### 44.1 HIGH 嚴重度修復
+
+**修復 1: DB_PORT 配置不一致** (`shared/database.py`)
+- 問題: `get_db_engine()` 使用 `os.getenv("DB_PORT", "3306")` 而非統一配置
+- 修復: 改為從 `shared.config_base` 導入 `DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME`
+- 影響: 修正 K8s 環境中 MySQL 連接端口不匹配問題
+
+**修復 2: Job TTL 不一致** (`backend/src/app.py`)
+- 問題: 硬編碼 `ex=86400`（24小時）與 config 定義的 `JOB_STATUS_EXPIRE_SECONDS=3600` 不符
+- 修復: 統一使用 `JOB_STATUS_EXPIRE_SECONDS` 配置值
+- 位置: `submit_job()` 和 `get_job_status()` 兩處 Redis SET
+
+#### 44.2 MEDIUM 嚴重度修復
+
+**修復 3: 重複 CORS 初始化** (`backend/src/app.py`)
+- 移除第 46 行冗餘 `CORS(app)` 呼叫（保留第 95 行帶設定的版本）
+
+**修復 4: Flask 端口硬編碼** (`backend/src/app.py`)
+- 修復: `app.run(port=int(os.getenv('FLASK_PORT', '5000')))` 支持環境變數覆蓋
+
+**修復 5: 混合導入路徑** (`backend/src/app.py`)
+- 統一從 `config` 模組導入 DB 配置，不再直接從 `shared.config_base` 導入
+
+**修復 6: Backend config.py 缺失 re-export** (`backend/src/config.py`)
+- 新增 `DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME` 重導出
+
+**修復 7: 移除 process_task() 重複方法** (`worker/src/comfy_client.py`)
+- 刪除 ~60 行的 `process_task()` 方法，功能與 `main.py::process_job()` 重複
+
+**修復 8: Worker 清理間隔硬編碼** (`worker/src/main.py`)
+- 新增可配置: `CLEANUP_INTERVAL_SECONDS`（預設 3600）、`OUTPUT_RETENTION_DAYS`（預設 30）
+
+**修復 9: check_comfy_connection.py 配置硬編碼** (`worker/src/check_comfy_connection.py`)
+- 改為從 `config.py` 導入 COMFY_HOST/PORT（保留獨立執行回退鏈）
+
+#### 44.3 未使用代碼清理
+
+| 檔案 | 移除項目 |
+|------|---------|
+| `backend/src/app.py` | `import threading`, `RotatingFileHandler` → `TimedRotatingFileHandler` |
+| `worker/src/main.py` | `import uuid`, `import RotatingFileHandler`, 函式內重複 `import logging/JobLogAdapter/STORAGE_OUTPUT_DIR` |
+| `worker/src/comfy_client.py` | `COMFY_OUTPUT_DIR` 別名, `copy_output_image` 別名 |
+| `worker/src/config.py` | `STORAGE_MODELS_DIR`（未被使用的目錄變數） |
+| `shared/storage.py` | `from datetime import timedelta` |
+| `shared/database.py` | `insert_job()` 內的行內 `import json`（移至頂層） |
+
+#### 44.4 文檔精煉
+
+| 文檔 | 原始行數 | 精煉後 | 精簡率 |
+|------|---------|--------|-------|
+| `docs/K8s_Comprehensive_Testing_Guide.md` | 1940 行 | ~680 行 | -65% |
+| `README.md` | 1615 行 | ~1000 行 | -38% |
+
+K8s 指南精煉要點:
+- 合併冗餘章節，移除 FAQ（內容已涵蓋在除錯指南中）
+- 壓縮測試腳本，保留完整操作指令
+- Web UI E2E 測試精簡為表格清單
+- 保持所有 PowerShell 命令可直接複製執行
+
+README.md 精煉要點:
+- 架構圖從 160 行壓縮至 40 行（保留核心流向）
+- Phase 歷史記錄精簡為單行摘要（詳情見 UpdateList.md）
+- 系統監控章節從 400 行壓縮至 50 行
+- 移除冗餘 Ngrok 架構圖
+
+#### 44.5 驗證結果
+
+所有修改檔案通過 `py_compile` 編譯驗證，零錯誤:
+- `shared/database.py` ✅
+- `shared/storage.py` ✅
+- `backend/src/app.py` ✅
+- `backend/src/config.py` ✅
+- `worker/src/main.py` ✅
+- `worker/src/config.py` ✅
+- `worker/src/comfy_client.py` ✅
+- `worker/src/check_comfy_connection.py` ✅
+
+---
 
 ### 四十三、Worker ComfyUI 連接修正 (2026-02-11)
 

@@ -14,7 +14,7 @@
     const hostname = window.location.hostname;
     const port = window.location.port;
     const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
-    const isServedByFlask = isLocalhost && (port === '5000' || port === '');
+    const isServedByFlask = isLocalhost && (port === '5000' || port === '5001' || port === '');
     const isServedByNginx = !isLocalhost || port === '80' || port === '';
     const isK8sEnv = hostname.endsWith('.local') || hostname.endsWith('.svc.cluster.local');
 

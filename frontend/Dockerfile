@@ -16,17 +16,18 @@ RUN apk add --no-cache gettext
 RUN rm -f /etc/nginx/conf.d/default.conf
 
 # --- 複製 Nginx 設定 ---
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
 
 # --- 複製靜態檔案 ---
-COPY *.html       /usr/share/nginx/html/
-COPY *.css        /usr/share/nginx/html/
-COPY *.js         /usr/share/nginx/html/
-COPY front/       /usr/share/nginx/html/front/
-COPY image/       /usr/share/nginx/html/image/
+COPY frontend/*.html       /usr/share/nginx/html/
+COPY frontend/*.css        /usr/share/nginx/html/
+COPY frontend/*.js         /usr/share/nginx/html/
+COPY frontend/config.js.template /usr/share/nginx/html/config.js.template
+COPY frontend/front/       /usr/share/nginx/html/front/
+COPY frontend/image/       /usr/share/nginx/html/image/
 
 # --- 複製 entrypoint（環境變數注入）---
-COPY docker-entrypoint.sh /docker-entrypoint.sh
+COPY frontend/docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 
 # --- 預設環境變數（可透過 K8s ConfigMap/Secret 覆蓋）---

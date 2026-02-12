@@ -27,6 +27,11 @@ from shared.config_base import (
     JOB_STATUS_EXPIRE_SECONDS,
     COMFYUI_ROOT,
     COMFYUI_MODELS_DIR,
+    DB_HOST,
+    DB_PORT,
+    DB_USER,
+    DB_PASSWORD,
+    DB_NAME,
 )
 
 # ==========================================

@@ -10,8 +10,8 @@ import boto3
 import logging
 from pathlib import Path
 from typing import Optional, Union
+from botocore.config import Config
 from botocore.exceptions import ClientError
-from datetime import timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +51,7 @@ class S3StorageClient:
                 aws_access_key_id=self.access_key,
                 aws_secret_access_key=self.secret_key,
                 region_name=self.region,
-                config=boto3.session.Config(signature_version='s3v4')
+                config=Config(signature_version='s3v4')
             )
             logger.info(f"✓ S3 客戶端初始化成功: {self.endpoint_url}")
             

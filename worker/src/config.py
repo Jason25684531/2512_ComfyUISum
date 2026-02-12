@@ -42,21 +42,18 @@ COMFY_HTTP_URL = f"http://{COMFY_HOST}:{COMFY_PORT}"
 COMFY_WS_URL = f"ws://{COMFY_HOST}:{COMFY_PORT}/ws"
 
 # ComfyUI 資料夾路徑
+# K8s 環境中會掛載到 /comfyui/output，本地開發使用 COMFYUI_ROOT
 COMFYUI_INPUT_DIR = Path(os.getenv(
     "COMFYUI_INPUT_DIR",
     str(COMFYUI_ROOT / "input")
 ))
 COMFYUI_OUTPUT_DIR = Path(os.getenv(
     "COMFYUI_OUTPUT_DIR",
-    str(COMFYUI_ROOT / "output")
+    "/comfyui/output" if os.path.exists("/comfyui/output") else str(COMFYUI_ROOT / "output")
 ))
 
 # 確保 ComfyUI 輸入目錄存在
 COMFYUI_INPUT_DIR.mkdir(parents=True, exist_ok=True)
-
-# 額外的儲存目錄
-STORAGE_MODELS_DIR = STORAGE_DIR / "models"
-STORAGE_MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Worker 特定配置
 TEMP_FILE_MAX_AGE_HOURS = int(os.getenv("TEMP_FILE_MAX_AGE_HOURS", "1"))
@@ -64,6 +61,10 @@ TEMP_FILE_MAX_AGE_HOURS = int(os.getenv("TEMP_FILE_MAX_AGE_HOURS", "1"))
 # Phase 9: Reliability - 延長超時配置
 WORKER_TIMEOUT = int(os.getenv("WORKER_TIMEOUT", "2400"))  # 預設 40 分鐘
 COMFY_POLLING_INTERVAL = float(os.getenv("COMFY_POLLING_INTERVAL", "0.5"))
+
+# 清理配置
+CLEANUP_INTERVAL_SECONDS = int(os.getenv("CLEANUP_INTERVAL_SECONDS", "3600"))  # 每小時清理一次
+OUTPUT_RETENTION_DAYS = int(os.getenv("OUTPUT_RETENTION_DAYS", "30"))  # 輸出檔保留 30 天
 
 # ==========================================
 # 除錯輸出
