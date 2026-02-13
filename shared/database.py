@@ -50,8 +50,9 @@ def get_db_engine(db_url: Optional[str] = None):
             db_url,
             pool_size=20,            # Phase 7: 增加至 20 (適應 50 並發)
             max_overflow=30,         # Phase 7: 峰值可達 50 連接
-            pool_recycle=3600,
+            pool_recycle=1800,       # 30分鐘回收連接（避免 MySQL 主動斷開）
             pool_pre_ping=True,      # Phase 7: 連接前先檢查有效性
+            pool_timeout=10,         # 等待連接池超時 10 秒
             echo=False
         )
         logger.info(f"✓ SQLAlchemy Engine 建立成功")
@@ -276,6 +277,8 @@ class Database:
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
         """
         
+        conn = None
+        cursor = None
         try:
             conn = self.pool.get_connection()
             cursor = conn.cursor()
@@ -289,8 +292,9 @@ class Database:
         except Error as e:
             logger.error(f"✗ 建立表失敗: {e}")
         finally:
-            if conn.is_connected():
+            if cursor:
                 cursor.close()
+            if conn and conn.is_connected():
                 conn.close()
     
     def insert_job(
@@ -333,6 +337,8 @@ class Database:
         
         workflow_json = json.dumps(workflow_data) if workflow_data else None
         
+        conn = None
+        cursor = None
         try:
             conn = self.pool.get_connection()
             cursor = conn.cursor()
@@ -344,8 +350,9 @@ class Database:
             logger.error(f"✗ 插入任務失敗: {e}")
             return False
         finally:
-            if conn.is_connected():
+            if cursor:
                 cursor.close()
+            if conn and conn.is_connected():
                 conn.close()
     
     def update_job_status(
@@ -372,6 +379,8 @@ class Database:
             sql = "UPDATE jobs SET status = %s WHERE id = %s"
             params = (status, job_id)
         
+        conn = None
+        cursor = None
         try:
             conn = self.pool.get_connection()
             cursor = conn.cursor()
@@ -383,8 +392,9 @@ class Database:
             logger.error(f"✗ 更新任務狀態失敗: {e}")
             return False
         finally:
-            if conn.is_connected():
+            if cursor:
                 cursor.close()
+            if conn and conn.is_connected():
                 conn.close()
     
     def get_history(
@@ -473,6 +483,8 @@ class Database:
         """
         sql = "UPDATE jobs SET deleted_at = CURRENT_TIMESTAMP, is_deleted = TRUE WHERE id = %s"
         
+        conn = None
+        cursor = None
         try:
             conn = self.pool.get_connection()
             cursor = conn.cursor()
@@ -484,8 +496,9 @@ class Database:
             logger.error(f"✗ 軟刪除失敗: {e}")
             return False
         finally:
-            if conn.is_connected():
+            if cursor:
                 cursor.close()
+            if conn and conn.is_connected():
                 conn.close()
     
     def get_or_create_user_id(self, ip_address: str) -> int:
@@ -498,6 +511,8 @@ class Database:
         Returns:
             用戶 ID (INT)
         """
+        conn = None
+        cursor = None
         try:
             conn = self.pool.get_connection()
             cursor = conn.cursor(dictionary=True)
@@ -522,12 +537,15 @@ class Database:
             logger.error(f"✗ 獲取或建立用戶 ID 失敗: {e}")
             return -1
         finally:
-            if conn.is_connected():
+            if cursor:
                 cursor.close()
+            if conn and conn.is_connected():
                 conn.close()
     
     def get_active_users_count(self) -> int:
         """獲取過去 24 小時內活躍的用戶數"""
+        conn = None
+        cursor = None
         try:
             conn = self.pool.get_connection()
             cursor = conn.cursor()
@@ -539,12 +557,15 @@ class Database:
             logger.error(f"✗ 查詢活躍用戶失敗: {e}")
             return 0
         finally:
-            if conn.is_connected():
+            if cursor:
                 cursor.close()
+            if conn and conn.is_connected():
                 conn.close()
     
     def check_connection(self) -> bool:
         """檢查資料庫連接是否正常"""
+        conn = None
+        cursor = None
         try:
             conn = self.pool.get_connection()
             cursor = conn.cursor()
@@ -555,6 +576,7 @@ class Database:
             logger.error(f"✗ 資料庫連接檢查失敗: {e}")
             return False
         finally:
-            if conn.is_connected():
+            if cursor:
                 cursor.close()
+            if conn and conn.is_connected():
                 conn.close()

@@ -88,6 +88,11 @@ spec:
         # MySQL 配置優化
         - name: MYSQL_ROOT_HOST
           value: "%"  # 允許任何主機連接 root（僅開發環境）
+        args:
+        - "--max-allowed-packet=67108864"  # 64MB
+        - "--wait-timeout=28800"           # 8小時
+        - "--interactive-timeout=28800"
+        - "--max-connections=100"
         volumeMounts:
         - name: mysql-storage
           mountPath: /var/lib/mysql

@@ -111,7 +111,7 @@ echo.
 echo ============================================
 echo.
 
-python tests/stack_test.py
+python -m locust -f tests/locustfile.py --headless -u 10 -r 2 -t 60s --host http://localhost:5001
 
 if errorlevel 1 (
     echo.

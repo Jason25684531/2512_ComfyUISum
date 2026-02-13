@@ -23,13 +23,8 @@ from config import (
 )
 
 # K8s Phase 2: S3 儲存整合
-try:
-    from shared.config_base import STORAGE_TYPE
-    from shared.storage import get_storage_client
-except ModuleNotFoundError:
-    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-    from shared.config_base import STORAGE_TYPE
-    from shared.storage import get_storage_client
+from shared.config_base import STORAGE_TYPE
+from shared.storage import get_storage_client
 
 
 class ComfyClient:
@@ -85,7 +80,11 @@ class ComfyClient:
         
         Returns:
             prompt_id: 執行 ID，失敗時返回 None
+        
+        Raises:
+            設置 self.last_error 以便呼叫者可以讀取詳細錯誤
         """
+        self.last_error = None  # 重置錯誤資訊
         payload = {
             "prompt": workflow,
             "client_id": self.client_id
@@ -104,10 +103,31 @@ class ComfyClient:
                 print(f"[ComfyClient] 任務已提交，prompt_id: {prompt_id}")
                 return prompt_id
             else:
-                print(f"[ComfyClient] 提交失敗: {response.status_code} - {response.text}")
+                # ⭐ 解析 ComfyUI 的詳細錯誤訊息
+                error_detail = response.text[:500]
+                node_error_details = []
+                try:
+                    err_json = response.json()
+                    if "error" in err_json:
+                        error_detail = err_json["error"].get("message", error_detail)
+                    if "node_errors" in err_json:
+                        for nid, nerr in err_json["node_errors"].items():
+                            node_err_msg = f"節點 {nid}: {nerr}"
+                            node_error_details.append(node_err_msg)
+                            print(f"[ComfyClient] ⚠️ {node_err_msg}")
+                except Exception:
+                    pass
+                
+                self.last_error = {
+                    "status_code": response.status_code,
+                    "detail": error_detail,
+                    "node_errors": node_error_details
+                }
+                print(f"[ComfyClient] 提交失敗: {response.status_code} - {error_detail}")
                 return None
                 
         except Exception as e:
+            self.last_error = {"detail": str(e)}
             print(f"[ComfyClient] 提交錯誤: {e}")
             return None
     
@@ -221,16 +241,43 @@ class ComfyClient:
                             result["videos"] = all_videos
                             result["gifs"] = all_gifs
                             
-                            # 如果 WebSocket 沒有收到輸出，從 History API 獲取
+                            # ⭐ 始終從 History API 補充輸出
+                            # WebSocket 可能遺漏部分節點的輸出（如 SigmasPreview 干擾）
+                            # 即使已收到部分輸出，仍需檢查 History API 以獲取完整結果
+                            has_only_temp = all(
+                                item.get("type") == "temp" 
+                                for item in (all_images + all_videos + all_gifs)
+                            ) if (all_images or all_videos or all_gifs) else True
+                            
                             if not all_images and not all_videos and not all_gifs:
                                 print(f"[ComfyClient] WebSocket 未收到輸出，嘗試從 History API 獲取...")
+                            elif has_only_temp:
+                                print(f"[ComfyClient] WebSocket 僅收到臨時預覽圖，從 History API 補充真實輸出...")
+                            
+                            if (not all_images and not all_videos and not all_gifs) or has_only_temp:
                                 history_outputs = self.get_outputs_from_history(prompt_id)
-                                result["images"] = history_outputs.get("images", [])
-                                result["videos"] = history_outputs.get("videos", [])
-                                result["gifs"] = history_outputs.get("gifs", [])
+                                h_images = history_outputs.get("images", [])
+                                h_videos = history_outputs.get("videos", [])
+                                h_gifs = history_outputs.get("gifs", [])
                                 
-                                if result["images"] or result["videos"] or result["gifs"]:
-                                    print(f"[ComfyClient] ✅ 從 History API 獲取到輸出")
+                                # 合併 History API 的非重複輸出
+                                existing_filenames = {item.get("filename") for item in all_images + all_videos + all_gifs}
+                                for item in h_images:
+                                    if item.get("filename") not in existing_filenames:
+                                        all_images.append(item)
+                                for item in h_videos:
+                                    if item.get("filename") not in existing_filenames:
+                                        all_videos.append(item)
+                                for item in h_gifs:
+                                    if item.get("filename") not in existing_filenames:
+                                        all_gifs.append(item)
+                                
+                                result["images"] = all_images
+                                result["videos"] = all_videos
+                                result["gifs"] = all_gifs
+                                
+                                if h_images or h_videos or h_gifs:
+                                    print(f"[ComfyClient] ✅ 從 History API 補充了 {len(h_images)} 張圖片, {len(h_videos)} 個影片, {len(h_gifs)} 個 GIF")
                             break
                     
                     # 執行完成 (獲取輸出)
@@ -363,9 +410,17 @@ class ComfyClient:
         Returns:
             新的檔名，失敗時返回 None
         """
+        from config import COMFYUI_ROOT, COMFYUI_INPUT_DIR
+        
         # 根據 file_type 決定來源根目錄
+        # K8s 環境中 /comfyui/output 和 /comfyui/temp 分別掛載
         if file_type == "temp":
-            base_dir = COMFYUI_OUTPUT_DIR.parent / "temp"
+            # 優先使用 /comfyui/temp (K8s 環境已掛載)
+            comfy_temp = Path("/comfyui/temp")
+            if comfy_temp.exists():
+                base_dir = comfy_temp
+            else:
+                base_dir = COMFYUI_OUTPUT_DIR.parent / "temp"
         else:
             base_dir = COMFYUI_OUTPUT_DIR
         
@@ -402,6 +457,30 @@ class ComfyClient:
                 else:
                     alternative_paths.append(temp_dir / filename)
             
+            # 4. ⭐ 嘗試 COMFYUI_ROOT/temp（K8s 環境中 output parent 可能不是 COMFYUI_ROOT）
+            comfy_temp = COMFYUI_ROOT / "temp"
+            if comfy_temp != (COMFYUI_OUTPUT_DIR.parent / "temp"):
+                if subfolder:
+                    alternative_paths.append(comfy_temp / subfolder / filename)
+                else:
+                    alternative_paths.append(comfy_temp / filename)
+            
+            # 4.5 ⭐ 嘗試 /comfyui/temp（K8s 掛載的 temp 目錄）
+            k8s_temp = Path("/comfyui/temp")
+            if k8s_temp.exists() and k8s_temp != comfy_temp and k8s_temp != (COMFYUI_OUTPUT_DIR.parent / "temp"):
+                if subfolder:
+                    alternative_paths.append(k8s_temp / subfolder / filename)
+                else:
+                    alternative_paths.append(k8s_temp / filename)
+            
+            # 5. 嘗試在 output 子目錄中搜尋（SaveImage 可能帶 prefix 子目錄）
+            for sub in COMFYUI_OUTPUT_DIR.iterdir() if COMFYUI_OUTPUT_DIR.exists() else []:
+                if sub.is_dir():
+                    candidate = sub / filename
+                    if candidate.exists():
+                        alternative_paths.insert(0, candidate)
+                        break
+            
             # 檢查所有備用路徑
             for alt_path in alternative_paths:
                 print(f"[ComfyClient] 嘗試備用路徑: {alt_path}")
@@ -410,8 +489,44 @@ class ComfyClient:
                     source_path = alt_path
                     break
             else:
-                # 所有路徑都找不到
-                print(f"[ComfyClient] ✗ 所有可能路徑都找不到檔案")
+                # 所有本地路徑都找不到，嘗試透過 ComfyUI HTTP API 下載
+                print(f"[ComfyClient] ✗ 所有本地路徑都找不到，嘗試透過 HTTP API 下載...")
+                try:
+                    params = {
+                        "filename": filename,
+                        "subfolder": subfolder or "",
+                        "type": file_type
+                    }
+                    resp = requests.get(
+                        f"{self.http_url}/view",
+                        params=params,
+                        timeout=30
+                    )
+                    if resp.status_code == 200 and len(resp.content) > 0:
+                        # 直接下載到目標路徑
+                        ext = Path(filename).suffix or ".png"
+                        if job_id:
+                            new_filename = f"{job_id}{ext}"
+                        else:
+                            new_filename = f"{int(time.time())}_{filename}"
+                        dest_path = STORAGE_OUTPUT_DIR / new_filename
+                        with open(dest_path, "wb") as f:
+                            f.write(resp.content)
+                        print(f"[ComfyClient] ✓ 已透過 HTTP API 下載檔案: {filename} -> {dest_path} ({len(resp.content)} bytes)")
+                        
+                        # K8s Phase 2: 上傳到 S3（如果啟用）
+                        if self.s3_client and STORAGE_TYPE == "s3":
+                            object_key = f"outputs/{new_filename}"
+                            success = self.s3_client.upload_file(dest_path, object_key)
+                            if success:
+                                print(f"[ComfyClient] ✓ 已上傳至 S3: {object_key}")
+                        
+                        return new_filename
+                    else:
+                        print(f"[ComfyClient] ✗ HTTP API 下載失敗: status={resp.status_code}")
+                except Exception as dl_err:
+                    print(f"[ComfyClient] ✗ HTTP API 下載錯誤: {dl_err}")
+                
                 return None
         
         # 目標檔名

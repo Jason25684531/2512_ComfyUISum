@@ -9,6 +9,7 @@ import uuid
 import logging
 import time
 import base64
+from contextlib import contextmanager
 from logging.handlers import TimedRotatingFileHandler
 from datetime import datetime
 from pathlib import Path
@@ -18,6 +19,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_bcrypt import Bcrypt
+from sqlalchemy import text
 from redis import Redis, RedisError
 from werkzeug.utils import secure_filename
 
@@ -53,23 +55,6 @@ login_manager = LoginManager(app)
 login_manager.login_view = 'api_login'  # 未登入時重定向的端點
 
 # ============================================
-# 自訂日誌過濾器
-# ============================================
-
-class UserIdFilter(logging.Filter):
-    """日誌過濾器，將 g.user_id 注入到日誌記錄中"""
-    def filter(self, record):
-        try:
-            # 從 Flask 上下文中獲取 user_id，如果不存在則使用 'INIT'
-            user_id = getattr(g, 'user_id', 'INIT')
-        except (RuntimeError, AttributeError):
-            # 在應用上下文外或沒有活躍請求時，使用預設值
-            user_id = 'INIT'
-        
-        record.user_id = user_id
-        return True
-
-# ============================================
 
 # 初始化 Rate Limiter (使用 Redis 作為儲存後端)
 limiter = Limiter(
@@ -82,15 +67,13 @@ limiter = Limiter(
     strategy="fixed-window"
 )
 
-# 設定 CORS - 允許所有來源的跨域請求
-# 使用 supports_credentials=True 以支援會話 Cookie
+# 設定 CORS - 使用 Flask-CORS 統一處理跨域請求
 CORS(app, 
      origins=["*"],
      allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
      methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
      supports_credentials=True)
 
-# 手動處理 OPTIONS 預檢請求
 @app.before_request
 def before_request_handler():
     """
@@ -120,28 +103,12 @@ def before_request_handler():
     # 記錄請求開始
     logger.debug(f"📨 {request.method} {request.path} - IP: {ip_address}")
 
-# 手動處理 OPTIONS 預檢請求
-@app.before_request
-def handle_preflight():
-    if request.method == "OPTIONS":
-        response = app.make_default_options_response()
-        # 使用請求的 Origin 而非 *，因為 credentials=True 時不能用 *
-        origin = request.headers.get('Origin', 'http://localhost:5000')
-        response.headers["Access-Control-Allow-Origin"] = origin
-        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
-        response.headers["Access-Control-Allow-Credentials"] = "true"
-        return response
+    # API 請求前確保資料庫 Schema 存在（避免 users 表不存在）
+    if request.path.startswith('/api/'):
+        ensure_db_schema(max_retries=1, retry_delay=0)
 
 @app.after_request
 def after_request(response):
-    # 使用請求的 Origin 而非 *，因為 credentials=True 時不能用 *
-    origin = request.headers.get('Origin', 'http://localhost:5000')
-    response.headers["Access-Control-Allow-Origin"] = origin
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
-    response.headers["Access-Control-Allow-Credentials"] = "true"
-    
     # 記錄請求完成 + Redis 隊列深度
     try:
         queue_depth = redis_client.llen(REDIS_QUEUE_NAME) if redis_client else 0
@@ -178,6 +145,15 @@ from shared.database import Database, User, get_db_session, init_db
 
 # 初始化資料庫連接 (使用 shared.config_base 統一配置)
 db_client = None
+_db_schema_initialized = False
+_last_schema_verified_ts = 0.0
+_schema_verify_interval_seconds = 30
+_health_cache = {
+    'ts': 0.0,
+    'redis': 'unavailable',
+    'mysql': 'unavailable'
+}
+_health_cache_ttl_seconds = 5
 try:
     db_client = Database(
         host=DB_HOST,
@@ -190,6 +166,72 @@ try:
 except Exception as e:
     logger.warning(f"⚠️ 資料庫連接失敗 (功能降級): {e}")
 
+
+def ensure_db_schema(max_retries: int = 3, retry_delay: int = 2) -> bool:
+    """確保資料表存在（避免 MySQL 晚於 Backend 啟動導致 users/jobs 缺失）"""
+    global _db_schema_initialized, _last_schema_verified_ts
+
+    now = time.monotonic()
+
+    if _db_schema_initialized:
+        if now - _last_schema_verified_ts < _schema_verify_interval_seconds:
+            return True
+
+        # 保守驗證 users 表是否仍存在（避免資料被外部刪除後旗標仍為 True）
+        try:
+            session = get_db_session()
+            session.execute(text("SELECT 1 FROM users LIMIT 1"))
+            _last_schema_verified_ts = now
+            return True
+        except Exception:
+            _db_schema_initialized = False
+        finally:
+            try:
+                session.close()
+            except Exception:
+                pass
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            init_db()
+            _db_schema_initialized = True
+            _last_schema_verified_ts = time.monotonic()
+            logger.info("✓ 資料庫 Schema 已確認 (users/jobs)")
+            return True
+        except Exception as e:
+            if attempt < max_retries:
+                logger.warning(
+                    f"⚠️ Schema 初始化失敗 (第 {attempt}/{max_retries} 次): {e}，{retry_delay}s 後重試"
+                )
+                time.sleep(retry_delay)
+            else:
+                logger.error(f"✗ Schema 初始化最終失敗: {e}")
+
+    return False
+
+
+@contextmanager
+def db_session_scope():
+    """統一資料庫 Session 生命週期，避免重複樣板與未關閉連線。"""
+    session = get_db_session()
+    try:
+        yield session
+    except Exception:
+        try:
+            session.rollback()
+        except Exception:
+            pass
+        raise
+    finally:
+        try:
+            session.close()
+        except Exception:
+            pass
+
+
+# 啟動時先嘗試初始化一次 Schema（失敗則由請求路徑懶初始化補償）
+ensure_db_schema(max_retries=5, retry_delay=3)
+
 # ============================================
 # Flask-Login user_loader callback
 # ============================================
@@ -197,8 +239,11 @@ except Exception as e:
 def load_user(user_id):
     """載入用戶（Flask-Login 回調）"""
     try:
-        session = get_db_session()
-        return session.query(User).get(int(user_id))
+        if not ensure_db_schema(max_retries=1, retry_delay=0):
+            return None
+
+        with db_session_scope() as session:
+            return session.query(User).get(int(user_id))
     except Exception as e:
         logger.error(f"載入用戶失敗: {e}")
         return None
@@ -275,30 +320,30 @@ def api_register():
         if len(password) < 6:
             return jsonify({'error': 'Password must be at least 6 characters'}), 400
         
-        session = get_db_session()
-        
-        # 檢查 Email 是否已存在
-        existing_user = session.query(User).filter_by(email=email).first()
-        if existing_user:
-            return jsonify({'error': 'Email already registered'}), 409
-        
-        # 建立新用戶
-        password_hash = bcrypt.generate_password_hash(password).decode('utf-8')
-        new_user = User(
-            email=email,
-            password_hash=password_hash,
-            name=name,
-            role='member'
-        )
-        
-        session.add(new_user)
-        session.commit()
+        with db_session_scope() as session:
+            # 檢查 Email 是否已存在
+            existing_user = session.query(User).filter_by(email=email).first()
+            if existing_user:
+                return jsonify({'error': 'Email already registered'}), 409
+            
+            # 建立新用戶
+            password_hash = bcrypt.generate_password_hash(password).decode('utf-8')
+            new_user = User(
+                email=email,
+                password_hash=password_hash,
+                name=name,
+                role='member'
+            )
+            
+            session.add(new_user)
+            session.commit()
+            user_data = new_user.to_dict()
         
         logger.info(f"✓ 新用戶註冊: {email}")
         
         return jsonify({
             'success': True,
-            'user': new_user.to_dict()
+            'user': user_data
         }), 201
     
     except Exception as e:
@@ -336,21 +381,22 @@ def api_login():
         if not email or not password:
             return jsonify({'error': 'Email and password are required'}), 400
         
-        session = get_db_session()
-        user = session.query(User).filter_by(email=email).first()
-        
-        if not user:
-            return jsonify({'error': 'Invalid email or password'}), 401
-        
-        if not bcrypt.check_password_hash(user.password_hash, password):
-            return jsonify({'error': 'Invalid email or password'}), 401
+        with db_session_scope() as session:
+            user = session.query(User).filter_by(email=email).first()
+            
+            if not user:
+                return jsonify({'error': 'Invalid email or password'}), 401
+            
+            if not bcrypt.check_password_hash(user.password_hash, password):
+                return jsonify({'error': 'Invalid email or password'}), 401
+            user_data = user.to_dict()
         
         login_user(user, remember=True)
         logger.info(f"✓ 用戶登入: {email}")
         
         return jsonify({
             'success': True,
-            'user': user.to_dict()
+            'user': user_data
         }), 200
     
     except Exception as e:
@@ -442,33 +488,34 @@ def api_update_profile():
         if not data:
             return jsonify({'error': 'Missing JSON data'}), 400
         
-        session = get_db_session()
-        user = session.query(User).get(current_user.id)
-        
-        if not user:
-            return jsonify({'error': 'User not found'}), 404
-        
-        # 更新名稱
-        if 'name' in data:
-            name = data['name'].strip()
-            if name:
-                user.name = name
-        
-        # 更新 Email（需要檢查唯一性）
-        if 'email' in data:
-            new_email = data['email'].strip().lower()
-            if new_email and new_email != user.email:
-                existing = session.query(User).filter_by(email=new_email).first()
-                if existing:
-                    return jsonify({'error': 'Email already in use'}), 409
-                user.email = new_email
-        
-        session.commit()
+        with db_session_scope() as session:
+            user = session.query(User).get(current_user.id)
+            
+            if not user:
+                return jsonify({'error': 'User not found'}), 404
+            
+            # 更新名稱
+            if 'name' in data:
+                name = data['name'].strip()
+                if name:
+                    user.name = name
+            
+            # 更新 Email（需要檢查唯一性）
+            if 'email' in data:
+                new_email = data['email'].strip().lower()
+                if new_email and new_email != user.email:
+                    existing = session.query(User).filter_by(email=new_email).first()
+                    if existing:
+                        return jsonify({'error': 'Email already in use'}), 409
+                    user.email = new_email
+            
+            session.commit()
+            user_data = user.to_dict()
         logger.info(f"✓ 用戶資料更新: {user.email}")
         
         return jsonify({
             'success': True,
-            'user': user.to_dict()
+            'user': user_data
         }), 200
     
     except Exception as e:
@@ -509,19 +556,19 @@ def api_update_password():
         if len(new_password) < 6:
             return jsonify({'error': 'New password must be at least 6 characters'}), 400
         
-        session = get_db_session()
-        user = session.query(User).get(current_user.id)
-        
-        if not user:
-            return jsonify({'error': 'User not found'}), 404
-        
-        # 驗證舊密碼
-        if not bcrypt.check_password_hash(user.password_hash, old_password):
-            return jsonify({'error': 'Old password is incorrect'}), 401
-        
-        # 更新密碼
-        user.password_hash = bcrypt.generate_password_hash(new_password).decode('utf-8')
-        session.commit()
+        with db_session_scope() as session:
+            user = session.query(User).get(current_user.id)
+            
+            if not user:
+                return jsonify({'error': 'User not found'}), 404
+            
+            # 驗證舊密碼
+            if not bcrypt.check_password_hash(user.password_hash, old_password):
+                return jsonify({'error': 'Old password is incorrect'}), 401
+            
+            # 更新密碼
+            user.password_hash = bcrypt.generate_password_hash(new_password).decode('utf-8')
+            session.commit()
         
         logger.info(f"✓ 用戶密碼更新: {user.email}")
         
@@ -549,17 +596,17 @@ def api_delete_user():
     }
     """
     try:
-        session = get_db_session()
-        user = session.query(User).get(current_user.id)
-        
-        if not user:
-            return jsonify({'error': 'User not found'}), 404
-        
-        email = user.email
-        
-        # 刪除用戶（CASCADE 會處理相關的 jobs）
-        session.delete(user)
-        session.commit()
+        with db_session_scope() as session:
+            user = session.query(User).get(current_user.id)
+            
+            if not user:
+                return jsonify({'error': 'User not found'}), 404
+            
+            email = user.email
+            
+            # 刪除用戶（CASCADE 會處理相關的 jobs）
+            session.delete(user)
+            session.commit()
         
         logout_user()
         logger.info(f"✓ 用戶帳號刪除: {email}")
@@ -824,12 +871,32 @@ def generate():
             
             # 6. 建立 Job 物件並加入 Session
             from shared.database import Job
+            
+            # ⭐ 重要：移除 base64 圖片資料再存入 DB
+            # base64 圖片資料可能數十 MB，超出 MySQL max_allowed_packet
+            # Redis 佇列保留完整 job_data（worker 需要 base64 解碼圖片）
+            db_workflow_data = {k: v for k, v in job_data.items() if k != 'images'}
+            db_workflow_data['image_fields'] = list(job_data.get('images', {}).keys())
+            
+            # 安全檢查：確保 workflow_data 不超過 1MB
+            import sys
+            db_workflow_data_size = sys.getsizeof(json.dumps(db_workflow_data, default=str))
+            if db_workflow_data_size > 1_000_000:  # 1MB
+                logger.warning(f"⚠️ workflow_data 過大 ({db_workflow_data_size} bytes)，簡化存儲")
+                db_workflow_data = {
+                    'job_id': job_data.get('job_id'),
+                    'workflow': job_data.get('workflow'),
+                    'prompt': job_data.get('prompt', '')[:500],
+                    'image_fields': db_workflow_data.get('image_fields', []),
+                    'note': 'workflow_data 過大，已簡化存儲'
+                }
+            
             new_job = Job(
                 id=job_id,
                 user_id=user_id_for_job,
                 prompt=prompt,
                 workflow_name=workflow,
-                workflow_data=job_data,
+                workflow_data=db_workflow_data,
                 model=job_data.get('model', 'turbo_fp8'),
                 aspect_ratio=job_data.get('aspect_ratio', '1:1'),
                 batch_size=job_data.get('batch_size', 1),
@@ -945,8 +1012,7 @@ def status(job_id):
         
         # 2. Redis 中沒找到，查詢資料庫 (歷史任務或 Redis 過期)
         if db_client:
-            session = get_db_session()
-            try:
+            with db_session_scope() as session:
                 from shared.database import Job
                 
                 # 查詢資料庫中的任務記錄
@@ -972,9 +1038,6 @@ def status(job_id):
                         'source': 'database',  # 標記數據來源
                         'created_at': job.created_at.isoformat() if job.created_at else None
                     }), 200
-                    
-            finally:
-                session.close()
         
         # 3. Redis 和資料庫都沒找到，返回 404
         logger.warning(f"任務不存在: job_id={job_id} (Redis 和資料庫均未找到)")
@@ -1175,11 +1238,24 @@ def metrics():
 @app.route('/health', methods=['GET'])
 def health():
     """健康检查接口 - 檢查 Redis 和 MySQL 狀態"""
-    redis_status = 'healthy' if redis_client and redis_client.ping() else 'unavailable'
-    
-    mysql_status = 'unavailable'
-    if db_client:
-        mysql_status = 'healthy' if db_client.check_connection() else 'error'
+    global _health_cache
+
+    now = time.monotonic()
+    if now - _health_cache['ts'] > _health_cache_ttl_seconds:
+        redis_status = 'healthy' if redis_client and redis_client.ping() else 'unavailable'
+
+        mysql_status = 'unavailable'
+        if db_client:
+            mysql_status = 'healthy' if db_client.check_connection() else 'error'
+
+        _health_cache = {
+            'ts': now,
+            'redis': redis_status,
+            'mysql': mysql_status
+        }
+    else:
+        redis_status = _health_cache['redis']
+        mysql_status = _health_cache['mysql']
     
     overall_status = 'ok' if redis_status == 'healthy' else 'degraded'
     

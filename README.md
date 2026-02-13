@@ -143,7 +143,7 @@ ComfyUI Studio 是一個現代化的 AI 圖像生成平台，提供直觀的 Web
 
 ## 🚀 快速開始
 
-> 支援 Windows/Linux 混合部署。詳見 [HYBRID_DEPLOYMENT_STRATEGY.md](docs/HYBRID_DEPLOYMENT_STRATEGY.md)
+> 支援 Windows/Linux 混合部署。使用 `docker-compose.unified.yml` 統一配置檔案。
 
 ### 前置要求
 
@@ -193,28 +193,40 @@ docker build -t studiocore-backend:latest -f backend/Dockerfile .
 docker build -t studiocore-worker:latest -f worker/Dockerfile .
 docker build -t studiocore-frontend:latest -f frontend/Dockerfile .
 
-# 部署
-kubectl apply -f k8s/base/    # 基礎設施
-kubectl apply -f k8s/app/     # 應用層
+# 部署 (Secrets → ConfigMap → 基礎設施 → 應用層)
+kubectl apply -f k8s/base/    # 基礎設施 (含 Secrets + PVC)
+kubectl apply -f k8s/app/     # 應用層 (含 app-secrets)
 
 # Port Forward
 kubectl port-forward svc/backend-service 5001:5001
 kubectl port-forward svc/frontend-service 8080:80
+
+# 快速重建 Worker (開發時)
+.\scripts\dev-refresh.ps1 -Component worker
 ```
 
 📚 **完整 K8s 指南**: [K8s_Comprehensive_Testing_Guide.md](docs/K8s_Comprehensive_Testing_Guide.md)
 
-### 方式 3: 傳統部署
+### 啟動 / 關閉（建議流程）
 
 ```powershell
-# 1. 啟動 ComfyUI
-D:\02_software\ComfyUI_windows_portable\run_nvidia_gpu.bat
-
-# 2. 啟動所有服務
+# Windows 本地開發啟動（推薦）
 cd scripts
-start_all_with_docker.bat
+start_unified_windows.bat   # 建議選 [3]
 
-# 3. 訪問: http://localhost:5000/
+# K8s 一鍵部署
+.\scripts\k8s-deploy-phase3.ps1
+```
+
+```powershell
+# K8s 關閉（僅應用層）
+.\scripts\k8s-teardown.ps1
+
+# K8s 完全清理（含 PVC）
+.\scripts\k8s-teardown.ps1 -All -Force
+
+# Docker Compose 關閉（統一檔）
+docker-compose -f docker-compose.unified.yml down
 ```
 
 ### 驗證系統
@@ -223,11 +235,14 @@ start_all_with_docker.bat
 # 服務狀態
 docker-compose -f docker-compose.unified.yml ps
 
-# API 健康檢查
+# API 健康檢查（本地）
 curl http://localhost:5000/api/health
 
+# API 健康檢查（K8s port-forward 後）
+curl http://localhost:5001/health
+
 # 端口檢查
-netstat -ano | findstr "5000 6379 3307 8188"
+netstat -ano | findstr "5000 5001 6379 3307 8188"
 ```
 
 ---
@@ -279,8 +294,19 @@ ComfyUISum/
 │   └── InfiniteTalk_IndexTTS_2.json
 │
 ├── k8s/                        # Kubernetes 部署
-│   ├── base/                  # 基礎設施 (Redis, MySQL, MinIO, Ingress)
-│   └── app/                   # 應用層 (Backend, Frontend, Worker)
+│   ├── base/                  # 基礎設施 (Redis, MySQL, MinIO, Ingress, Monitoring)
+│   │   ├── 01-redis.yaml      # Redis + Secret (redis-creds)
+│   │   ├── 03-minio.yaml      # MinIO + Secret + PVC
+│   │   ├── 04-comfyui-bridge.yaml
+│   │   ├── 05-mysql.yaml      # MySQL + Secret + PVC (5Gi)
+│   │   ├── 07-monitoring.yaml # Prometheus + Grafana
+│   │   └── 99-ingress.yaml    # 統一 Ingress
+│   └── app/                   # 應用層
+│       ├── 00-configmap.yaml  # 環境變數 (非敏感)
+│       ├── 01-secrets.yaml    # 應用層 Secrets (SECRET_KEY)
+│       ├── 10-backend.yaml    # Backend Deployment
+│       ├── 10-frontend.yaml   # Frontend Deployment
+│       └── 20-worker.yaml     # Worker + LivenessProbe
 │
 ├── openspec/                   # OpenSpec 規格文件系統
 │   ├── AGENTS.md, project.md
@@ -296,12 +322,14 @@ ComfyUISum/
 │
 ├── storage/                    # 數據存儲 (inputs/, outputs/, models/)
 ├── logs/                       # 日誌 (backend/worker .log + .json.log)
-├── scripts/                    # 啟動腳本
-├── tests/                      # 測試文件
+├── scripts/                    # 啟動/自動化腳本
+│   ├── dev-refresh.ps1        # 一鍵重建 Worker/Backend Pod
+│   ├── k8s-deploy-phase3.ps1  # K8s 完整部署腳本
+│   └── ...                    # 其他啟動腳本
+├── tests/                      # 壓力測試 + S3 整合測試
+├── archive/                    # 已封存的舊配置檔案
 │
 ├── docker-compose.unified.yml  # 統一 Docker 配置 (推薦)
-├── docker-compose.yml          # 生產環境 Docker 配置
-├── docker-compose.dev.yml      # 開發環境 Docker 配置
 ├── requirements.txt            # Python 依賴
 └── README.md                   # 本文件
 ```
@@ -409,9 +437,9 @@ BACKEND_URL=
 
 | 文件 | 用途 | 內容 |
 |------|------|------|
-| `docker-compose.unified.yml` | 統一部署 (推薦) | Profile 切換多種模式 |
-| `docker-compose.yml` | 生產環境 | 全容器化 |
-| `docker-compose.dev.yml` | 開發環境 | MySQL+Redis 容器，Backend+Worker 本地 |
+| `docker-compose.unified.yml` | 統一部署 (推薦) | Profile 切換：windows-dev / linux-dev / linux-prod |
+
+> 💡 舊版配置檔案 (`docker-compose.yml`, `docker-compose.dev.yml`) 已移至 `archive/` 資料夾
 
 ---
 
@@ -420,14 +448,19 @@ BACKEND_URL=
 ### 本地開發
 
 ```powershell
-# 1. 啟動基礎服務
-docker-compose -f docker-compose.dev.yml up -d
+# 推薦：使用統一啟動腳本
+cd scripts
+start_unified_windows.bat  # 選擇 [3] 本地開發模式
 
-# 2. 啟動 Backend (開發模式，自動重載)
-cd backend && python src/app.py
+# 或手動啟動各服務：
+# 1. 啟動基礎服務
+docker-compose -f docker-compose.unified.yml up -d redis mysql
+
+# 2. 啟動 Backend
+cd backend\src && python app.py
 
 # 3. 啟動 Worker
-cd worker && python src/main.py
+cd worker\src && python main.py
 
 # 4. 訪問: http://localhost:5000/
 ```
@@ -464,6 +497,13 @@ Get-Content logs\worker.log -Tail 50 -Wait
 
 ## 🧪 測試
 
+### 測試前置（進入虛擬環境）
+
+```powershell
+cd D:\01_Project\2512_ComfyUISum
+& .\venv\Scripts\Activate.ps1
+```
+
 ### API 測試
 
 ```powershell
@@ -478,26 +518,53 @@ curl -X POST http://localhost:5000/api/generate -H "Content-Type: application/js
 curl http://localhost:5000/api/status/<job_id>
 ```
 
-### 整合測試
+### 全功能整合測試（推薦）
 
-```bash
-# 完整測試 (需 Backend + Worker + ComfyUI)
-python tests/test_virtual_human_flow.py
+```powershell
+# 1) 後端/前端健康檢查
+curl http://localhost:5000/api/health
 
-# 僅測試上傳
-python tests/test_virtual_human_flow.py --upload-only
+# 2) 會員流程（註冊/登入/狀態）
+$email = "e2e_$([int](Get-Date -UFormat %s))@example.com"
+$register = @{email=$email; password='abc12345'; name='E2EUser'} | ConvertTo-Json
+curl -X POST http://localhost:5000/api/register -H "Content-Type: application/json" -d $register
 
-# 跳過生成
-python tests/test_virtual_human_flow.py --skip-generation
+# 3) 任務流程（提交→輪詢）
+$body = '{"workflow":"text_to_image","prompt":"test","model":"turbo_fp8"}'
+curl -X POST http://localhost:5000/api/generate -H "Content-Type: application/json" -d $body
+
+# 4) S3/MinIO 整合測試
+python tests/test_s3_integration.py
 ```
 
 ### 壓力測試 (Locust)
 
-```bash
-pip install locust
-cd tests
-locust -f locustfile.py --host=http://localhost:5000
-# 訪問 http://localhost:8089
+```powershell
+# 建議使用內建腳本（已封裝參數）
+scripts\run_stack_test.bat
+
+# 或手動執行
+python -m locust -f tests/locustfile.py --headless -u 10 -r 2 -t 60s --host http://localhost:5001
+```
+
+### K8s 環境全功能驗證
+
+```powershell
+# 1) 部署
+.\scripts\k8s-deploy-phase3.ps1
+
+# 2) 檢查狀態
+kubectl get pods
+kubectl get svc
+
+# 3) 驗證會員 API
+$job = Start-Job -ScriptBlock { kubectl port-forward svc/frontend-service 18080:80 }
+Start-Sleep -Seconds 3
+curl http://127.0.0.1:18080/api/me
+Stop-Job $job; Remove-Job $job
+
+# 4) 清理
+.\scripts\k8s-teardown.ps1 -All -Force
 ```
 
 | 測試類型 | 用戶數 | 持續 | 目的 |
@@ -506,7 +573,7 @@ locust -f locustfile.py --host=http://localhost:5000
 | 負載測試 | 10 | 5min | 日常使用 |
 | 壓力測試 | 50 | 10min | 系統極限 |
 
-### K8s 環境測試
+### K8s 測試指南
 
 📚 **完整指南**: [K8s_Comprehensive_Testing_Guide.md](docs/K8s_Comprehensive_Testing_Guide.md)
 
@@ -535,7 +602,7 @@ cmd /c "venv\Scripts\activate.bat && cd backend\src && python app.py"
 
 ```powershell
 docker ps | findstr redis                              # 檢查運行
-docker-compose -f docker-compose.dev.yml restart redis # 重啟
+docker-compose -f docker-compose.unified.yml restart redis # 重啟
 netstat -ano | findstr 6379                            # 端口檢查
 ```
 
@@ -618,7 +685,14 @@ kubectl apply -f k8s/base/07-monitoring.yaml
 
 ## 📝 更新日誌
 
-### Phase 15 - 代碼清洗與文檔精煉 (2026-02-12) ⭐ 最新
+### Phase 16 - K8s Hardening & 架構清洗 (2026-02-13) ⭐ 最新
+- ✅ 安全強化: `SECRET_KEY` 遷移至 K8s Secret (`app-secrets`)
+- ✅ 自我修復: Worker `livenessProbe` (ComfyUI 連線健康檢查)
+- ✅ 持久化: MySQL PVC (5Gi) + MinIO PVC (1Gi) 確認
+- ✅ 自動化: `scripts/dev-refresh.ps1` (一鍵重建 Pod)
+- ✅ 架構清洗: 刪除 7 類冗餘檔案、更新部署腳本
+
+### Phase 15 - 代碼清洗與文檔精煉 (2026-02-12)
 - ✅ 全面代碼清洗 (28 處問題修復)
 - ✅ DB_PORT 配置統一修復、CORS 去重、未使用 import 清理
 - ✅ 移除重複 `process_task()` 方法、統一導入路徑
@@ -672,7 +746,6 @@ kubectl apply -f k8s/base/07-monitoring.yaml
 | 文檔 | 說明 |
 |------|------|
 | [K8s 完整指南](docs/K8s_Comprehensive_Testing_Guide.md) | K8s 部署、測試、除錯 |
-| [混合部署策略](docs/HYBRID_DEPLOYMENT_STRATEGY.md) | Windows/Linux 統一部署 |
 | [更新日誌](docs/UpdateList.md) | 詳細變更記錄 |
 | [最佳實踐](docs/BEST_PRACTICES.md) | 開發規範 |
 | [API 測試](backend/Readme/API_TESTING.md) | API 測試集合 |

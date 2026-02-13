@@ -44,9 +44,7 @@ from config import (
     COMFYUI_INPUT_DIR, JOB_QUEUE, TEMP_FILE_MAX_AGE_HOURS,
     JOB_STATUS_EXPIRE_SECONDS, STORAGE_INPUT_DIR, STORAGE_OUTPUT_DIR,
     print_config, WORKER_TIMEOUT,
-    CLEANUP_INTERVAL_SECONDS, OUTPUT_RETENTION_DAYS
-)
-from shared.config_base import (
+    CLEANUP_INTERVAL_SECONDS, OUTPUT_RETENTION_DAYS,
     DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
 )
 
@@ -439,7 +437,13 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
         
         prompt_id = client.queue_prompt(workflow)
         if not prompt_id:
-            raise Exception("任務提交失敗")
+            comfy_error = ""
+            if hasattr(client, 'last_error') and client.last_error:
+                err_info = client.last_error
+                comfy_error = f" - ComfyUI 回應: {err_info.get('detail', '未知')}"
+                if err_info.get('node_errors'):
+                    comfy_error += f" | 節點錯誤: {'; '.join(err_info['node_errors'][:3])}"
+            raise Exception(f"任務提交失敗 (workflow: {workflow_name}{comfy_error})")
         
         job_logger.info(f"任務已提交，prompt_id: {prompt_id}")
         

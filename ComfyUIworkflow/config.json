@@ -23,7 +23,7 @@
       "avatar": "284"
     }
   },
-  "image_edit": {
+  "single_image_edit": {
     "file": "single_image_edit_qwen_2509_gguf_1222.json",
     "description": "Qwen 單圖指令編輯",
     "category": "image",
@@ -32,6 +32,9 @@
       "prompt_text_node_id": "123:111",
       "seed_node_id": "123:3",
       "output_node_id": "119"
+    },
+    "image_map": {
+      "input": "120"
     }
   },
   "face_swap": {
@@ -44,6 +47,10 @@
       "prompt_text_node_id": "504:348",
       "seed_node_id": "504:395",
       "output_node_id": "503"
+    },
+    "image_map": {
+      "source": "501",
+      "target": "502"
     }
   },
   "sketch_to_image": {
@@ -55,9 +62,12 @@
       "prompt_text_node_id": "124:111",
       "seed_node_id": "124:3",
       "output_node_id": "119"
+    },
+    "image_map": {
+      "input": "120"
     }
   },
-  "multi_blend": {
+  "multi_image_blend": {
     "file": "multi_image_blend_qwen_2509_gguf_1222.json",
     "description": "Qwen 多圖場景融合",
     "category": "image",
@@ -68,6 +78,11 @@
       "prompt_text_node_id": "433:111",
       "seed_node_id": "433:3",
       "output_node_id": "60"
+    },
+    "image_map": {
+      "source": "78",
+      "target": "436",
+      "extra": "437"
     }
   },
   "veo3_long_video": {

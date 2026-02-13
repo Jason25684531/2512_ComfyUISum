@@ -13,6 +13,11 @@ from typing import Optional, Union
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
+from shared.config_base import (
+    S3_ENDPOINT_URL, S3_ACCESS_KEY, S3_SECRET_KEY,
+    S3_BUCKET_NAME, S3_REGION
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -37,11 +42,11 @@ class S3StorageClient:
             bucket_name: 預設儲存桶名稱
             region: AWS 區域 (MinIO 可忽略)
         """
-        self.endpoint_url = endpoint_url or os.getenv("S3_ENDPOINT_URL", "http://minio-service:9000")
-        self.access_key = access_key or os.getenv("S3_ACCESS_KEY", "minioadmin")
-        self.secret_key = secret_key or os.getenv("S3_SECRET_KEY", "minioadmin")
-        self.bucket_name = bucket_name or os.getenv("S3_BUCKET_NAME", "comfyui-outputs")
-        self.region = region or os.getenv("S3_REGION", "us-east-1")
+        self.endpoint_url = endpoint_url or S3_ENDPOINT_URL
+        self.access_key = access_key or S3_ACCESS_KEY
+        self.secret_key = secret_key or S3_SECRET_KEY
+        self.bucket_name = bucket_name or S3_BUCKET_NAME
+        self.region = region or S3_REGION
         
         # 初始化 boto3 客戶端
         try:

@@ -55,12 +55,12 @@ if errorlevel 1 (
 echo.
 
 :: ========================================
-:: 4. Docker Containers
+:: 4. Kubernetes Pods
 :: ========================================
-echo [4] Docker Containers
-docker-compose -f docker-compose.dev.yml ps 2>nul
+echo [4] Kubernetes Pods
+kubectl get pods -l "app in (backend,worker,frontend)" --no-headers 2>nul
 if errorlevel 1 (
-    echo   Docker service not available
+    echo   Kubernetes not available
 )
 echo.
 

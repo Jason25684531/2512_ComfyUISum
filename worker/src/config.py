@@ -28,6 +28,11 @@ from shared.config_base import (
     WORKFLOW_CONFIG_PATH,
     JOB_STATUS_EXPIRE_SECONDS,
     COMFYUI_ROOT,
+    DB_HOST,
+    DB_PORT,
+    DB_USER,
+    DB_PASSWORD,
+    DB_NAME,
 )
 
 # ==========================================

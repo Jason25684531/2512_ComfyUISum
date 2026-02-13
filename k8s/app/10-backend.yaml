@@ -82,8 +82,8 @@ spec:
               key: FLASK_DEBUG
         - name: SECRET_KEY
           valueFrom:
-            configMapKeyRef:
-              name: app-config
+            secretKeyRef:
+              name: app-secrets
               key: SECRET_KEY
         - name: DB_HOST
           valueFrom:

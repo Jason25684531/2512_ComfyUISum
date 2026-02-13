@@ -1,9 +1,422 @@
 # 專案更新日誌
 
 ## 更新日期
-2026-02-12 (最新更新 - Hotfix: Worker COMFY_OUTPUT_DIR 錯誤修正 ✅)
+2026-02-13 (最新更新 - 架構清洗與會員系統穩定化 ✅)
 
-## 最新更新摘要 (2026-02-12 - Hotfix: Worker COMFY_OUTPUT_DIR Undefined Error)
+## 最新更新摘要 (2026-02-13 - 架構清洗與會員系統穩定化)
+
+### 五十、架構清洗與會員系統穩定化 (2026-02-13)
+
+#### 概述
+針對會員中心載入與資料庫初始化的穩定性問題，完成後端重複邏輯整併、冗餘檔案清理、README 架構與測試流程重寫，確保專案在 K8s 與本地模式都有可執行的啟動/關閉/驗證路徑。
+
+#### 50.1 Backend 重複邏輯整併 (Critical)
+
+**問題**: `backend/src/app.py` 存在多處重複 `get_db_session()` 樣板，Session 關閉策略不一致，容易造成維護與連線管理風險。
+
+**修改檔案**: `backend/src/app.py`
+- 新增 `db_session_scope()` 統一管理 Session 生命週期（含例外 rollback + finally close）
+- 套用至 `load_user`、會員 API（register/login/profile/password/delete）與 `/api/status` 的資料庫回查流程
+- 保留既有 API 行為，僅清洗重複邏輯與連線管理
+
+#### 50.2 冗餘檔案清理 (Cleanup)
+
+**問題**: 根目錄殘留舊版環境範本備份，與目前統一配置流程重複。
+
+**修改**:
+- 刪除 `.env.example.backup`（已由 `.env.unified.example` 與現行 `.env` 覆蓋）
+
+#### 50.3 README 架構與測試流程重整 (Documentation)
+
+**修改檔案**: `README.md`
+- 移除不存在或過時指令（舊啟動腳本與失效測試入口）
+- 新增現行「啟動 / 關閉」矩陣（Windows Local、K8s Deploy、K8s Teardown、Compose Down）
+- 新增「測試前置需進虛擬環境」步驟
+- 重寫全功能測試流程（會員 API、任務提交輪詢、S3/MinIO、Locust、K8s 端到端）
+
+#### 50.4 驗證結果 (Verification)
+
+- ✅ 後端語法檢查通過（`backend/src/app.py` 無錯誤）
+- ✅ 會員 API 驗證通過（register/login/me）
+- ✅ K8s 前端代理路徑驗證通過（`/api/me` 正常回應）
+
+#### 下一步預期發展
+
+1. 導入 `api/db-ready` 探針，前端啟動時可先檢查 users/jobs schema 就緒狀態。
+2. 將 `backend/src/app.py` 分拆為 `routes/auth.py`、`routes/jobs.py`、`routes/metrics.py`，進一步降低單檔複雜度。
+3. 建立最小自動化回歸（會員流程 + 生成流程）並納入 CI。
+
+---
+
+## 上一更新 (2026-02-13 - Worker Volume Mount 修復 & Teardown 三級卸載)
+
+### 四十九、Worker Volume Mount 修復 & K8s Teardown 三級卸載增強 (2026-02-13)
+
+#### 概述
+修復所有圖片類工作流（multi_image_blend、sketch_to_image、single_image_edit、face_swap）在 K8s 環境中的 "Invalid image file" 錯誤。
+根本原因為 Worker 容器的 `/comfyui/input` 和 `/comfyui/temp` 目錄未掛載到主機 ComfyUI 對應目錄，
+導致 Worker 上傳的圖片只存在於容器內部，主機 ComfyUI 無法讀取。同時修復 k8s-teardown.ps1 無法完全清理
+PVC、StatefulSet、Secrets 的問題。
+
+#### 49.1 Worker ComfyUI Input Volume Mount 修復 (Critical)
+
+**問題**: Worker 將上傳圖片保存到容器內 `/comfyui/input/`，但此目錄未掛載到主機
+`C:\ComfyUI_windows_portable\ComfyUI\input\`，導致 ComfyUI LoadImage 節點報錯 "Invalid image file"。
+
+**影響工作流**:
+- `multi_image_blend` - 三張圖片全部無效 (節點 78, 436, 437)
+- `sketch_to_image` - 草稿圖無效 (節點 120)
+- `single_image_edit` - 原圖無效 (節點 120)
+- `face_swap` - source/target 圖片無效 (節點 501, 502)
+
+**修改檔案**: `k8s/app/20-worker.yaml`
+- 新增 `comfyui-input` Volume Mount: `/comfyui/input` → 主機 ComfyUI input 目錄 (RW)
+- 新增 `comfyui-temp` Volume Mount: `/comfyui/temp` → 主機 ComfyUI temp 目錄 (RO)
+
+```yaml
+# 新增的 Volume Mounts
+volumeMounts:
+- name: comfyui-input
+  mountPath: /comfyui/input          # Worker 寫入上傳圖片
+- name: comfyui-temp
+  mountPath: /comfyui/temp
+  readOnly: true                      # 讀取臨時預覽圖
+
+# 新增的 Volume 定義
+volumes:
+- name: comfyui-input
+  hostPath:
+    path: /run/desktop/mnt/host/c/ComfyUI_windows_portable/ComfyUI/input
+    type: DirectoryOrCreate
+- name: comfyui-temp
+  hostPath:
+    path: /run/desktop/mnt/host/c/ComfyUI_windows_portable/ComfyUI/temp
+    type: DirectoryOrCreate
+```
+
+#### 49.2 Worker copy_output_file K8s 路徑修復 (Medium)
+
+**問題**: face_swap 等工作流的輸出為 temp 類型檔案，Worker 嘗試從 `/comfyui/temp` 讀取但路徑計算邏輯
+未考慮 K8s 掛載路徑，改為優先使用 `/comfyui/temp` (K8s 掛載) 路徑。
+
+**修改檔案**: `worker/src/comfy_client.py`
+- `copy_output_file()` 中 temp 路徑優先使用 `/comfyui/temp` (K8s 掛載目錄)
+- 新增 `/comfyui/temp` 為備用搜尋路徑
+
+#### 49.3 k8s-teardown.ps1 三級卸載重寫 (Enhancement)
+
+**問題**: 原有 teardown 腳本:
+1. 不刪除基礎設施 Secrets (redis-creds, minio-creds, mysql-creds)
+2. 不刪除 MySQL StatefulSet 的 PVC (`mysql-storage-mysql-0`)
+3. 不刪除 MinIO 的 PVC (`minio-pvc`)
+4. 不驗證 StatefulSet 和 PVC 殘留
+5. 不支援跳過確認的 Force 模式
+
+**修改檔案**: `scripts/k8s-teardown.ps1` (完全重寫)
+
+三級卸載模式:
+| 模式 | 參數 | 刪除範圍 |
+|------|------|---------|
+| 僅應用層 | (無) | Frontend, Backend, Worker, Ingress, ConfigMap, App Secrets |
+| 含基礎設施 | `-IncludeBase` | + Redis, MySQL, MinIO, ComfyUI Bridge, Infra Secrets |
+| 完全刪除 | `-All` | + Monitoring, MySQL PVC, MinIO PVC, 殘留 PV |
+| 完全刪除(免確認) | `-All -Force` | 同上，跳過確認提示 |
+
+新增驗證項目: StatefulSets、PersistentVolumeClaims
+
+#### 49.4 K8s 測試指南更新 (Documentation)
+
+**修改檔案**: `docs/K8s_Comprehensive_Testing_Guide.md`
+- 版本升級至 v3.2
+- 架構圖更新: Worker Volume Mounts 說明 (input/output/temp)
+- K8s 檔案結構更新: 移除不存在的 `02-hfs-pvc.yaml`、`20-worker-gpu.yaml`
+- 第 2.2 節: 新增 v3.2 修復項對照表
+- 第 3.4 節: 新增 "Invalid image file" 和 "臨時預覽圖無法複製" 排查項
+- 第 4 節: 完全重寫卸載文件，三級模式對照表
+- 第 6.3 節: 新增 3 項常見問題
+
+---
+
+## 上一更新 (2026-02-13 - 資料庫穩定性 & Worker 輸出可靠性修復)
+
+### 四十八、資料庫連線穩定性 & Worker 輸出檔案可靠性修復 (2026-02-13)
+
+#### 概述
+修復多圖生成 API 500 錯誤、草稿轉精稿提交失敗、換臉/單圖編輯輸出檔案無法複製等生產環境問題。
+根本原因為 `database.py` 中 7 個方法存在 `UnboundLocalError`（連線失敗時 `finally` 區塊引用未初始化變數）、
+MySQL `max_allowed_packet` 過小導致大型 workflow_data 寫入失敗、Worker 僅捕獲臨時預覽圖而遺漏正式輸出、
+以及 K8s 卸載腳本未清理監控資源。全部修復後重建映像、重新部署、測試通過。
+
+#### 48.1 database.py UnboundLocalError 修復 (Critical)
+
+**問題**: `shared/database.py` 中 7 個方法在 `self.pool.get_connection()` 失敗時，`conn` 未被賦值，
+但 `finally` 區塊中引用 `conn.is_connected()` 導致 `UnboundLocalError`，造成所有 API 請求崩潰。
+
+**錯誤日誌**:
+```
+UnboundLocalError: cannot access local variable 'conn' where it is not associated with a value
+  File "shared/database.py", line 525, in get_or_create_user_id
+```
+
+**修改檔案**: `shared/database.py`
+- 修復 7 個方法: `_init_tables()`, `insert_job()`, `update_job_status()`, `soft_delete_job()`,
+  `get_or_create_user_id()`, `get_active_users_count()`, `check_connection()`
+- 每個方法在 `try` 區塊前新增 `conn = None; cursor = None` 初始化
+- `finally` 區塊改為安全關閉: `if cursor: cursor.close()` → `if conn and conn.is_connected(): conn.close()`
+- SQLAlchemy `pool_recycle` 從 3600 調至 1800（避免 MySQL 8 小時閒置斷線）
+- 新增 `pool_timeout=10` 參數
+
+#### 48.2 MySQL 大型資料寫入失敗修復 (Critical)
+
+**問題**: 前端上傳的 Base64 圖片直接存入 `workflow_data` JSON 欄位，資料量可達 18MB+，
+超過 MySQL 預設 `max_allowed_packet`（4MB）導致 `Lost connection to MySQL server during query`。
+
+**修改檔案**: `k8s/base/05-mysql.yaml`
+- MySQL StatefulSet 新增啟動參數:
+  - `--max-allowed-packet=67108864` (64MB)
+  - `--wait-timeout=28800`
+  - `--interactive-timeout=28800`
+  - `--max-connections=100`
+
+**修改檔案**: `backend/src/app.py`
+- 新增 `import sys`
+- 在 `/api/generate` 端點中，將 `job_data` 的 `images` 鍵剝離後，檢查 `workflow_data` 大小
+- 若 `sys.getsizeof(db_workflow_data)` 超過 1MB，自動精簡為僅保留:
+  `job_id`, `workflow`, 截斷後的 `prompt`（前 200 字元）, `image_fields` 清單
+- 確保大型 Base64 資料不會寫入 MySQL
+
+#### 48.3 Worker 輸出檔案可靠性增強 (Critical)
+
+**問題 1 - History API 補充機制**: Worker 透過 WebSocket 監聽只捕獲到 `SigmasPreview` 臨時預覽圖，
+遺漏 `SaveImage` 正式輸出。原有 History API 回退僅在零輸出時觸發，無法覆蓋「僅有臨時圖」的情況。
+
+**問題 2 - 檔案複製失敗**: K8s 環境中 Worker 與 ComfyUI 的本機路徑不同，所有本地路徑嘗試均失敗，
+導致「所有輸出檔案都無法複製」。
+
+**修改檔案**: `worker/src/comfy_client.py`
+- **History API 增強** (`wait_for_completion()`):
+  - 新增 `has_only_temp` 檢測邏輯：檢查所有輸出是否僅來自 `temp` 目錄
+  - 當 `has_only_temp=True` 時，強制查詢 History API 取得正式輸出
+  - History API 結果與現有輸出合併，按檔名去重
+- **HTTP API 下載後備方案** (`copy_output_file()`):
+  - 在所有本地檔案路徑嘗試失敗後，新增 HTTP API 回退
+  - 透過 ComfyUI `/view?filename=X&type=temp` 端點直接下載檔案
+  - 自動重試 `temp` 和 `output` 兩種類型
+  - 下載成功後直接寫入 `STORAGE_OUTPUT_DIR`
+
+#### 48.4 ComfyUI 錯誤訊息傳播改善
+
+**問題**: `queue_prompt()` 失敗時錯誤訊息過於籠統，無法判斷 ComfyUI 拒絕原因。
+
+**修改檔案**: `worker/src/comfy_client.py`
+- `queue_prompt()` 新增 `self.last_error` 屬性，記錄完整錯誤資訊:
+  - `status_code`: HTTP 狀態碼
+  - `detail`: 錯誤描述
+  - `node_errors`: 節點級錯誤清單
+
+**修改檔案**: `worker/src/main.py`
+- `process_job()` 錯誤訊息現包含 `client.last_error` 的詳細內容
+- 格式: `ComfyUI 詳細錯誤: status=XXX, detail=..., node_errors=[...]`
+
+#### 48.5 K8s 卸載腳本重寫
+
+**問題**: `k8s-teardown.ps1` 未清理監控資源（Prometheus、Grafana、ConfigMap、monitoring-ingress），
+導致 `kubectl get pods` 仍顯示殘留 Pod。
+
+**修改檔案**: `scripts/k8s-teardown.ps1`（完全重寫）
+- 4 步驟清理流程:
+  1. 應用層移除 (backend, worker, frontend deployments + ingress)
+  2. 監控層移除 (Prometheus, Grafana, ConfigMap, monitoring-ingress) — 新增
+  3. 基礎設施移除 (MySQL StatefulSet, Redis, MinIO, ComfyUI-bridge)
+  4. 驗證清理結果（顯示殘留 Pods, Services, Deployments, Ingresses）
+- 新增 `-IncludeMonitoring` 參數: 僅需清理監控層時使用
+- 新增 `-All` 參數: 清理所有層級
+- 所有 `kubectl delete` 命令的 stderr 以 `2>$null` 處理
+
+#### 48.6 測試驗證結果
+
+**部署驗證**:
+```
+All 8 pods Running:
+  backend        1/1 Running
+  frontend       1/1 Running
+  grafana        1/1 Running
+  minio          1/1 Running
+  mysql-0        1/1 Running
+  prometheus     1/1 Running
+  redis          1/1 Running
+  worker         1/1 Running
+```
+
+**API 健康檢查**: Backend Health endpoint 持續回傳 HTTP 200，Queue: 0
+**Worker 連線**: Redis ✅、MySQL ✅、ComfyUI ✅
+
+---
+
+## 歷史更新 (2026-02-13 - 工作流錯誤修復 & 代碼清洗)
+
+### 四十七、工作流出圖錯誤修復 & 架構整潔化 (2026-02-13)
+
+#### 概述
+修復多圖生成、單圖編輯、換臉、草稿轉精稿等工作流錯誤，清理重複定義和冗餘代碼，確保 K8s 部署腳本完整。
+
+#### 47.1 config.json 命名一致性修復 (Critical)
+
+**問題**: 前端發送 `multi_image_blend`/`single_image_edit`，但 config.json 用 `multi_blend`/`image_edit`
+- Config-Driven 圖片注入找不到配置 → 降級到 Fallback → 部分功能失效
+
+**修改檔案**: `ComfyUIworkflow/config.json`
+- `"image_edit"` → `"single_image_edit"` (與前端 `selectTool('single_image_edit')` 一致)
+- `"multi_blend"` → `"multi_image_blend"` (與前端 `selectTool('multi_image_blend')` 一致)
+- 為 `face_swap` 新增 `image_map`: `{"source": "501", "target": "502"}`
+- 為 `sketch_to_image` 新增 `image_map`: `{"input": "120"}`
+- 為 `single_image_edit` 新增 `image_map`: `{"input": "120"}`
+- 為 `multi_image_blend` 新增 `image_map`: `{"source": "78", "target": "436", "extra": "437"}`
+
+#### 47.2 輸出檔案複製路徑增強 (Worker)
+
+**問題**: 換臉/單圖編輯完成但「所有輸出檔案都無法複製」
+- ComfyUI SaveImage 帶 prefix 子目錄，檔案路徑不在預期位置
+
+**修改檔案**: `worker/src/comfy_client.py`
+- `copy_output_file()` 新增路徑搜索策略:
+  - 嘗試 `COMFYUI_ROOT/temp` (K8s 環境中 output parent 可能不同)
+  - 遍歷 `COMFYUI_OUTPUT_DIR` 子目錄搜尋檔案 (SaveImage prefix 子目錄)
+  - 從 `config` 導入 `COMFYUI_ROOT` 用於動態路徑推導
+- `queue_prompt()` 增強: 解析 ComfyUI 的 JSON 錯誤回應，輸出節點級錯誤訊息
+- 移除 `shared.config_base` 的冗餘 try/except import，直接導入
+
+**修改檔案**: `worker/src/main.py`
+- 改進 `queue_prompt` 失敗時的錯誤訊息，包含 workflow 名稱
+- DB 配置統一從 `config.py` 導入（不再跨層直接用 `shared.config_base`）
+
+#### 47.3 CORS 配置去重 (Backend)
+
+**問題**: Flask-CORS + 手動 OPTIONS handler + after_request 三重設置 CORS headers
+
+**修改檔案**: `backend/src/app.py`
+- 移除 `handle_preflight()` 手動 OPTIONS 處理函數
+- 移除 `after_request()` 中手動 CORS header 設定
+- 保留 `CORS(app, ...)` 統一處理（Flask-CORS 已處理 OPTIONS 和 credentials）
+- 移除未使用的 `UserIdFilter` 死代碼類
+
+#### 47.4 配置一致性整合
+
+**修改檔案**: `worker/src/config.py`
+- 新增匯出 `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`
+- 消除 main.py 直接跨層導入 `shared.config_base` 的不一致
+
+**修改檔案**: `shared/storage.py`
+- S3 配置改從 `shared.config_base` 導入（不再重複讀取 `os.getenv`）
+- 消除 S3 預設值的二重定義風險
+
+#### 47.5 K8s 部署腳本完善
+
+**修改檔案**: `scripts/k8s-deploy-phase3.ps1`
+- 步驟從 6 步擴展為 7 步
+- 新增 Frontend image build
+- 新增 Frontend deployment (`10-frontend.yaml`)
+- 新增 Ingress deployment (`99-ingress.yaml`)
+- 新增 ComfyUI bridge service (`04-comfyui-bridge.yaml`)
+
+**修改檔案**: `scripts/k8s-teardown.ps1`
+- 新增 Frontend 移除步驟
+- 新增 Ingress 移除步驟
+- 驗證清理時包含 frontend Pod/Service
+
+**修改檔案**: `scripts/dev-refresh.ps1`
+- 新增 `Refresh-Frontend` 函數
+- Component 支援 `frontend` 選項
+
+#### 47.6 冗餘檔案清理
+
+**修改檔案**: `scripts/monitor_status.bat`
+- Docker Compose 狀態檢查改為 Kubernetes Pods 狀態檢查
+- 移除對已歸檔 `docker-compose.dev.yml` 的引用
+
+**修改檔案**: `scripts/run_stack_test.bat`
+- 修復引用不存在的 `tests/stack_test.py` → 改用 `locust` 命令
+
+**移動檔案**:
+- `tests/code_review_report.md` → `docs/code_review_report.md`
+- `tests/performance_optimization.md` → `docs/performance_optimization.md`
+
+---
+
+## 歷史更新 (2026-02-13 - infra-k8s-hardening)
+
+#### 概述
+執行 OpenSpec 變更 `infra-k8s-hardening`，強化 K8s 安全性、添加自我修復機制、確認持久化儲存，並清理架構冗餘。
+
+#### 46.1 安全憑證集中管理 (Priority 1)
+
+**新增檔案**: `k8s/app/01-secrets.yaml`
+- 建立 `app-secrets` Secret 資源，集中管理應用層密鑰 (`SECRET_KEY`)
+- 基礎服務 Secrets（`redis-creds`, `mysql-creds`, `minio-creds`）維持於各自 base YAML
+
+**修改檔案**: `k8s/app/00-configmap.yaml`
+- 移除 `SECRET_KEY` 明文值，改以註解指向 Secret
+
+**修改檔案**: `k8s/app/10-backend.yaml`
+- `SECRET_KEY` 從 `configMapKeyRef` 改為 `secretKeyRef` (引用 `app-secrets`)
+
+#### 46.2 Worker 自我修復 (Priority 1)
+
+**修改檔案**: `k8s/app/20-worker.yaml`
+- 新增 `livenessProbe` (exec 命令)
+- 探測命令: `python -c "import urllib.request; ..."` 連接 ComfyUI `/system_stats`
+- 配置: `initialDelaySeconds: 60`, `periodSeconds: 60`, `failureThreshold: 3`
+- 效果: 若 ComfyUI 連線中斷超過 3 分鐘，Worker Pod 自動重啟
+
+#### 46.3 資料持久化確認 (Priority 3)
+
+- **MySQL**: `volumeClaimTemplates` (5Gi) 已掛載至 `/var/lib/mysql` ✅
+- **MinIO**: `minio-pvc` (1Gi) 已掛載至 `/data` ✅
+- 無需額外修改
+
+#### 46.4 開發自動化腳本 (Priority 2)
+
+**新增檔案**: `scripts/dev-refresh.ps1`
+- 支援參數: `-Component worker|backend|all`
+- 一鍵重建映像 → 刪除 Pod → 等待就緒
+
+**修改檔案**: `scripts/k8s-deploy-phase3.ps1`
+- 新增 Secrets 部署步驟 (`01-secrets.yaml`)
+- 新增基礎服務確認步驟
+- 步驟從 5 步擴展為 6 步
+
+#### 46.5 架構清洗
+
+**刪除的冗餘檔案**:
+| 檔案 | 原因 |
+|------|------|
+| `k8s/app/20-worker-gpu.yaml` | 空檔案，GPU 配置已在 `20-worker.yaml` |
+| `k8s/base/02-hfs-pvc.yaml` | 空檔案 |
+| `k8s/base/06-ingress.yaml` | 已被 `99-ingress.yaml` 統一版取代 |
+| `backend/test_config.py` | `[TEMP]` 臨時腳本 |
+| `scripts/add_output_path_column.py` | 已廢棄遷移（output_path 已從設計移除）|
+| `frontend/backups/` | 備份文件不應存在於代碼庫 |
+| `*/__pycache__/` | Python 快取目錄 |
+
+#### 驗證方式
+```powershell
+# 1. 驗證 YAML 語法
+kubectl apply --dry-run=client -f k8s/app/
+kubectl apply --dry-run=client -f k8s/base/
+
+# 2. 驗證 Secrets 部署
+kubectl apply -f k8s/app/01-secrets.yaml
+kubectl get secret app-secrets -o yaml
+
+# 3. 驗證 Worker LivenessProbe
+kubectl describe pod -l app=worker | Select-String "Liveness"
+
+# 4. 測試開發腳本
+.\scripts\dev-refresh.ps1 -Component worker
+```
+
+---
+
 
 ### 四十五、Hotfix: Worker COMFY_OUTPUT_DIR 錯誤修正 (2026-02-12)
 

@@ -40,7 +40,7 @@ data:
   FLASK_HOST: "0.0.0.0"
   FLASK_PORT: "5001"
   FLASK_DEBUG: "false"
-  SECRET_KEY: "dev-secret-key-change-in-production"
+  # SECRET_KEY: 已遷移到 Secret (app-secrets)
   
   # ==========================================
   # Worker 專用配置
