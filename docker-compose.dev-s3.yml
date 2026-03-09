@@ -1,0 +1,97 @@
+# ============================================
+# 本地 S3 模擬測試環境 (MinIO + Redis + MySQL)
+# ============================================
+# 用途：在本地 Windows 環境驗證 S3/COS 邏輯
+#       推上 TWCC 前先用 MinIO 模擬 S3 API
+#
+# 使用方式：
+#   docker compose -f docker-compose.dev-s3.yml --env-file .env.dev-s3 up -d
+#   然後設定 STORAGE_BACKEND=s3, S3_ENDPOINT=http://localhost:9000
+#
+# MinIO Console: http://localhost:9001
+#   帳號: minioadmin / minioadmin
+# ============================================
+
+services:
+  # =========================================
+  # Redis
+  # =========================================
+  redis:
+    image: redis:7.2
+    container_name: studio-redis
+    ports:
+      - "6379:6379"
+    command: >
+      redis-server
+      --requirepass mysecret
+      --appendonly yes
+    volumes:
+      - ./redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "mysecret", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # =========================================
+  # MySQL
+  # =========================================
+  mysql:
+    image: mysql:8.0
+    container_name: studio-mysql
+    ports:
+      - "3307:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=rootpassword
+      - MYSQL_DATABASE=studio_db
+      - MYSQL_USER=studio_user
+      - MYSQL_PASSWORD=studio_password
+    volumes:
+      - ./mysql_data:/var/lib/mysql
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # =========================================
+  # MinIO (S3 相容物件儲存)
+  # =========================================
+  minio:
+    image: minio/minio:latest
+    container_name: studio-minio
+    ports:
+      - "9000:9000"    # S3 API
+      - "9001:9001"    # Web Console
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - ./minio_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # =========================================
+  # MinIO 初始化（自動建立 Bucket）
+  # =========================================
+  minio-init:
+    image: minio/mc:latest
+    container_name: studio-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 minioadmin minioadmin;
+      mc mb local/studio-outputs --ignore-existing;
+      mc anonymous set download local/studio-outputs;
+      echo 'Bucket studio-outputs 已建立';
+      "
+    restart: "no"

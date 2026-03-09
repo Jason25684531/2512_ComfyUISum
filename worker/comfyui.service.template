@@ -1,0 +1,52 @@
+# ============================================
+# ComfyUI Systemd Service Template
+# ============================================
+# GPU VM 上 ComfyUI 的自動啟動服務
+# 安裝方式: 由 twcc_gpu_setup.sh 自動複製到 /etc/systemd/system/
+#
+# 手動安裝:
+#   sudo cp comfyui.service.template /etc/systemd/system/comfyui.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now comfyui
+# ============================================
+
+[Unit]
+Description=ComfyUI AI Image Generation Engine
+Documentation=https://github.com/comfyanonymous/ComfyUI
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+
+# ComfyUI 工作目錄
+WorkingDirectory=/opt/comfyui
+
+# Python 虛擬環境中的 Python 執行 ComfyUI
+# 僅監聽 localhost，不對外暴露（Worker 同機存取）
+ExecStart=/opt/comfyui/venv/bin/python main.py --listen 127.0.0.1 --port 8188 --preview-method auto
+
+# GPU 環境變數
+Environment=NVIDIA_VISIBLE_DEVICES=all
+Environment=CUDA_VISIBLE_DEVICES=0
+Environment=PYTHONUNBUFFERED=1
+
+# 自動重啟策略
+Restart=always
+RestartSec=10
+StartLimitBurst=5
+StartLimitIntervalSec=300
+
+# 資源限制（A100 場景，記憶體給足）
+# LimitNOFILE=65536
+# MemoryMax=48G
+
+# 日誌導向 journald
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=comfyui
+
+[Install]
+WantedBy=multi-user.target

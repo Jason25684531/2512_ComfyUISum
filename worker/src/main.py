@@ -11,11 +11,30 @@ import time
 import redis
 import base64
 import uuid
+import signal
 import logging
 import threading
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from datetime import datetime, timedelta
+
+# ============================================
+# Graceful Shutdown 支援（SIGTERM / SIGINT）
+# ============================================
+_shutdown_flag = False
+_current_job_id = None  # 追蹤當前處理中的任務
+
+
+def _shutdown_handler(signum, frame):
+    """收到 SIGTERM/SIGINT 時設置關閉旗標，等待當前任務完成"""
+    global _shutdown_flag
+    _shutdown_flag = True
+    sig_name = signal.Signals(signum).name
+    print(f"\n⚠️ 收到 {sig_name} 信號，等待當前任務完成後安全關閉...")
+
+
+signal.signal(signal.SIGTERM, _shutdown_handler)
+signal.signal(signal.SIGINT, _shutdown_handler)
 
 # ============================================
 # 添加 shared 模組路徑
@@ -562,6 +581,18 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
                 if new_filename:
                     # 無論是圖片還是影片，都通過 image_url 欄位回傳 (前端會根據副檔名判斷)
                     file_url = f"/outputs/{new_filename}"
+                    
+                    # S3/COS 上傳：若 STORAGE_BACKEND=s3，同步上傳到物件儲存
+                    try:
+                        from shared.storage_service import storage
+                        local_output_path = STORAGE_OUTPUT_DIR / new_filename
+                        remote_key = f"outputs/{new_filename}"
+                        if hasattr(storage, 'client'):  # S3Storage 才有 client 屬性
+                            storage.upload_file(str(local_output_path), remote_key)
+                            job_logger.info(f"☁️ 已上傳到 S3: {remote_key}")
+                    except Exception as s3_err:
+                        job_logger.warning(f"⚠️ S3 上傳失敗（不影響任務結果）: {s3_err}")
+                    
                     update_job_status(r, job_id, "finished", progress=100, image_url=file_url, db_client=db_client)
                     job_logger.info(f"✅ 任務完成，輸出 ({output_type}): {file_url}")
                 else:
@@ -601,6 +632,80 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
         error_msg = str(e)
         job_logger.error(f"❌ 處理錯誤: {error_msg}")
         update_job_status(r, job_id, "failed", progress=0, error=error_msg, db_client=db_client)
+
+
+def _build_warmup_workflow() -> dict:
+    """
+    建構最小化的暖機 workflow（256x256, step=1）
+    強制 ComfyUI 將模型載入 GPU 顯存，避免第一筆真實任務過慢
+    
+    Returns:
+        ComfyUI workflow dict，若無法建構則返回 None
+    """
+    try:
+        # 最簡單的 txt2img workflow：KSampler + EmptyLatentImage + CheckpointLoader
+        return {
+            "1": {
+                "class_type": "CheckpointLoaderSimple",
+                "inputs": {
+                    "ckpt_name": "z_image_turbo_fp8.safetensors"
+                }
+            },
+            "2": {
+                "class_type": "CLIPTextEncode",
+                "inputs": {
+                    "text": "warmup test",
+                    "clip": ["1", 1]
+                }
+            },
+            "3": {
+                "class_type": "CLIPTextEncode",
+                "inputs": {
+                    "text": "",
+                    "clip": ["1", 1]
+                }
+            },
+            "4": {
+                "class_type": "EmptyLatentImage",
+                "inputs": {
+                    "width": 256,
+                    "height": 256,
+                    "batch_size": 1
+                }
+            },
+            "5": {
+                "class_type": "KSampler",
+                "inputs": {
+                    "model": ["1", 0],
+                    "positive": ["2", 0],
+                    "negative": ["3", 0],
+                    "latent_image": ["4", 0],
+                    "seed": 42,
+                    "steps": 1,
+                    "cfg": 1.0,
+                    "sampler_name": "euler",
+                    "scheduler": "normal",
+                    "denoise": 1.0
+                }
+            },
+            "6": {
+                "class_type": "VAEDecode",
+                "inputs": {
+                    "samples": ["5", 0],
+                    "vae": ["1", 2]
+                }
+            },
+            "7": {
+                "class_type": "SaveImage",
+                "inputs": {
+                    "images": ["6", 0],
+                    "filename_prefix": "_warmup_"
+                }
+            }
+        }
+    except Exception as e:
+        logger.warning(f"⚠️ 暖機 workflow 建構失敗: {e}")
+        return None
 
 
 def main():
@@ -643,6 +748,32 @@ def main():
     # 4. 檢查 ComfyUI 連接
     if client.check_connection():
         logger.info("✅ ComfyUI 連接成功")
+        
+        # 4.1 VRAM 暖機：強制模型載入 GPU 顯存
+        # A100 首次載入 6GB 模型約需 20 秒，暖機避免第一筆任務過慢
+        skip_warmup = os.getenv('SKIP_WARMUP', 'false').lower() == 'true'
+        if not skip_warmup:
+            logger.info("🔥 執行 VRAM 暖機（載入模型到 GPU 顯存）...")
+            try:
+                warmup_workflow = _build_warmup_workflow()
+                if warmup_workflow:
+                    prompt_id = client.queue_prompt(warmup_workflow)
+                    if prompt_id:
+                        logger.info(f"🔥 暖機任務已提交 (prompt_id: {prompt_id})")
+                        # 等待暖機完成（最多 120 秒）
+                        warmup_result = client.wait_for_completion(prompt_id, timeout=120)
+                        if warmup_result and warmup_result.get("success"):
+                            logger.info("✅ VRAM 暖機完成，模型已載入 GPU 顯存")
+                        else:
+                            logger.warning("⚠️ 暖機任務未成功完成，但不影響後續運作")
+                    else:
+                        logger.warning("⚠️ 暖機任務提交失敗，跳過暖機")
+                else:
+                    logger.info("ℹ️ 未找到適用的暖機 workflow，跳過暖機")
+            except Exception as warmup_err:
+                logger.warning(f"⚠️ 暖機過程發生錯誤（不影響正常運作）: {warmup_err}")
+        else:
+            logger.info("ℹ️ SKIP_WARMUP=true，跳過 VRAM 暖機")
     else:
         logger.warning("⚠️ ComfyUI 尚未啟動，將持續等待...")
     
@@ -666,8 +797,10 @@ def main():
     
     last_cleanup_time = time.time()
     CLEANUP_INTERVAL = 3600  # 每小時清理一次
+    redis_retry_delay = 2.0  # Redis 重連指數退避初始值
+    REDIS_RETRY_MAX_DELAY = 60.0
     
-    while True:
+    while not _shutdown_flag:
         try:
             # 定期清理暫存檔案和輸出圖片
             if time.time() - last_cleanup_time > CLEANUP_INTERVAL:
@@ -678,22 +811,31 @@ def main():
             # BLPOP: 阻塞式取出任務 (超時 5 秒)
             result = r.blpop(JOB_QUEUE, timeout=5)
             
+            # 連接成功，重置退避延遲
+            redis_retry_delay = 2.0
+            
             if result:
                 queue_name, job_json = result
                 
                 try:
                     job_data = json.loads(job_json)
+                    _current_job_id = job_data.get('job_id', 'unknown')
                     process_job(r, client, job_data, db_client)
+                    _current_job_id = None
                 except json.JSONDecodeError as e:
                     logger.error(f"JSON 解析錯誤: {e}")
+                    _current_job_id = None
             
         except redis.ConnectionError as e:
-            logger.error(f"Redis 連接中斷，5 秒後重試: {e}")
-            time.sleep(5)
+            logger.error(f"Redis 連接中斷，{redis_retry_delay:.0f}s 後重試: {e}")
+            time.sleep(redis_retry_delay)
+            redis_retry_delay = min(redis_retry_delay * 2, REDIS_RETRY_MAX_DELAY)
             try:
                 r = get_redis_client()
-            except:
-                pass
+                logger.info("✅ Redis 重連成功")
+                redis_retry_delay = 2.0  # 重置
+            except Exception as reconnect_err:
+                logger.warning(f"⚠️ Redis 重連失敗: {reconnect_err}")
                 
         except KeyboardInterrupt:
             logger.info("\n收到中斷信號，正在關閉...")
@@ -703,7 +845,10 @@ def main():
             logger.error(f"未預期錯誤: {e}")
             time.sleep(1)
     
-    logger.info("已關閉")
+    # Graceful shutdown: 確認當前任務狀態
+    if _current_job_id:
+        logger.info(f"⏳ 等待任務 {_current_job_id} 完成...")
+    logger.info("✅ Worker 已安全關閉")
 
 
 if __name__ == '__main__':

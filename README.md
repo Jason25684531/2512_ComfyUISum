@@ -22,6 +22,9 @@
 - [系統架構](#-系統架構)
 - [技術棧](#-技術棧)
 - [快速開始](#-快速開始)
+  - [本地開發環境](#本地開發環境-windows)
+  - [本地 MinIO S3 測試](#本地-minio-s3-測試)
+  - [TWCC 雲端部署](#twcc-雲端部署-生產環境)
 - [文件結構](#-文件結構)
 - [API 端點](#-api-端點)
 - [配置說明](#-配置說明)
@@ -50,6 +53,7 @@ ComfyUI Studio 是一個現代化的 AI 圖像生成平台，提供直觀的 Web
 - 🔄 **自動化** - 從配置到部署的完整自動化流程
 - 🛡️ **安全加固** - Rate Limiting、Input Validation、Path Traversal Protection (Phase 6)
 - 📊 **系統監控** - Real-time HUD、Metrics API、Worker Heartbeat (Phase 6)
+- ☁️ **雲端就緒** - TWCC 雙 VM 架構、S3 物件儲存、自動排程開關機 (feature/twcc-linux-migration)
 
 ---
 
@@ -89,13 +93,46 @@ ComfyUI Studio 是一個現代化的 AI 圖像生成平台，提供直觀的 Web
 #### 🗄️ 數據層
 - **MySQL**: 持久化任務記錄
 - **Redis**: 任務隊列與狀態緩存
-- **File System**: 圖片存儲管理
+- **File System**: 圖片存儲管理（本地模式）
+- **TWCC COS / S3**: 生成圖片物件儲存（雲端模式）
 
 ---
 
 ## 🏗️ 系統架構
 
-### 整體架構圖 (含 Ngrok 公網存取)
+### TWCC 雲端架構（生產環境）
+
+```
+┌─────────────────────────────────────────────────┐
+│            TWCC Load Balancer (HTTPS:443)        │
+│         SSL 終端 → Base VM Nginx:80              │
+└──────────────────────┬──────────────────────────┘
+                       │
+         ┌─────────────▼─────────────┐
+         │   Base VM (永遠開機)       │  ← docker-compose.base.yml
+         │   Nginx(:80)              │
+         │   Flask API(:5000)        │
+         │   Redis(:6379, bind all)  │
+         │   MySQL(:3306)            │
+         └─────────────┬─────────────┘
+                       │ TWCC 私有網路 10.x.x.x
+         ┌─────────────▼─────────────┐
+         │   GPU VM (Cron 排程)       │  ← systemd 雙服務
+         │   ComfyUI(:8188, local)   │
+         │   Worker (Python)         │
+         └─────────────┬─────────────┘
+                       │
+         ┌─────────────▼─────────────┐
+         │   TWCC COS (S3 相容)       │  ← boto3 + storage_service.py
+         │   studio-outputs bucket   │
+         └───────────────────────────┘
+```
+
+> 📚 完整部署步驟請參閱 [docs/TWCC_Deployment_Guide.md](docs/TWCC_Deployment_Guide.md)
+
+---
+
+### 本地架構圖 (含 Ngrok 公網存取)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -248,7 +285,9 @@ https://[your-id].ngrok-free.app/  → 對應 localhost:5000/
 - **Flask 3.0** - Web 框架
 - **MySQL 8.0** - 關係型數據庫
 - **Redis 7.0** - 內存數據庫/消息隊列
+- **boto3 1.34+** - S3 相容物件儲存（TWCC COS / MinIO）
 - **Docker** - 容器化部署
+- **Nginx** - 反向代理（TWCC 生產環境）
 
 ### 前端技術
 - **HTML5 / CSS3** - 結構與樣式
@@ -271,11 +310,21 @@ https://[your-id].ngrok-free.app/  → 對應 localhost:5000/
 
 ## 🚀 快速開始
 
-> **全新統一部署架構！** 現在支援 Windows/Linux 混合部署，一套配置多環境使用。詳見 [混合部署策略指南](HYBRID_DEPLOYMENT_STRATEGY.md)
+> **多環境部署支援！** 本地 Windows 開發、本地 MinIO S3 測試、TWCC 雲端生產三種模式，一份程式碼搞定。
 
 ### 部署方式選擇
 
-本專案提供兩種部署方式，請根據需求選擇：
+本專案提供三種部署方式，請根據需求選擇：
+
+| 方式 | 環境 | 儲存後端 | 說明 |
+|------|------|----------|------|
+| **方式 1** 🪟 | 本地 Windows | 本地檔案系統 | 日常開發、即時除錯 |
+| **方式 2** 🪣 | 本地 + MinIO | S3 (MinIO 模擬) | 驗證 S3 上傳/下載流程 |
+| **方式 3** ☁️ | TWCC Linux VM | TWCC COS (S3) | 生產環境部署 |
+
+---
+
+### 本地開發環境 (Windows)
 
 #### 方式 1: 統一架構部署 (推薦 ⭐)
 
@@ -434,6 +483,178 @@ curl http://localhost:5000/api/health
 
 ---
 
+### 本地 MinIO S3 測試
+
+> 在 Windows 本地環境模擬 S3 物件儲存，驗證 COS 上傳/下載流程，無需 TWCC 帳號。
+
+```powershell
+# 1. 啟動 MinIO + Flask + Redis + MySQL
+docker compose -f docker-compose.dev-s3.yml --env-file .env.dev-s3 up -d
+
+# 2. 確認所有容器正在運行
+docker compose -f docker-compose.dev-s3.yml ps
+# 預期：minio, minio-init, api, redis, mysql 全部 running
+
+# 3. 開啟 MinIO 管理介面
+start http://localhost:9001
+# 帳號: minioadmin  密碼: minioadmin
+# 確認 studio-outputs bucket 已自動建立
+
+# 4. 啟動 Worker（另開終端，設定 S3 環境）
+$env:STORAGE_BACKEND="s3"
+$env:S3_ENDPOINT="http://localhost:9000"
+$env:S3_ACCESS_KEY="minioadmin"
+$env:S3_SECRET_KEY="minioadmin"
+$env:S3_BUCKET="studio-outputs"
+python worker/src/main.py
+
+# 5. 測試圖片生成 → 驗證 MinIO 上已有上傳檔案
+# 在 MinIO Console 的 studio-outputs bucket 中確認結果
+
+# 6. 測試結束後清理
+docker compose -f docker-compose.dev-s3.yml down
+```
+
+**驗證 storage_service 本地可用性：**
+```powershell
+# 虛擬環境啟動後
+.\venv\Scripts\Activate.ps1
+python -c "
+import sys; sys.path.insert(0, '.')
+from shared.storage_service import storage
+print('Storage type:', type(storage).__name__)
+# 預期: LocalStorage（本地開發無 S3 設定）
+"
+```
+
+---
+
+### TWCC 雲端部署（生產環境）
+
+#### 快速部署流程
+
+```
+[本地 Windows]                    [TWCC]
+git push origin                    │
+feature/twcc-linux-migration       │
+                                   ▼
+                          Base VM: git pull + docker compose up
+                          GPU VM:  git pull + systemd restart
+```
+
+#### Base VM — 啟動服務
+
+```bash
+# 1. SSH 登入 Base VM
+ssh ubuntu@<BASE_VM_IP>
+
+# 2. 進入專案目錄
+cd ~/studio-core
+git pull origin feature/twcc-linux-migration
+
+# 3. 設定環境變數（首次需填入所有 TWCC 實際值）
+cp .env.twcc .env
+nano .env
+
+# 4. 首次部署：初始化資料庫
+docker compose -f docker-compose.base.yml up -d mysql
+sleep 30
+docker compose -f docker-compose.base.yml exec mysql \
+  mysql -u root -p${MYSQL_ROOT_PASSWORD} studio_db < backend/schema.sql
+
+# 5. 啟動全部服務（Nginx + Flask + Redis + MySQL）
+docker compose -f docker-compose.base.yml up -d
+
+# 6. 確認服務狀態
+docker compose -f docker-compose.base.yml ps
+curl http://localhost/api/health
+```
+
+#### GPU VM — 首次建置 & 啟動
+
+```bash
+# 1. SSH 登入 GPU VM
+ssh ubuntu@<GPU_VM_PRIVATE_IP>
+
+# 2. 進入專案目錄
+cd ~/studio-core
+git pull origin feature/twcc-linux-migration
+
+# 3. 設定環境（特別注意 GPU_VM_REDIS_HOST 填 Base VM 的私有 IP）
+cp .env.twcc .env
+nano .env
+
+# 4. 一鍵初始化 GPU VM（僅首次執行）
+chmod +x scripts/twcc_gpu_setup.sh
+sudo bash scripts/twcc_gpu_setup.sh
+# 此腳本會自動：安裝驅動、建立 venv、複製 systemd 服務
+
+# 5. 確認雙服務狀態
+sudo systemctl status comfyui   # ComfyUI 服務
+sudo systemctl status worker    # Worker 服務
+
+# 6. 即時查看 Worker 日誌
+journalctl -u worker -f
+```
+
+#### 設定 Cron 自動排程開關機
+
+```bash
+# 在 Base VM 上執行（TWCC CLI 必須已安裝）
+chmod +x scripts/twcc_setup_cron.sh
+bash scripts/twcc_setup_cron.sh
+
+# 查看安裝的排程
+crontab -l
+# 預期輸出：
+# 0 9 * * 1-5 /home/ubuntu/studio-core/scripts/twcc_start_gpu.sh ...
+# 0 18 * * 1-5 /home/ubuntu/studio-core/scripts/twcc_stop_gpu.sh ...
+
+# 手動開機 GPU VM
+bash scripts/twcc_start_gpu.sh
+
+# 手動安全關機（會先確認佇列清空）
+bash scripts/twcc_stop_gpu.sh
+```
+
+#### 健康檢查
+
+```bash
+# 在 Base VM 上執行
+chmod +x scripts/twcc_healthcheck.sh
+bash scripts/twcc_healthcheck.sh
+
+# 預期輸出範例：
+# [PASS] Docker daemon 運行中
+# [PASS] 容器 [nginx] 運行中
+# [PASS] Redis PING 回應
+# [PASS] MySQL 連線正常
+# [PASS] studio_db 資料庫存在
+# [PASS] Nginx 回應 (HTTP 200)
+# [PASS] Worker 心跳正常（xx s 前更新）
+# Results: 7/7 passed ✅
+```
+
+#### 更新部署
+
+```bash
+# Base VM 更新
+git pull origin feature/twcc-linux-migration
+docker compose -f docker-compose.base.yml up -d --build
+
+# GPU VM 更新
+git pull origin feature/twcc-linux-migration
+source venv/bin/activate
+pip install -r requirements.txt
+sudo systemctl restart worker      # Worker 更新
+sudo systemctl restart comfyui     # ComfyUI 更新（需要時）
+```
+
+📚 **完整 TWCC 部署文件**: [docs/TWCC_Deployment_Guide.md](docs/TWCC_Deployment_Guide.md)  
+📋 **遷移提案書**: [docs/TWCC_Migration_Proposal.md](docs/TWCC_Migration_Proposal.md)
+
+---
+
 ## 📁 文件結構
 
 ```
@@ -441,7 +662,9 @@ ComfyUISum/
 ├── shared/                     # 共用模組 (核心 - Phase 10 優化)
 │   ├── __init__.py            # 模組導出 (18 個配置項)
 │   ├── utils.py               # load_env(), setup_logger(), get_redis_client() 等
+│   │                          # ⭐ [TWCC] get_redis_client 支援指數退避重試
 │   ├── config_base.py         # 共用配置 (Redis, DB, Storage, ComfyUI)
+│   ├── storage_service.py     # ⭐ [TWCC] 儲存抽象層（LocalStorage / S3Storage）
 │   └── database.py            # Database 類 + ORM 模型 (User, Job)
 │
 ├── backend/                    # Flask 後端服務
@@ -458,10 +681,14 @@ ComfyUISum/
 │   ├── src/
 │   │   ├── main.py            # Worker 主邏輯
 │   │   │                      # ⭐ 使用 shared.utils.get_redis_client()
+│   │   │                      # ⭐ [TWCC] SIGTERM 優雅關機 + S3上傳 + VRAM暖機
 │   │   ├── json_parser.py     # Workflow 解析
-│   │   ├── comfy_client.py    # ComfyUI 客戶端 (525 行)
+│   │   ├── comfy_client.py    # ComfyUI 客戶端
+│   │   │                      # ⭐ [TWCC] check_connection 指數退避重試
 │   │   ├── check_comfy_connection.py  # 連線檢查工具
 │   │   └── config.py          # 配置管理 (繼承 shared.config_base)
+│   ├── comfyui.service.template   # [TWCC] ComfyUI systemd 服務範本
+│   ├── worker.service.template    # [TWCC] Worker systemd 服務範本
 │   └── Dockerfile             # Worker 容器定義
 │
 ├── frontend/                   # Web 前端
@@ -486,6 +713,14 @@ ComfyUISum/
 │   ├── sketch_to_image_*.json    # 草圖轉圖像
 │   └── InfiniteTalk_IndexTTS_2.json  # 虛擬人說話
 │
+├── .env.twcc                       # [TWCC] 環境變數範本（所有 TWCC 必填欄位）
+├── .env.dev-s3                    # [TWCC] MinIO 本地 S3 測試環境變數
+├── docker-compose.base.yml        # [TWCC] Base VM Compose（nginx+api+redis+mysql）
+├── docker-compose.dev-s3.yml      # [TWCC] MinIO S3 本地測試 Compose
+│
+├── nginx/
+│   └── nginx.twcc.conf            # [TWCC] Nginx 反向代理配置（含 LB proxy headers）
+│
 ├── openspec/                   # ⭐ OpenSpec 規格文件系統 (Phase 10 新增)
 │   ├── AGENTS.md              # OpenSpec 代理指南
 │   ├── project.md             # 專案概述
@@ -498,6 +733,8 @@ ComfyUISum/
 ├── docs/                       # 文檔目錄 (11 個檔案)
 │   ├── UpdateList.md          # 詳細更新日誌
 │   ├── BEST_PRACTICES.md      # 開發最佳實踐
+│   ├── TWCC_Deployment_Guide.md   # [TWCC] 雲端部署完整指南（新增）
+│   ├── TWCC_Migration_Proposal.md # [TWCC] 遷移提案書與變更總結（新增）
 │   ├── HYBRID_DEPLOYMENT_STRATEGY.md  # 混合部署策略指南
 │   ├── NAVIGATION_FLOW.md     # 導航流程文檔
 │   ├── Phase8C_Monitoring_Guide.md    # 監控指南
@@ -518,13 +755,18 @@ ComfyUISum/
 │   ├── worker.log             # Worker 日誌 (5MB × 3)
 │   └── *.json.log             # JSON 格式日誌 (午夜輪換)
 │
-├── scripts/                    # 啟動腳本目錄 (9 個檔案)
+├── scripts/                    # 啟動腳本目錄
 │   ├── start_unified_windows.bat   # Windows 統一啟動 (推薦) ⭐
 │   ├── start_unified_linux.sh      # Linux 統一啟動 (推薦) ⭐
 │   ├── start_ngrok.bat             # Ngrok 啟動腳本
 │   ├── update_ngrok_config.ps1     # Ngrok 配置更新
 │   ├── monitor_status.bat          # 狀態監控
 │   ├── run_stack_test.bat          # 整合測試
+│   ├── twcc_start_gpu.sh           # [TWCC] GPU VM 開機（呼叫 TWCC CLI）
+│   ├── twcc_stop_gpu.sh            # [TWCC] GPU VM 安全關機（佇列檢查）
+│   ├── twcc_setup_cron.sh          # [TWCC] 安裝 Cron 自動排程
+│   ├── twcc_gpu_setup.sh           # [TWCC] GPU VM 首次建置腳本
+│   ├── twcc_healthcheck.sh         # [TWCC] 健康檢查（7 項檢查）
 │   └── *.bat/*.py                  # 其他輔助腳本
 │
 ├── mysql_data/                 # MySQL 數據卷
@@ -1327,6 +1569,50 @@ curl http://localhost:5000/api/metrics
 - ✅ Config-Driven Parser (image_map)
 - ✅ 雙通道結構化日誌系統 (Console 彩色 + JSON File)
 - ✅ Worker/Backend 日誌系統統一化
+
+### TWCC 雲端遷移 (2026-03-09) 🆕
+
+> 分支: `feature/twcc-linux-migration`
+
+**架構升級**
+- ✅ 雙 VM 架構：Base VM（永遠開機）+ GPU VM（Cron 排程開關）
+- ✅ TWCC Load Balancer SSL 終端 → Nginx(:80) → Flask(:5000)
+- ✅ TWCC 私有網路 Redis 跨 VM 通訊
+
+**儲存層**
+- ✅ `shared/storage_service.py`：LocalStorage / S3Storage 抽象層
+- ✅ Worker 任務完成後自動上傳至 TWCC COS (S3)
+- ✅ Flask `serve_output()` S3 模式回傳 302 presigned URL 重導向
+- ✅ `docker-compose.dev-s3.yml`：本地 MinIO 模擬 S3 測試環境
+- ✅ `boto3>=1.34.0` 加入 requirements.txt
+
+**韌性強化**
+- ✅ Redis 連線指數退避重試（max 10 次，2s→60s）
+- ✅ ComfyUI 連線指數退避重試（max 10 次，5s→120s）
+- ✅ Worker 主迴圈失敗指數退避
+- ✅ SIGTERM / SIGINT 優雅關機（等目前任務完成再退出）
+
+**GPU VM 服務化**
+- ✅ 雙 systemd 服務：`comfyui.service` + `worker.service`（相依順序）
+- ✅ VRAM GPU 暖機機制（冷啟動後自動發送 256×256 預熱任務）
+- ✅ `scripts/twcc_gpu_setup.sh`：GPU VM 一鍵初始建置
+
+**自動化腳本**
+- ✅ `twcc_start_gpu.sh` / `twcc_stop_gpu.sh`（含安全佇列檢查）
+- ✅ `twcc_setup_cron.sh`：平日 09:00 開機、18:00 安全關機
+- ✅ `twcc_healthcheck.sh`：7 項服務健康檢查
+
+**其他修復**
+- ✅ Dockerfile 修復：補上 `COPY shared/`（容器化部署關鍵 bug）
+- ✅ Flask `ProxyFix`（`PROXY_FIX=true` 條件啟用）
+- ✅ 前端 `config.js` TWCC LB 域名偵測
+- ✅ `SESSION_COOKIE_SECURE` 環境變數化
+
+**文件**
+- ✅ `docs/TWCC_Deployment_Guide.md`：完整部署指南（10 章）
+- ✅ `docs/TWCC_Migration_Proposal.md`：遷移提案書與變更總結
+
+---
 
 ### Video Studio Integration (2026-01-15)
 - ✅ 三種影片工作流整合 (Veo3 Long Video, T2V, FLF)

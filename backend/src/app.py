@@ -21,6 +21,7 @@ from flask_login import LoginManager, login_user, logout_user, login_required, c
 from flask_bcrypt import Bcrypt
 from redis import Redis, RedisError
 from werkzeug.utils import secure_filename
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 # ============================================
 # 添加 shared 模組路徑並載入 .env
@@ -35,12 +36,19 @@ load_env()
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
 
+# ============================================
+# ProxyFix: 修正 TWCC LB → Nginx 反向代理鏈的標頭
+# 僅在 PROXY_FIX=true 時啟用，不影響本地 Windows 開發
+# ============================================
+if os.getenv('PROXY_FIX', 'false').lower() == 'true':
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+
 # Session Cookie 配置 - 確保跨域請求能正確處理 cookies
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # 允許同站導航攜帶 cookie
-app.config['SESSION_COOKIE_SECURE'] = False     # 開發環境用 HTTP，正式環境改為 True
+app.config['SESSION_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', 'false').lower() == 'true'
 app.config['SESSION_COOKIE_HTTPONLY'] = True    # 防止 JS 讀取 cookie
 app.config['REMEMBER_COOKIE_SAMESITE'] = 'Lax'
-app.config['REMEMBER_COOKIE_SECURE'] = False
+app.config['REMEMBER_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', 'false').lower() == 'true'
 
 CORS(app)
 
@@ -1341,10 +1349,30 @@ def serve_output(filename):
     Serve generated images/videos from storage/outputs directory
     支援 .png, .jpg, .mp4 等格式
     防止路徑穿越攻擊
+    
+    當 STORAGE_BACKEND=s3 時，回傳 302 redirect 到 COS pre-signed URL
+    當 STORAGE_BACKEND=local 時，維持既有的 send_from_directory 行為
     """
     import mimetypes
-    from flask import abort
+    from flask import abort, redirect
     
+    # ===== S3 模式：嘗試產生 pre-signed URL 做 302 redirect =====
+    storage_backend = os.getenv('STORAGE_BACKEND', 'local').lower()
+    if storage_backend == 's3':
+        try:
+            from shared.storage_service import storage
+            remote_key = f"outputs/{filename}"
+            if storage.file_exists(remote_key):
+                presigned_url = storage.get_presigned_url(remote_key, expires=3600)
+                if presigned_url:
+                    logger.info(f"☁️ S3 redirect: {filename}")
+                    return redirect(presigned_url, code=302)
+            # S3 上找不到，降級為本地檔案系統
+            logger.warning(f"⚠️ S3 檔案不存在，嘗試本地: {filename}")
+        except Exception as s3_err:
+            logger.warning(f"⚠️ S3 存取失敗，降級為本地: {s3_err}")
+    
+    # ===== 本地模式（或 S3 降級）=====
     # Get the absolute path to storage/outputs
     current_dir = os.path.dirname(os.path.abspath(__file__))
     outputs_dir = os.path.join(current_dir, '..', '..', 'storage', 'outputs')

@@ -6,14 +6,21 @@ const _API_BASE_LOCAL = 'http://localhost:5000';
 const _isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 const _currentPort = window.location.port;
 
+// TWCC LB 偵測：當域名包含 .twcc.ai 或透過 Nginx 反向代理時，使用相對路徑
+const _isTWCC = window.location.hostname.includes('.twcc.ai') || window.location.hostname.includes('twcc');
+
 // 如果當前頁面已經是從 Flask (port 5000) 提供，使用相對路徑以確保 cookie 正確傳遞
 const _isServedByFlask = _isLocalhost && (_currentPort === '5000' || _currentPort === '');
 
-// 使用相對路徑 '' 當從 Flask 提供時，否則使用完整 URL
-const _apiBase = _isServedByFlask ? '' : (_isLocalhost ? _API_BASE_LOCAL : _API_BASE_NGROK);
+// 如果是透過 Nginx（port 80/443）提供，使用相對路徑（由 Nginx 反向代理到 Flask）
+const _isServedByNginx = !_isLocalhost && (_currentPort === '80' || _currentPort === '443' || _currentPort === '');
+
+// 使用相對路徑 '' 當從 Flask/Nginx/TWCC LB 提供時，否則使用完整 URL
+const _apiBase = (_isServedByFlask || _isServedByNginx || _isTWCC) ? '' : (_isLocalhost ? _API_BASE_LOCAL : _API_BASE_NGROK);
 
 // Export for use in other scripts (login.html, profile.html, etc.)
 window.API_URL = _apiBase;
 
 console.log('API Base URL:', _apiBase || '(relative path)');
 console.log('Served by Flask:', _isServedByFlask);
+console.log('Served by Nginx/LB:', _isServedByNginx || _isTWCC);

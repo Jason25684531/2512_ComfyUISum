@@ -1,0 +1,62 @@
+# ============================================
+# Studio Worker Systemd Service Template
+# ============================================
+# GPU VM 上 Python Worker 的自動啟動服務
+# 依賴 comfyui.service，確保 ComfyUI 先啟動
+#
+# 安裝方式: 由 twcc_gpu_setup.sh 自動複製到 /etc/systemd/system/
+#
+# 手動安裝:
+#   sudo cp worker.service.template /etc/systemd/system/studio-worker.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now studio-worker
+# ============================================
+
+[Unit]
+Description=Studio Core Worker - ComfyUI Task Processor
+Documentation=https://github.com/your-org/studio-core
+After=network-online.target comfyui.service
+Wants=network-online.target comfyui.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+
+# Worker 工作目錄
+WorkingDirectory=/opt/studio-worker
+
+# 從 .env.twcc 載入環境變數
+EnvironmentFile=/opt/studio-worker/.env.twcc
+
+# 使用 GPU VM 專用的 Redis 連線設定（覆蓋 .env.twcc 中 Docker 預設的 redis）
+# Base VM 私有網路 IP — 安裝時由 twcc_gpu_setup.sh 替換
+Environment=REDIS_HOST=${GPU_VM_REDIS_HOST}
+Environment=REDIS_PORT=6379
+Environment=DB_HOST=${GPU_VM_REDIS_HOST}
+Environment=DB_PORT=3306
+
+# Python 與 Worker 環境
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/opt/studio-worker
+
+# 啟動 Worker
+ExecStart=/opt/studio-worker/venv/bin/python src/main.py
+
+# 停機策略：送 SIGTERM → Worker graceful shutdown → 最多等 120 秒完成當前任務
+KillSignal=SIGTERM
+TimeoutStopSec=120
+
+# 自動重啟策略
+Restart=always
+RestartSec=5
+StartLimitBurst=10
+StartLimitIntervalSec=300
+
+# 日誌導向 journald
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=studio-worker
+
+[Install]
+WantedBy=multi-user.target

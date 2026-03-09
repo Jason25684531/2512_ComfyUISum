@@ -40,29 +40,41 @@ class ComfyClient:
         # 確保輸出目錄存在
         STORAGE_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     
-    def check_connection(self, retry: int = 1) -> bool:
+    def check_connection(self, retry: int = None, initial_delay: float = 5.0,
+                         max_delay: float = 120.0) -> bool:
         """
-        檢查 ComfyUI 是否可連接
+        檢查 ComfyUI 是否可連接（指數退避重試）
         
         Args:
-            retry: 失敗時重試次數（預設 1 次）
+            retry: 失敗時重試次數（預設從環境變數 COMFY_CONNECT_RETRIES 讀取，預設 10）
+            initial_delay: 初始重試延遲秒數（預設 5.0）
+            max_delay: 最大重試延遲秒數（預設 120.0，適應 ComfyUI 冷啟動載入模型）
         
         Returns:
             是否連接成功
         """
+        import os
+        if retry is None:
+            retry = int(os.getenv('COMFY_CONNECT_RETRIES', '10'))
+        
+        delay = initial_delay
         for attempt in range(retry + 1):
             try:
                 response = requests.get(f"{self.http_url}/system_stats", timeout=5)
                 if response.status_code == 200:
+                    if attempt > 0:
+                        print(f"[ComfyClient] ✅ 連接成功 (第 {attempt + 1} 次嘗試)")
                     return True
             except (requests.ConnectionError, requests.Timeout) as e:
                 if attempt < retry:
-                    print(f"[ComfyClient] 連接失敗 ({attempt + 1}/{retry + 1})，5 秒後重試: {e}")
-                    time.sleep(5)
+                    print(f"[ComfyClient] ⚠️ 連接失敗 ({attempt + 1}/{retry + 1})，"
+                          f"{delay:.0f}s 後重試: {e}")
+                    time.sleep(delay)
+                    delay = min(delay * 2, max_delay)  # 指數退避
                 else:
-                    print(f"[ComfyClient] 連接失敗（已重試 {retry} 次）: {e}")
+                    print(f"[ComfyClient] ❌ 連接失敗（已重試 {retry} 次）: {e}")
             except Exception as e:
-                print(f"[ComfyClient] 連接異常: {e}")
+                print(f"[ComfyClient] ❌ 連接異常: {e}")
                 break
         
         return False

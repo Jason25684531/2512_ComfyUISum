@@ -177,33 +177,61 @@ def setup_logger(service_name: str, log_level: int = logging.INFO) -> logging.Lo
 # Phase 10: Redis Connection Utility
 # ==========================================
 
-def get_redis_client(decode_responses: bool = True):
+def get_redis_client(decode_responses: bool = True, max_retries: int = 10,
+                     initial_delay: float = 2.0, max_delay: float = 60.0):
     """
-    取得 Redis 客戶端連接 (統一介面，避免重複代碼)
+    取得 Redis 客戶端連接 (統一介面，帶指數退避重試)
     
     Args:
         decode_responses: 是否自動解碼響應為字串 (預設 True)
+        max_retries: 最大重試次數 (預設 10)
+        initial_delay: 初始重試延遲秒數 (預設 2.0)
+        max_delay: 最大重試延遲秒數 (預設 60.0)
     
     Returns:
         Redis 客戶端實例
         
     Raises:
-        Exception: 連接失敗時拋出異常
+        Exception: 所有重試都失敗時拋出最後一次的異常
     """
+    import time
     from redis import Redis
     from shared.config_base import REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
     
-    try:
-        client = Redis(
-            host=REDIS_HOST,
-            port=REDIS_PORT,
-            password=REDIS_PASSWORD,
-            decode_responses=decode_responses,
-            socket_connect_timeout=5,
-            socket_keepalive=True
-        )
-        # 測試連接
-        client.ping()
-        return client
-    except Exception as e:
-        raise Exception(f"Redis 連接失敗 ({REDIS_HOST}:{REDIS_PORT}): {e}")
+    last_error = None
+    delay = initial_delay
+    
+    for attempt in range(max_retries + 1):
+        try:
+            client = Redis(
+                host=REDIS_HOST,
+                port=REDIS_PORT,
+                password=REDIS_PASSWORD,
+                decode_responses=decode_responses,
+                socket_connect_timeout=5,
+                socket_keepalive=True
+            )
+            # 測試連接
+            client.ping()
+            if attempt > 0:
+                logging.getLogger(__name__).info(
+                    f"✅ Redis 連接成功 (第 {attempt + 1} 次嘗試，"
+                    f"總等待 {initial_delay * (2**attempt - 1):.1f}s)"
+                )
+            return client
+        except Exception as e:
+            last_error = e
+            if attempt < max_retries:
+                logging.getLogger(__name__).warning(
+                    f"⚠️ Redis 連接失敗 ({attempt + 1}/{max_retries + 1})，"
+                    f"{delay:.1f}s 後重試: {e}"
+                )
+                time.sleep(delay)
+                delay = min(delay * 2, max_delay)  # 指數退避，不超過上限
+            else:
+                logging.getLogger(__name__).error(
+                    f"❌ Redis 連接失敗（已重試 {max_retries} 次）: {e}"
+                )
+    
+    raise Exception(f"Redis 連接失敗 ({REDIS_HOST}:{REDIS_PORT})，"
+                    f"已重試 {max_retries} 次: {last_error}")
