@@ -1,141 +1,493 @@
 {
-  "34": {
-    "inputs": {
-      "filename_prefix": "集成應用1222/文生圖",
-      "images": [
-        "33:8",
-        0
-      ]
-    },
-    "class_type": "SaveImage",
-    "_meta": {
-      "title": "Save Image"
-    }
-  },
-  "33:7": {
-    "inputs": {
-      "text": "blurry ugly bad",
-      "clip": [
-        "33:18",
-        0
-      ]
-    },
-    "class_type": "CLIPTextEncode",
-    "_meta": {
-      "title": "CLIP Text Encode (Negative Prompt)"
-    }
-  },
-  "33:17": {
-    "inputs": {
-      "vae_name": "z-image/ae.safetensors"
-    },
-    "class_type": "VAELoader",
-    "_meta": {
-      "title": "Load VAE"
-    }
-  },
-  "33:18": {
-    "inputs": {
-      "clip_name": "z-image/qwen_3_4b.safetensors",
-      "type": "lumina2",
-      "device": "default"
-    },
-    "class_type": "CLIPLoader",
-    "_meta": {
-      "title": "Load CLIP"
-    }
-  },
-  "33:9": {
-    "inputs": {
-      "filename_prefix": "ComfyUI",
-      "images": [
-        "33:8",
-        0
-      ]
-    },
-    "class_type": "SaveImage",
-    "_meta": {
-      "title": "Save Image"
-    }
-  },
-  "33:3": {
-    "inputs": {
-      "seed": 234893190867793,
-      "steps": 8,
-      "cfg": 1,
-      "sampler_name": "euler",
-      "scheduler": "simple",
-      "denoise": 1,
-      "model": [
-        "33:16",
-        0
+  "id": "00000000-0000-0000-0000-000000000000",
+  "revision": 0,
+  "last_node_id": 34,
+  "last_link_id": 20,
+  "nodes": [
+    {
+      "id": 34,
+      "type": "SaveImage",
+      "pos": [
+        1580,
+        130
       ],
-      "positive": [
-        "33:6",
-        0
+      "size": [
+        270,
+        270
       ],
-      "negative": [
-        "33:7",
-        0
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 11
+        }
       ],
-      "latent_image": [
-        "33:13",
-        0
+      "outputs": [],
+      "title": "Save Image",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.17.0",
+        "Node name for S&R": "SaveImage"
+      },
+      "widgets_values": [
+        "集成應用1222/文生圖"
       ]
     },
-    "class_type": "KSampler",
-    "_meta": {
-      "title": "KSampler"
-    }
-  },
-  "33:6": {
-    "inputs": {
-      "text": "Macro photograph of fantastical botanical sculptures made from translucent, frosted, and clear glass-like material. The arrangement features sea anemone-shaped flowers with swirling pink and blue gradient tentacles, large milky-white blossoms with delicate filaments, and spiky bulbous forms in peach and red. Winding, transparent stems and small red accent flowers are visible against a deep black background. Soft studio lighting highlights the fragile, exquisite textures. The style is reminiscent of intricate Dale Chihuly glass art.",
-      "clip": [
-        "33:18",
-        0
-      ]
-    },
-    "class_type": "CLIPTextEncode",
-    "_meta": {
-      "title": "CLIP Text Encode (Positive Prompt)"
-    }
-  },
-  "33:13": {
-    "inputs": {
-      "width": 720,
-      "height": 1280,
-      "batch_size": 1
-    },
-    "class_type": "EmptySD3LatentImage",
-    "_meta": {
-      "title": "EmptySD3LatentImage"
-    }
-  },
-  "33:8": {
-    "inputs": {
-      "samples": [
-        "33:3",
-        0
+    {
+      "id": "33:7",
+      "type": "CLIPTextEncode",
+      "pos": [
+        470,
+        130
       ],
-      "vae": [
-        "33:17",
-        0
+      "size": [
+        400,
+        200
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 12
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": [
+            16
+          ]
+        }
+      ],
+      "title": "CLIP Text Encode (Negative Prompt)",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.17.0",
+        "Node name for S&R": "CLIPTextEncode"
+      },
+      "widgets_values": [
+        "blurry ugly bad"
       ]
     },
-    "class_type": "VAEDecode",
-    "_meta": {
-      "title": "VAE Decode"
-    }
-  },
-  "33:16": {
-    "inputs": {
-      "unet_name": "z-image/z-image-turbo-fp8-e4m3fn.safetensors",
-      "weight_dtype": "default"
+    {
+      "id": "33:9",
+      "type": "SaveImage",
+      "pos": [
+        1580,
+        318
+      ],
+      "size": [
+        270,
+        58
+      ],
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 13
+        }
+      ],
+      "outputs": [],
+      "title": "Save Image",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.17.0",
+        "Node name for S&R": "SaveImage"
+      },
+      "widgets_values": [
+        "ComfyUI"
+      ]
     },
-    "class_type": "UNETLoader",
-    "_meta": {
-      "title": "Load Diffusion Model"
+    {
+      "id": "33:3",
+      "type": "KSampler",
+      "pos": [
+        970,
+        130
+      ],
+      "size": [
+        270,
+        262
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 14
+        },
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 15
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 16
+        },
+        {
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 17
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            19
+          ]
+        }
+      ],
+      "title": "KSampler",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.17.0",
+        "Node name for S&R": "KSampler"
+      },
+      "widgets_values": [
+        683681381320697,
+        "randomize",
+        8,
+        1,
+        "euler",
+        "simple",
+        1
+      ]
+    },
+    {
+      "id": "33:6",
+      "type": "CLIPTextEncode",
+      "pos": [
+        470,
+        460
+      ],
+      "size": [
+        400,
+        200
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 18
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": [
+            15
+          ]
+        }
+      ],
+      "title": "CLIP Text Encode (Positive Prompt)",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.17.0",
+        "Node name for S&R": "CLIPTextEncode"
+      },
+      "widgets_values": [
+        "Macro photograph of fantastical botanical sculptures made from translucent, frosted, and clear glass-like material. The arrangement features sea anemone-shaped flowers with swirling pink and blue gradient tentacles, large milky-white blossoms with delicate filaments, and spiky bulbous forms in peach and red. Winding, transparent stems and small red accent flowers are visible against a deep black background. Soft studio lighting highlights the fragile, exquisite textures. The style is reminiscent of intricate Dale Chihuly glass art."
+      ]
+    },
+    {
+      "id": "33:13",
+      "type": "EmptySD3LatentImage",
+      "pos": [
+        100,
+        554
+      ],
+      "size": [
+        270,
+        106
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            17
+          ]
+        }
+      ],
+      "title": "EmptySD3LatentImage",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.17.0",
+        "Node name for S&R": "EmptySD3LatentImage"
+      },
+      "widgets_values": [
+        720,
+        1280,
+        1
+      ]
+    },
+    {
+      "id": "33:8",
+      "type": "VAEDecode",
+      "pos": [
+        1340,
+        130
+      ],
+      "size": [
+        140,
+        46
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 19
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 20
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            11,
+            13
+          ]
+        }
+      ],
+      "title": "VAE Decode",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.17.0",
+        "Node name for S&R": "VAEDecode"
+      }
+    },
+    {
+      "id": "33:17",
+      "type": "VAELoader",
+      "pos": [
+        100,
+        130
+      ],
+      "size": [
+        270,
+        58
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "links": [
+            20
+          ]
+        }
+      ],
+      "title": "Load VAE",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.17.0",
+        "Node name for S&R": "VAELoader"
+      },
+      "widgets_values": [
+        "z-image/split_files/vae/ae.safetensors"
+      ]
+    },
+    {
+      "id": "33:18",
+      "type": "CLIPLoader",
+      "pos": [
+        100,
+        318
+      ],
+      "size": [
+        270,
+        106
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "CLIP",
+          "type": "CLIP",
+          "links": [
+            12,
+            18
+          ]
+        }
+      ],
+      "title": "Load CLIP",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.17.0",
+        "Node name for S&R": "CLIPLoader"
+      },
+      "widgets_values": [
+        "z-image/split_files/text_encoders/qwen_3_4b.safetensors",
+        "lumina2",
+        "default"
+      ]
+    },
+    {
+      "id": "33:16",
+      "type": "UNETLoader",
+      "pos": [
+        100,
+        790
+      ],
+      "size": [
+        270,
+        82
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            14
+          ]
+        }
+      ],
+      "title": "Load Diffusion Model",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.17.0",
+        "Node name for S&R": "UNETLoader"
+      },
+      "widgets_values": [
+        "z-image/z-image-turbo-fp8-e4m3fn.safetensors",
+        "default"
+      ]
     }
-  }
+  ],
+  "links": [
+    [
+      11,
+      "33:8",
+      0,
+      34,
+      0,
+      "IMAGE"
+    ],
+    [
+      12,
+      "33:18",
+      0,
+      "33:7",
+      0,
+      "CLIP"
+    ],
+    [
+      13,
+      "33:8",
+      0,
+      "33:9",
+      0,
+      "IMAGE"
+    ],
+    [
+      14,
+      "33:16",
+      0,
+      "33:3",
+      0,
+      "MODEL"
+    ],
+    [
+      15,
+      "33:6",
+      0,
+      "33:3",
+      1,
+      "CONDITIONING"
+    ],
+    [
+      16,
+      "33:7",
+      0,
+      "33:3",
+      2,
+      "CONDITIONING"
+    ],
+    [
+      17,
+      "33:13",
+      0,
+      "33:3",
+      3,
+      "LATENT"
+    ],
+    [
+      18,
+      "33:18",
+      0,
+      "33:6",
+      0,
+      "CLIP"
+    ],
+    [
+      19,
+      "33:3",
+      0,
+      "33:8",
+      0,
+      "LATENT"
+    ],
+    [
+      20,
+      "33:17",
+      0,
+      "33:8",
+      1,
+      "VAE"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.5644739300537774,
+      "offset": [
+        330.3192949003858,
+        196.51131423487197
+      ]
+    },
+    "frontendVersion": "1.41.20"
+  },
+  "version": 0.4
 }
