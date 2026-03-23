@@ -1,0 +1,141 @@
+{
+  "34": {
+    "inputs": {
+      "filename_prefix": "集成應用1222/文生圖",
+      "images": [
+        "33:8",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "33:7": {
+    "inputs": {
+      "text": "blurry ugly bad",
+      "clip": [
+        "33:18",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Negative Prompt)"
+    }
+  },
+  "33:17": {
+    "inputs": {
+      "vae_name": "z-image\\ae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Load VAE"
+    }
+  },
+  "33:18": {
+    "inputs": {
+      "clip_name": "z-image\\qwen_3_4b.safetensors",
+      "type": "lumina2",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "Load CLIP"
+    }
+  },
+  "33:9": {
+    "inputs": {
+      "filename_prefix": "ComfyUI",
+      "images": [
+        "33:8",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "33:3": {
+    "inputs": {
+      "seed": 234893190867793,
+      "steps": 8,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "33:16",
+        0
+      ],
+      "positive": [
+        "33:6",
+        0
+      ],
+      "negative": [
+        "33:7",
+        0
+      ],
+      "latent_image": [
+        "33:13",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "KSampler"
+    }
+  },
+  "33:6": {
+    "inputs": {
+      "text": "Macro photograph of fantastical botanical sculptures made from translucent, frosted, and clear glass-like material. The arrangement features sea anemone-shaped flowers with swirling pink and blue gradient tentacles, large milky-white blossoms with delicate filaments, and spiky bulbous forms in peach and red. Winding, transparent stems and small red accent flowers are visible against a deep black background. Soft studio lighting highlights the fragile, exquisite textures. The style is reminiscent of intricate Dale Chihuly glass art.",
+      "clip": [
+        "33:18",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Positive Prompt)"
+    }
+  },
+  "33:13": {
+    "inputs": {
+      "width": 720,
+      "height": 1280,
+      "batch_size": 1
+    },
+    "class_type": "EmptySD3LatentImage",
+    "_meta": {
+      "title": "EmptySD3LatentImage"
+    }
+  },
+  "33:8": {
+    "inputs": {
+      "samples": [
+        "33:3",
+        0
+      ],
+      "vae": [
+        "33:17",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "33:16": {
+    "inputs": {
+      "unet_name": "z-image\\z-image-turbo-fp8-e4m3fn.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "Load Diffusion Model"
+    }
+  }
+}
