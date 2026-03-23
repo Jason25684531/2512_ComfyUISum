@@ -14,7 +14,7 @@
   },
   "120": {
     "inputs": {
-      "image": "æ__ç__å___00059_.png"
+      "image": "sketch_test.png"
     },
     "class_type": "LoadImage",
     "_meta": {
@@ -49,7 +49,7 @@
   },
   "124:38": {
     "inputs": {
-      "clip_name": "Qwen\\qwen_2.5_vl_7b_fp8_scaled.safetensors",
+      "clip_name": "Qwen/qwen_2.5_vl_7b_fp8_scaled.safetensors",
       "type": "qwen_image",
       "device": "default"
     },
@@ -60,7 +60,7 @@
   },
   "124:39": {
     "inputs": {
-      "vae_name": "Qwen\\qwen_image_vae.safetensors"
+      "vae_name": "Qwen/qwen_image_vae.safetensors"
     },
     "class_type": "VAELoader",
     "_meta": {
@@ -141,7 +141,7 @@
   },
   "124:115": {
     "inputs": {
-      "unet_name": "Qwen\\Qwen-Image-Edit-2509-Q4_K_M.gguf"
+      "unet_name": "Qwen/Qwen-Image-Edit-2509-Q4_K_M.gguf"
     },
     "class_type": "UnetLoaderGGUF",
     "_meta": {
@@ -150,7 +150,7 @@
   },
   "124:89": {
     "inputs": {
-      "lora_name": "Qwen_Edit\\Lightning\\Qwen-Image-Edit-2509-Lightning-4steps-V1.0-bf16.safetensors",
+      "lora_name": "Qwen_Edit/Lightning/Qwen-Image-Edit-2509-Lightning-4steps-V1.0-bf16.safetensors",
       "strength_model": 1,
       "model": [
         "124:115",
