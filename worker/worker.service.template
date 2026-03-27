@@ -58,5 +58,9 @@ StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=studio-worker
 
+# 若 Base VM 私網 IP 異動，請同步更新 unit 檔中的 REDIS_HOST / DB_HOST，然後執行：
+#   sudo systemctl daemon-reload
+#   sudo systemctl restart studio-worker
+
 [Install]
 WantedBy=multi-user.target

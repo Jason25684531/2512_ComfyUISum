@@ -19,6 +19,11 @@ WARN="${YELLOW}[WARN]${NC}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+NGINX_CONTAINER="studio-nginx"
+BACKEND_CONTAINER="studio-backend"
+REDIS_CONTAINER="studio-redis"
+MYSQL_CONTAINER="studio-mysql"
+REDIS_PASSWORD="${REDIS_PASSWORD:-mysecret}"
 
 # 載入環境變數
 if [ -f "$PROJECT_DIR/.env" ]; then
@@ -81,10 +86,14 @@ check "Docker daemon 運行中" \
     "docker info > /dev/null 2>&1"
 
 # 檢查各容器是否 running
-for svc in nginx api redis mysql; do
-    warn_check "容器 [$svc] 運行中" \
-        "docker ps --filter name=$svc --filter status=running --format '{{.Names}}' | grep -q $svc"
-done
+warn_check "容器 [studio-nginx] 運行中" \
+    "docker ps --filter name=${NGINX_CONTAINER} --filter status=running --format '{{.Names}}' | grep -q ${NGINX_CONTAINER}"
+warn_check "容器 [studio-backend] 運行中" \
+    "docker ps --filter name=${BACKEND_CONTAINER} --filter status=running --format '{{.Names}}' | grep -q ${BACKEND_CONTAINER}"
+warn_check "容器 [studio-redis] 運行中" \
+    "docker ps --filter name=${REDIS_CONTAINER} --filter status=running --format '{{.Names}}' | grep -q ${REDIS_CONTAINER}"
+warn_check "容器 [studio-mysql] 運行中" \
+    "docker ps --filter name=${MYSQL_CONTAINER} --filter status=running --format '{{.Names}}' | grep -q ${MYSQL_CONTAINER}"
 echo ""
 
 # ==========================================
@@ -93,13 +102,13 @@ echo ""
 echo "--- Redis ---"
 
 check "Redis PING 回應" \
-    "docker exec redis redis-cli ping | grep -q PONG"
+    "docker exec ${REDIS_CONTAINER} redis-cli -a '${REDIS_PASSWORD}' --no-auth-warning ping | grep -q PONG"
 
 warn_check "Redis 記憶體使用率 < 80%" \
-    "docker exec redis redis-cli info memory | grep used_memory_peak_human"
+    "docker exec ${REDIS_CONTAINER} redis-cli -a '${REDIS_PASSWORD}' --no-auth-warning info memory | grep used_memory_peak_human"
 
 # 任務佇列
-QUEUE_LEN=$(docker exec redis redis-cli LLEN job_queue 2>/dev/null || echo "0")
+QUEUE_LEN=$(docker exec ${REDIS_CONTAINER} redis-cli -a "${REDIS_PASSWORD}" --no-auth-warning LLEN job_queue 2>/dev/null || echo "0")
 if [ "$QUEUE_LEN" -gt 10 ] 2>/dev/null; then
     TOTAL=$((TOTAL + 1))
     WARNED=$((WARNED + 1))
@@ -119,10 +128,10 @@ echo "--- MySQL ---"
 MYSQL_PWD="${MYSQL_ROOT_PASSWORD:-}"
 if [ -n "$MYSQL_PWD" ]; then
     check "MySQL 連線正常" \
-        "docker exec mysql mysql -u root -p'$MYSQL_PWD' -e 'SELECT 1;' > /dev/null 2>&1"
+        "docker exec ${MYSQL_CONTAINER} mysql -u root -p'$MYSQL_PWD' -e 'SELECT 1;' > /dev/null 2>&1"
 
     check "studio_db 資料庫存在" \
-        "docker exec mysql mysql -u root -p'$MYSQL_PWD' -e 'USE studio_db;' > /dev/null 2>&1"
+        "docker exec ${MYSQL_CONTAINER} mysql -u root -p'$MYSQL_PWD' -e 'USE studio_db;' > /dev/null 2>&1"
 else
     TOTAL=$((TOTAL + 1))
     WARNED=$((WARNED + 1))
@@ -139,7 +148,7 @@ check "Nginx 回應 (HTTP 200)" \
     "curl -sf -o /dev/null -w '%{http_code}' http://localhost | grep -q 200"
 
 warn_check "Flask API 回應" \
-    "curl -sf http://localhost/api/health > /dev/null 2>&1 || curl -sf -o /dev/null http://localhost/api/ 2>&1"
+    "curl -sf http://localhost/api/health > /dev/null 2>&1 || curl -sf http://localhost/health > /dev/null 2>&1"
 echo ""
 
 # ==========================================
@@ -154,8 +163,14 @@ S3_BK="${S3_BUCKET:-studio-outputs}"
 STORAGE="${STORAGE_BACKEND:-local}"
 
 if [ "$STORAGE" = "s3" ] && [ -n "$S3_EP" ] && [ -n "$S3_AK" ] && [ -n "$S3_SK" ]; then
-    check "COS Bucket 可存取" \
-        "AWS_ACCESS_KEY_ID='$S3_AK' AWS_SECRET_ACCESS_KEY='$S3_SK' aws s3api head-bucket --bucket '$S3_BK' --endpoint-url '$S3_EP' 2>&1"
+    if command -v aws > /dev/null 2>&1; then
+        check "COS Bucket 可存取" \
+            "AWS_ACCESS_KEY_ID='$S3_AK' AWS_SECRET_ACCESS_KEY='$S3_SK' aws s3api head-bucket --bucket '$S3_BK' --endpoint-url '$S3_EP' 2>&1"
+    else
+        TOTAL=$((TOTAL + 1))
+        WARNED=$((WARNED + 1))
+        echo -e "$WARN aws CLI 未安裝，跳過 COS Bucket 驗證"
+    fi
 else
     TOTAL=$((TOTAL + 1))
     WARNED=$((WARNED + 1))
@@ -168,22 +183,21 @@ echo ""
 # ==========================================
 echo "--- Worker 心跳 ---"
 
-HEARTBEAT=$(docker exec redis redis-cli GET worker:heartbeat 2>/dev/null || echo "")
+HEARTBEAT=$(docker exec ${REDIS_CONTAINER} redis-cli -a "${REDIS_PASSWORD}" --no-auth-warning GET worker:heartbeat 2>/dev/null || echo "")
 if [ -z "$HEARTBEAT" ]; then
     TOTAL=$((TOTAL + 1))
     WARNED=$((WARNED + 1))
     echo -e "$WARN Worker 心跳不存在（Worker 可能未啟動或 GPU VM 已關機）"
 else
-    NOW=$(date +%s)
-    HB_AGE=$((NOW - HEARTBEAT))
-    if [ "$HB_AGE" -gt 120 ]; then
+    HEARTBEAT_TTL=$(docker exec ${REDIS_CONTAINER} redis-cli -a "${REDIS_PASSWORD}" --no-auth-warning TTL worker:heartbeat 2>/dev/null || echo "-1")
+    if [ "$HEARTBEAT_TTL" -le 0 ] 2>/dev/null; then
         TOTAL=$((TOTAL + 1))
         WARNED=$((WARNED + 1))
-        echo -e "$WARN Worker 心跳已 ${HB_AGE}s 未更新（> 120s，可能失聯）"
+        echo -e "$WARN Worker 心跳鍵存在但 TTL 異常（ttl=${HEARTBEAT_TTL}），建議檢查 Worker 狀態"
     else
         TOTAL=$((TOTAL + 1))
         PASSED=$((PASSED + 1))
-        echo -e "$PASS Worker 心跳正常（${HB_AGE}s 前更新）"
+        echo -e "$PASS Worker 心跳正常（TTL 剩餘 ${HEARTBEAT_TTL}s）"
     fi
 fi
 echo ""

@@ -63,6 +63,7 @@ TEMP_FILE_MAX_AGE_HOURS = int(os.getenv("TEMP_FILE_MAX_AGE_HOURS", "1"))
 # Phase 9: Reliability - 延長超時配置
 WORKER_TIMEOUT = int(os.getenv("WORKER_TIMEOUT", "2400"))  # 預設 40 分鐘
 COMFY_POLLING_INTERVAL = float(os.getenv("COMFY_POLLING_INTERVAL", "0.5"))
+COMFY_HTTP_TIMEOUT = float(os.getenv("COMFY_HTTP_TIMEOUT", "300"))
 
 # ==========================================
 # 除錯輸出
@@ -75,6 +76,7 @@ def print_config():
     print(f"  PROJECT_ROOT: {PROJECT_ROOT}")
     print(f"  REDIS: {REDIS_HOST}:{REDIS_PORT}")
     print(f"  COMFY: {COMFY_HOST}:{COMFY_PORT}")
+    print(f"  COMFY_HTTP_TIMEOUT: {COMFY_HTTP_TIMEOUT}")
     print(f"  COMFYUI_INPUT_DIR: {COMFYUI_INPUT_DIR}")
     print(f"  COMFYUI_OUTPUT_DIR: {COMFYUI_OUTPUT_DIR}")
     print(f"  STORAGE_OUTPUT_DIR: {STORAGE_OUTPUT_DIR}")

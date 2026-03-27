@@ -18,7 +18,7 @@ from typing import Optional, Callable
 
 from config import (
     COMFY_HOST, COMFY_PORT, COMFY_HTTP_URL, COMFY_WS_URL,
-    COMFYUI_OUTPUT_DIR, STORAGE_OUTPUT_DIR
+    COMFYUI_OUTPUT_DIR, STORAGE_OUTPUT_DIR, COMFY_HTTP_TIMEOUT
 )
 
 # 為了向後相容，保留模組級別的別名
@@ -60,7 +60,10 @@ class ComfyClient:
         delay = initial_delay
         for attempt in range(retry + 1):
             try:
-                response = requests.get(f"{self.http_url}/system_stats", timeout=5)
+                response = requests.get(
+                    f"{self.http_url}/system_stats",
+                    timeout=COMFY_HTTP_TIMEOUT,
+                )
                 if response.status_code == 200:
                     if attempt > 0:
                         print(f"[ComfyClient] ✅ 連接成功 (第 {attempt + 1} 次嘗試)")
@@ -95,7 +98,7 @@ class ComfyClient:
             response = requests.post(
                 f"{self.http_url}/prompt",
                 json=payload,
-                timeout=30
+                timeout=COMFY_HTTP_TIMEOUT
             )
             
             if response.status_code == 200:
@@ -301,7 +304,7 @@ class ComfyClient:
         try:
             response = requests.get(
                 f"{self.http_url}/history/{prompt_id}",
-                timeout=30
+                timeout=COMFY_HTTP_TIMEOUT
             )
             
             if response.status_code != 200:
@@ -444,7 +447,7 @@ class ComfyClient:
         try:
             response = requests.post(
                 f"{self.http_url}/interrupt",
-                timeout=5
+                timeout=COMFY_HTTP_TIMEOUT
             )
             
             if response.status_code == 200:

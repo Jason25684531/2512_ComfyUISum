@@ -2,6 +2,10 @@
 
 > **統一配置架構** - 一套配置，多環境部署 | Windows 開發 + Linux 生產無縫切換
 
+> **TWCC MVP 補充**
+> 目前 TWCC 的雙 VM 生產部署仍以 [docker-compose.base.yml](d:/01_Project/2512_ComfyUISum/docker-compose.base.yml) 作為 CPU Web Node 的執行主檔。
+> [docker-compose.unified.yml](d:/01_Project/2512_ComfyUISum/docker-compose.unified.yml) 在現階段仍是跨平台與單機 Linux 的共用參考配置，尚未直接承載 TWCC Web Node 的 `nginx + frontend` runtime。
+
 ---
 
 ## 📋 目錄
@@ -195,6 +199,8 @@ curl http://localhost:5000/health        # Backend
 ### Linux 生產環境 (10分鐘)
 
 生產級部署，包含持久化、自動重啟、安全加固。
+
+> 若目標是 TWCC 雙 VM MVP，而非單機 Linux 佈署，請改以 [docs/TWCC_Deployment_Guide.md](d:/01_Project/2512_ComfyUISum/docs/TWCC_Deployment_Guide.md) 與 [docker-compose.base.yml](d:/01_Project/2512_ComfyUISum/docker-compose.base.yml) 為準。
 
 #### 步驟 1: 系統準備
 

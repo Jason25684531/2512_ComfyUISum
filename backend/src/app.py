@@ -1181,6 +1181,7 @@ def metrics():
 
 
 @app.route('/health', methods=['GET'])
+@app.route('/api/health', methods=['GET'])
 def health():
     """健康检查接口 - 檢查 Redis 和 MySQL 狀態"""
     redis_status = 'healthy' if redis_client and redis_client.ping() else 'unavailable'

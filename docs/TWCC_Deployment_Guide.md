@@ -2,6 +2,10 @@
 
 > Studio Core (ComfyUI Middleware) — 從單機 Windows 遷移至 TWCC Linux 雙 VM 架構
 
+> **執行主檔說明**
+> TWCC 目前的 CPU Web Node 生產執行檔是 [docker-compose.base.yml](d:/01_Project/2512_ComfyUISum/docker-compose.base.yml)。
+> [docker-compose.unified.yml](d:/01_Project/2512_ComfyUISum/docker-compose.unified.yml) 仍保留給跨平台開發、單機 Linux 與共用配置參考，不是目前 TWCC Web Node 的正式 runtime 檔。
+
 ---
 
 ## 目錄
@@ -78,6 +82,14 @@
 | **私有通訊** | Redis 透過 TWCC 私有網路暴露，GPU VM 跨 VM 連線 |
 | **安全第一** | SSL 在 LB 層終端，內部全部走 HTTP；Security Group 限制存取 |
 
+### 本次生產補強重點
+
+1. Web node 的 Nginx 設定需支援 50MB 上傳、300 秒代理 timeout 與 `/ws/` WebSocket。
+2. Base VM 與 unified compose 的長駐服務都應啟用 Docker log rotation，避免磁碟被容器日誌填滿。
+3. Worker 連到 ComfyUI 的 HTTP 控制請求需使用 300 秒 timeout；長任務等待仍由 `WORKER_TIMEOUT` 控制。
+4. 前端在 TWCC / LB / Nginx 佈署時應優先使用同源相對 API 路徑，而不是 `localhost`。
+
+
 ---
 
 ## 2. 前置需求
@@ -144,6 +156,11 @@ cp .env.twcc .env
 
 # 編輯實際值
 nano .env
+
+# 載入到目前 shell，讓後續檢查指令可直接使用變數
+set -a
+source .env
+set +a
 ```
 
 **必填欄位：**
@@ -206,7 +223,7 @@ curl -I http://localhost
 curl http://localhost/api/health
 
 # Redis
-docker compose -f docker-compose.base.yml exec redis redis-cli ping
+docker compose -f docker-compose.base.yml exec redis redis-cli -a "$REDIS_PASSWORD" --no-auth-warning ping
 # 預期回應：PONG
 
 # MySQL
@@ -254,13 +271,13 @@ sudo bash scripts/twcc_gpu_setup.sh
 sudo systemctl status comfyui
 
 # 查看 Worker 狀態
-sudo systemctl status worker
+sudo systemctl status studio-worker
 
 # 查看 ComfyUI logs
 journalctl -u comfyui -f
 
 # 查看 Worker logs
-journalctl -u worker -f
+journalctl -u studio-worker -f
 
 # 測試 ComfyUI API
 curl http://127.0.0.1:8188/system_stats
@@ -268,7 +285,7 @@ curl http://127.0.0.1:8188/system_stats
 # 測試 Redis 跨 VM 連線
 python3 -c "
 import redis
-r = redis.Redis(host='${GPU_VM_REDIS_HOST}', port=6379)
+r = redis.Redis(host='${GPU_VM_REDIS_HOST}', port=6379, password='${REDIS_PASSWORD}')
 print(r.ping())
 "
 ```
@@ -280,13 +297,13 @@ print(r.ping())
 sudo systemctl restart comfyui
 
 # 重啟 Worker
-sudo systemctl restart worker
+sudo systemctl restart studio-worker
 
 # 停止所有服務
-sudo systemctl stop worker comfyui
+sudo systemctl stop studio-worker comfyui
 
 # 啟用開機自動啟動
-sudo systemctl enable comfyui worker
+sudo systemctl enable comfyui studio-worker
 ```
 
 ---
@@ -314,7 +331,7 @@ sudo systemctl enable comfyui worker
 |------|-----|
 | Protocol | HTTP |
 | Port | 80 |
-| 健康檢查路徑 | `/api/health` |
+| 健康檢查路徑 | `/health` 或 `/api/health` |
 | 健康檢查間隔 | 30s |
 | 不健康閾值 | 3 |
 | 成員 | Base VM |
@@ -483,8 +500,8 @@ bash scripts/twcc_healthcheck.sh
 
 | 指標 | 檢查方式 | 警戒值 |
 |------|----------|--------|
-| Redis 連線 | `redis-cli ping` | 無回應 = 嚴重 |
-| Worker 心跳 | `GET worker:heartbeat` | 超過 120s 無更新 |
+| Redis 連線 | `redis-cli -a "$REDIS_PASSWORD" --no-auth-warning ping` | 無回應 = 嚴重 |
+| Worker 心跳 | `GET worker:heartbeat` | 不存在或 TTL <= 0 需注意 |
 | 任務佇列長度 | `LLEN job_queue` | > 10 需注意 |
 | GPU 記憶體 | `nvidia-smi` | > 90% 需注意 |
 | 磁碟空間 | `df -h` | > 85% 需清理 |
@@ -494,12 +511,12 @@ bash scripts/twcc_healthcheck.sh
 
 | 服務 | 日誌位置 |
 |------|----------|
-| Nginx | Docker logs: `docker logs nginx` |
-| Flask API | Docker logs: `docker logs api` |
-| Redis | Docker logs: `docker logs redis` |
-| MySQL | Docker logs: `docker logs mysql` |
+| Nginx | Docker logs: `docker logs studio-nginx` |
+| Flask API | Docker logs: `docker logs studio-backend` |
+| Redis | Docker logs: `docker logs studio-redis` |
+| MySQL | Docker logs: `docker logs studio-mysql` |
 | ComfyUI | `journalctl -u comfyui` |
-| Worker | `journalctl -u worker` |
+| Worker | `journalctl -u studio-worker` |
 | Cron 排程 | `logs/cron_gpu.log` |
 
 ---
@@ -635,7 +652,7 @@ docker compose -f docker-compose.base.yml up -d --build
 cd ~/studio-core
 git pull origin feature/twcc-linux-migration
 pip install -r requirements.txt
-sudo systemctl restart worker
+sudo systemctl restart studio-worker
 # 如果 ComfyUI 有更新：
 sudo systemctl restart comfyui
 ```

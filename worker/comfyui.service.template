@@ -48,5 +48,9 @@ StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=comfyui
 
+# 若更新了模型路徑、Python 環境或啟動參數，請執行：
+#   sudo systemctl daemon-reload
+#   sudo systemctl restart comfyui
+
 [Install]
 WantedBy=multi-user.target

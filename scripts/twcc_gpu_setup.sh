@@ -150,12 +150,22 @@ echo "✅ Systemd 服務已啟用（開機自動啟動）"
 # 8. 確認 TWCC CLI 安裝
 # ============================================
 echo ""
-if command -v twccli &> /dev/null; then
-    echo "✅ twccli 已安裝: $(which twccli)"
+TWCCLI_BIN="${HOME}/.local/bin/twccli"
+if [ -x "$TWCCLI_BIN" ]; then
+    echo "✅ twccli 已安裝: $TWCCLI_BIN"
 else
     echo "📦 安裝 twccli..."
-    pip install twccli
-    echo "✅ twccli 安裝完成"
+    python3.10 -m pip install --user --upgrade twccli
+    if [ ! -x "$TWCCLI_BIN" ]; then
+        echo "❌ twccli 安裝後仍找不到: $TWCCLI_BIN"
+        exit 1
+    fi
+    echo "✅ twccli 安裝完成: $TWCCLI_BIN"
+fi
+
+if [ -f "$ENV_FILE" ] && grep -q '^TWCCLI_PATH=' "$ENV_FILE"; then
+    sed -i "s|^TWCCLI_PATH=.*|TWCCLI_PATH=${TWCCLI_BIN}|" "$ENV_FILE"
+    echo "✅ .env.twcc 已更新 TWCCLI_PATH=${TWCCLI_BIN}"
 fi
 
 # ============================================
