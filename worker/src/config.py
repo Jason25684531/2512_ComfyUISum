@@ -35,6 +35,19 @@ from shared.config_base import (
 # Worker 專用配置
 # ==========================================
 
+DEFAULT_UNET_MODEL = os.getenv(
+    "DEFAULT_UNET_MODEL",
+    "z-image/z-image-turbo-fp8-e4m3fn.safetensors",
+)
+DEFAULT_CLIP_MODEL = os.getenv(
+    "DEFAULT_CLIP_MODEL",
+    "z-image/qwen_3_4b.safetensors",
+)
+DEFAULT_VAE_MODEL = os.getenv(
+    "DEFAULT_VAE_MODEL",
+    "z-image/ae.safetensors",
+)
+
 # ComfyUI 連線配置
 _raw_comfy_server_url = os.getenv("COMFYUI_SERVER_URL", "").strip()
 if _raw_comfy_server_url and "://" not in _raw_comfy_server_url:
@@ -96,6 +109,7 @@ def print_config():
     print(f"  REDIS: {REDIS_HOST}:{REDIS_PORT}")
     print(f"  COMFY: {COMFY_HOST}:{COMFY_PORT}")
     print(f"  COMFYUI_SERVER_URL: {COMFYUI_SERVER_URL}")
+    print(f"  DEFAULT_UNET_MODEL: {DEFAULT_UNET_MODEL}")
     print(f"  COMFY_HTTP_TIMEOUT: {COMFY_HTTP_TIMEOUT}")
     print(f"  COMFYUI_INPUT_DIR: {COMFYUI_INPUT_DIR}")
     print(f"  COMFYUI_OUTPUT_DIR: {COMFYUI_OUTPUT_DIR}")

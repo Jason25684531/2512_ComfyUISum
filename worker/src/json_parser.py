@@ -8,7 +8,27 @@ JSON Parser for ComfyUI Workflow
 import json
 import os
 import copy
+import sys
+import builtins
 from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+API_WORKFLOW_FALLBACK_DIR = PROJECT_ROOT / "ComfyUIworkflow_Windows"
+DEFAULT_UNET_MODEL = os.getenv(
+    "DEFAULT_UNET_MODEL",
+    "z-image/z-image-turbo-fp8-e4m3fn.safetensors",
+)
+
+
+def print(*args, **kwargs):
+    file = kwargs.get("file", sys.stdout)
+    encoding = getattr(file, "encoding", None) or "utf-8"
+    sep = kwargs.get("sep", " ")
+    end = kwargs.get("end", "\n")
+    flush = kwargs.get("flush", False)
+    message = sep.join(str(arg) for arg in args)
+    safe_message = message.encode(encoding, errors="backslashreplace").decode(encoding, errors="replace")
+    builtins.print(safe_message, end=end, file=file, flush=flush)
 
 # ==========================================
 # Aspect Ratio 映射表 (SDXL 最佳解析度)
@@ -28,8 +48,8 @@ DEFAULT_RESOLUTION = {"width": 1024, "height": 1024}
 # ==========================================
 MODEL_MAP = {
     # UNET 模型 (用於 UNETLoader)
-    "turbo_fp8": "z-image\\z-image-turbo-fp8-e4m3fn.safetensors",
-    "z_image_turbo": "z-image\\z-image-turbo-fp8-e4m3fn.safetensors",
+    "turbo_fp8": DEFAULT_UNET_MODEL,
+    "z_image_turbo": DEFAULT_UNET_MODEL,
     
     # Checkpoint 模型 (用於 CheckpointLoaderSimple)
     # "sdxl_base": "sd_xl_base_1.0.safetensors",
@@ -114,6 +134,88 @@ AUDIO_NODE_MAP = {
 }
 
 
+def _is_ui_workflow_data(workflow_data) -> bool:
+    return isinstance(workflow_data, dict) and isinstance(workflow_data.get("nodes"), list)
+
+
+def _load_json_file(path: Path):
+    with open(path, "r", encoding="utf-8") as file:
+        return json.load(file)
+
+
+def _safe_log_value(value) -> str:
+    return ascii(value)
+
+
+def get_workflow_node(workflow: dict, node_id: str):
+    node = workflow.get(str(node_id))
+    if not isinstance(node, dict):
+        print(f"[Parser] ⚠️ Node {node_id} 不是 dict，而是 {type(node).__name__}")
+        return None
+    return node
+
+
+def set_node_input_value(workflow: dict, node_id: str, input_key: str, value, label: str = "") -> bool:
+    node = get_workflow_node(workflow, node_id)
+    if not node:
+        return False
+
+    inputs = node.get("inputs")
+    if not isinstance(inputs, dict):
+        print(f"[Parser] ⚠️ Node {node_id} 沒有可用的 inputs dict")
+        return False
+
+    if input_key not in inputs:
+        print(f"[Parser] ⚠️ Node {node_id} 不包含 inputs.{input_key}")
+        return False
+
+    old_value = inputs.get(input_key)
+    inputs[input_key] = value
+
+    if label:
+        print(
+            f"[Parser] {label}: Node {node_id}.{input_key} = "
+            f"{_safe_log_value(old_value)} -> {_safe_log_value(value)}"
+        )
+    return True
+
+
+def set_node_prompt_value(workflow: dict, node_id: str, prompt_value: str, label: str = "") -> bool:
+    for input_key in ("text", "prompt", "string"):
+        if set_node_input_value(workflow, node_id, input_key, prompt_value, label):
+            return True
+
+    node = get_workflow_node(workflow, node_id)
+    if not node:
+        return False
+
+    widgets_values = node.get("widgets_values")
+    if isinstance(widgets_values, list) and widgets_values:
+        old_value = widgets_values[0]
+        widgets_values[0] = prompt_value
+        if label:
+            print(
+                f"[Parser] {label}: Node {node_id}.widgets_values[0] = "
+                f"{_safe_log_value(old_value)} -> {_safe_log_value(prompt_value)}"
+            )
+        return True
+
+    if isinstance(widgets_values, dict):
+        for input_key in ("text", "prompt", "string"):
+            if input_key in widgets_values:
+                old_value = widgets_values[input_key]
+                widgets_values[input_key] = prompt_value
+                if label:
+                    print(
+                        f"[Parser] {label}: Node {node_id}.widgets_values[{input_key!r}] = "
+                        f"{_safe_log_value(old_value)} -> {_safe_log_value(prompt_value)}"
+                    )
+                return True
+
+    print(f"[Parser] ⚠️ Node {node_id} 找不到可寫入的 prompt/text/string 欄位")
+    return False
+
+
 def get_workflow_path(workflow_name: str) -> Path:
     """
     取得 workflow JSON 檔案路徑
@@ -150,8 +252,22 @@ def load_workflow(workflow_name: str) -> dict:
     if not workflow_path.exists():
         raise FileNotFoundError(f"Workflow 檔案不存在: {workflow_path}")
     
-    with open(workflow_path, "r", encoding="utf-8") as f:
-        return json.load(f)
+    workflow_data = _load_json_file(workflow_path)
+
+    if _is_ui_workflow_data(workflow_data):
+        fallback_path = API_WORKFLOW_FALLBACK_DIR / workflow_path.name
+        if fallback_path.exists():
+            print(f"[Parser] 偵測到 UI workflow，改用 API fallback: {fallback_path.name}")
+            workflow_data = _load_json_file(fallback_path)
+        else:
+            raise ValueError(
+                f"Workflow {workflow_path.name} 是 UI 匯出格式，但找不到 API fallback 檔案: {fallback_path}"
+            )
+
+    if not isinstance(workflow_data, dict):
+        raise TypeError(f"Workflow 格式錯誤，預期 dict，實際為 {type(workflow_data).__name__}")
+
+    return workflow_data
 
 
 def find_node_by_class(workflow: dict, class_type: str) -> tuple:
@@ -251,7 +367,13 @@ def trim_veo3_workflow(workflow: dict, image_files: dict) -> dict:
     if shot_count == 1:
         # 只有一個 shot，直接連接到最終輸出
         if "110" in workflow:
-            workflow["110"]["inputs"]["images"] = [valid_gen_nodes[0], 0]
+            set_node_input_value(
+                workflow,
+                "110",
+                "images",
+                [valid_gen_nodes[0], 0],
+                "單一 shot 輸出連接",
+            )
             print(f"[Parser] 單一 shot 模式: 節點 110 直接連接到 {valid_gen_nodes[0]}")
     else:
         # 多個 shots，重建 ImageBatch 鏈
@@ -286,7 +408,13 @@ def trim_veo3_workflow(workflow: dict, image_files: dict) -> dict:
         
         # 最終輸出節點連接到最後一個 batch
         if "110" in workflow:
-            workflow["110"]["inputs"]["images"] = [str(batch_node_id), 0]
+            set_node_input_value(
+                workflow,
+                "110",
+                "images",
+                [str(batch_node_id), 0],
+                "ImageBatch 最終輸出連接",
+            )
             print(f"[Parser] 節點 110 連接到最後的 ImageBatch: {batch_node_id}")
     
     return workflow
@@ -367,20 +495,16 @@ def parse_workflow(
     if workflow_name == "virtual_human" and prompt:
         text_node_id = workflow_config.get('mapping', {}).get('text_node_id')
         if text_node_id and text_node_id in workflow:
-            node = workflow[text_node_id]
-            if 'inputs' in node and 'text' in node['inputs']:
-                node['inputs']['text'] = prompt
+            if set_node_input_value(workflow, text_node_id, 'text', prompt, "virtual_human 台詞注入"):
                 print(f"[Parser] 🎤 virtual_human: 注入台詞到 Node {text_node_id} (IndexTTS2BaseNode)")
-                print(f"[Parser] 📝 台詞內容: {prompt[:100] if len(prompt) > 100 else prompt}...")
-            else:
-                print(f"[Parser] ⚠️ Node {text_node_id} 沒有 inputs.text 欄位")
+                prompt_preview = prompt[:100] if len(prompt) > 100 else prompt
+                print(f"[Parser] 📝 台詞內容: {_safe_log_value(prompt_preview)}...")
         else:
             # Fallback: 直接查找 IndexTTS2BaseNode
             tts_nodes = find_nodes_by_class(workflow, "IndexTTS2BaseNode")
             if tts_nodes:
                 node_id, node = tts_nodes[0]
-                if 'inputs' in node and 'text' in node['inputs']:
-                    node['inputs']['text'] = prompt
+                if set_node_input_value(workflow, node_id, 'text', prompt, "virtual_human 台詞 fallback"):
                     print(f"[Parser] 🎤 virtual_human: 注入台詞到 IndexTTS2BaseNode 節點 {node_id} (fallback)")
     
     # ==========================================
@@ -393,16 +517,17 @@ def parse_workflow(
     for node_id, node in positive_nodes:
         title = node.get("_meta", {}).get("title", "")
         if "Positive" in title or "positive" in title.lower():
-            node["inputs"]["text"] = prompt
+            set_node_input_value(workflow, node_id, "text", prompt, "CLIPTextEncode Prompt 注入")
             print(f"[Parser] 注入 Prompt 到 CLIPTextEncode 節點 {node_id}")
             prompt_injected = True
             break
     else:
         # 如果沒找到標題，嘗試第一個 CLIPTextEncode
         if positive_nodes:
-            positive_nodes[0][1]["inputs"]["text"] = prompt
-            print(f"[Parser] 注入 Prompt 到第一個 CLIPTextEncode 節點")
-            prompt_injected = True
+            first_node_id, _ = positive_nodes[0]
+            if set_node_input_value(workflow, first_node_id, "text", prompt, "第一個 CLIPTextEncode Prompt 注入"):
+                print(f"[Parser] 注入 Prompt 到第一個 CLIPTextEncode 節點")
+                prompt_injected = True
     
     # 2. 嘗試 StringConstantMultiline (用於 face_swap 等需要用戶輸入的 workflow)
     # 注意：不要注入到 title 包含 "Trigger" 或 "trigger" 的節點，那些是預設內容
@@ -412,8 +537,7 @@ def parse_workflow(
             title = node.get("_meta", {}).get("title", "").lower()
             # 跳過包含 trigger 的節點（那是預設固定的 prompt）
             if "trigger" not in title:
-                if "inputs" in node and "string" in node["inputs"]:
-                    node["inputs"]["string"] = prompt
+                if set_node_input_value(workflow, node_id, "string", prompt, "StringConstantMultiline Prompt 注入"):
                     print(f"[Parser] 注入 Prompt 到 StringConstantMultiline 節點 {node_id} (title: {node.get('_meta', {}).get('title', '')})")
                     prompt_injected = True
                     break
@@ -425,8 +549,7 @@ def parse_workflow(
             title = node.get("_meta", {}).get("title", "").lower()
             # 只注入到 Positive 節點 (通常 Negative 節點的 prompt 為空)
             if "negative" not in title:
-                if "inputs" in node and "prompt" in node["inputs"]:
-                    node["inputs"]["prompt"] = prompt
+                if set_node_input_value(workflow, node_id, "prompt", prompt, "Qwen Prompt 注入"):
                     print(f"[Parser] 注入 Prompt 到 TextEncodeQwenImageEditPlus 節點 {node_id}")
                     prompt_injected = True
                     break
@@ -434,10 +557,10 @@ def parse_workflow(
         if not prompt_injected and qwen_nodes:
             # 如果找不到明確的 Positive，嘗試第一個有 prompt 輸入的節點
             for node_id, node in qwen_nodes:
-                if "inputs" in node and "prompt" in node["inputs"]:
+                if isinstance(node.get("inputs"), dict) and "prompt" in node["inputs"]:
                     # 檢查這個節點的 prompt 是否不為空 (表示是 Positive)
                     if node["inputs"]["prompt"] or node["inputs"]["prompt"] == "":
-                        node["inputs"]["prompt"] = prompt
+                        set_node_input_value(workflow, node_id, "prompt", prompt, "Qwen Prompt fallback 注入")
                         print(f"[Parser] 注入 Prompt 到 TextEncodeQwenImageEditPlus 節點 {node_id} (fallback)")
                         prompt_injected = True
                         break
@@ -448,8 +571,7 @@ def parse_workflow(
         for veo_class in veo_classes:
             veo_nodes = find_nodes_by_class(workflow, veo_class)
             for node_id, node in veo_nodes:
-                if "inputs" in node and "prompt" in node["inputs"]:
-                    node["inputs"]["prompt"] = prompt
+                if set_node_input_value(workflow, node_id, "prompt", prompt, f"{veo_class} Prompt 注入"):
                     print(f"[Parser] 注入 Prompt 到 {veo_class} 節點 {node_id}")
                     prompt_injected = True
                     break
@@ -465,9 +587,7 @@ def parse_workflow(
         prompt_node_id = mapping.get('prompt_node_id')
         
         if prompt_node_id and prompt_node_id in workflow:
-            node = workflow[prompt_node_id]
-            if 'inputs' in node and 'prompt' in node['inputs']:
-                node['inputs']['prompt'] = prompt
+            if set_node_input_value(workflow, prompt_node_id, 'prompt', prompt, "Config Prompt 注入"):
                 print(f"[Parser] 從 config 注入 Prompt 到 Node {prompt_node_id}")
                 prompt_injected = True
     
@@ -513,26 +633,13 @@ def parse_workflow(
                     # 用戶未提供或留空，使用空字串
                     user_prompt = ""
                 
-                print(f"[Parser] Segment {segment_index}: Node {node_id_str} = '{user_prompt[:40] if user_prompt else '(empty)'}...'")
+                prompt_preview = user_prompt[:40] if user_prompt else '(empty)'
+                print(f"[Parser] Segment {segment_index}: Node {node_id_str} = {_safe_log_value(prompt_preview)}...")
                 
                 # 注入到對應節點
-                node = workflow[node_id_str]
-                
-                # 優先嘗試 inputs.prompt（ComfyUI API 格式）
-                if 'inputs' in node and isinstance(node['inputs'], dict):
-                    if 'prompt' in node['inputs']:
-                        node['inputs']['prompt'] = user_prompt
-                        print(f"[Parser] ✓ 已注入到 Node {node_id_str}.inputs.prompt")
-                        injected_count += 1
-                
-                # 嘗試 widgets_values (舊版格式)
-                elif 'widgets_values' in node:
-                    if isinstance(node['widgets_values'], list) and len(node['widgets_values']) > 0:
-                        node['widgets_values'][0] = user_prompt
-                        injected_count += 1
-                    elif isinstance(node['widgets_values'], dict) and 'prompt' in node['widgets_values']:
-                        node['widgets_values']['prompt'] = user_prompt
-                        injected_count += 1
+                if set_node_prompt_value(workflow, node_id_str, user_prompt, f"Prompt Segment {segment_index}"):
+                    print(f"[Parser] ✓ 已注入到 Node {node_id_str}")
+                    injected_count += 1
             
             print(f"[Parser] ✅ 完成 prompt segments 注入: {injected_count} 個成功, {skipped_count} 個跳過")
     
@@ -541,8 +648,8 @@ def parse_workflow(
     # ==========================================
     sampler_id, sampler_node = find_node_by_class(workflow, "KSampler")
     if sampler_node:
-        sampler_node["inputs"]["seed"] = seed
-        print(f"[Parser] 注入 Seed 到 KSampler 節點 {sampler_id}")
+        if set_node_input_value(workflow, sampler_id, "seed", seed, "Seed 注入"):
+            print(f"[Parser] 注入 Seed 到 KSampler 節點 {sampler_id}")
     
     # ==========================================
     # 注入 Resolution (EmptySD3LatentImage / EmptyLatentImage)
@@ -551,11 +658,12 @@ def parse_workflow(
     for class_type in latent_classes:
         latent_id, latent_node = find_node_by_class(workflow, class_type)
         if latent_node:
-            latent_node["inputs"]["width"] = width
-            latent_node["inputs"]["height"] = height
-            latent_node["inputs"]["batch_size"] = batch_size
-            print(f"[Parser] 注入解析度 {width}x{height} 到 {class_type} 節點 {latent_id}")
-            break
+            width_ok = set_node_input_value(workflow, latent_id, "width", width, f"{class_type} width 注入")
+            height_ok = set_node_input_value(workflow, latent_id, "height", height, f"{class_type} height 注入")
+            batch_ok = set_node_input_value(workflow, latent_id, "batch_size", batch_size, f"{class_type} batch_size 注入")
+            if width_ok and height_ok and batch_ok:
+                print(f"[Parser] 注入解析度 {width}x{height} 到 {class_type} 節點 {latent_id}")
+                break
     
     # ==========================================
     # 注入 Model (UNETLoader / CheckpointLoaderSimple)
@@ -566,14 +674,14 @@ def parse_workflow(
         # 嘗試 UNETLoader
         unet_id, unet_node = find_node_by_class(workflow, "UNETLoader")
         if unet_node:
-            unet_node["inputs"]["unet_name"] = model_filename
-            print(f"[Parser] 注入模型 {model_filename} 到 UNETLoader 節點 {unet_id}")
+            if set_node_input_value(workflow, unet_id, "unet_name", model_filename, "UNET 模型注入"):
+                print(f"[Parser] 注入模型 {model_filename} 到 UNETLoader 節點 {unet_id}")
         
         # 嘗試 CheckpointLoaderSimple
         ckpt_id, ckpt_node = find_node_by_class(workflow, "CheckpointLoaderSimple")
         if ckpt_node:
-            ckpt_node["inputs"]["ckpt_name"] = model_filename
-            print(f"[Parser] 注入模型 {model_filename} 到 CheckpointLoaderSimple 節點 {ckpt_id}")
+            if set_node_input_value(workflow, ckpt_id, "ckpt_name", model_filename, "Checkpoint 模型注入"):
+                print(f"[Parser] 注入模型 {model_filename} 到 CheckpointLoaderSimple 節點 {ckpt_id}")
     else:
         print(f"[Parser] ⚠️ 未知模型: {model}，使用 workflow 預設值")
     
@@ -588,17 +696,8 @@ def parse_workflow(
         for field_name, node_id in image_map_config.items():
             if field_name in image_files:
                 filename = image_files[field_name]
-                if node_id in workflow:
-                    node = workflow[node_id]
-                    if "inputs" in node:
-                        old_image = node["inputs"].get("image", "")
-                        node["inputs"]["image"] = filename
-                        print(f"[Parser] ✅ Config Injection: Node {node_id} ({field_name}): {old_image!r} -> {filename!r}")
-                        images_injected = True
-                    else:
-                        print(f"[Parser] ⚠️ Node {node_id} 沒有 inputs")
-                else:
-                    print(f"[Parser] ⚠️ 找不到 Node {node_id}")
+                if set_node_input_value(workflow, node_id, "image", filename, f"Config 圖片注入 {field_name}"):
+                    images_injected = True
             else:
                 print(f"[Parser] ⚠️ Config 缺少圖片: {field_name}")
     
@@ -610,16 +709,8 @@ def parse_workflow(
             for node_id, field_name in node_map.items():
                 if field_name in image_files:
                     filename = image_files[field_name]
-                    if node_id in workflow:
-                        node = workflow[node_id]
-                        if "inputs" in node:
-                            old_image = node["inputs"].get("image", "")
-                            node["inputs"]["image"] = filename
-                            print(f"[Parser] ✅ Fallback 節點 {node_id}: {old_image!r} -> {filename!r}")
-                        else:
-                            print(f"[Parser] ⚠️ 節點 {node_id} 沒有 inputs")
-                    else:
-                        print(f"[Parser] ⚠️ 找不到節點 {node_id}")
+                    if set_node_input_value(workflow, node_id, "image", filename, f"Fallback 圖片注入 {field_name}"):
+                        print(f"[Parser] ✅ Fallback 節點 {node_id}: {filename!r}")
                 else:
                     print(f"[Parser] ⚠️ 缺少圖片欄位: {field_name}")
         elif node_map:
@@ -635,18 +726,9 @@ def parse_workflow(
     # 優先策略: 從 config.json 讀取 audio_node_id
     audio_node_id = workflow_config.get('mapping', {}).get('audio_node_id')
     if audio_node_id and audio_file:
-        if audio_node_id in workflow:
-            node = workflow[audio_node_id]
-            if "inputs" in node:
-                old_audio = node["inputs"].get("audio", "")
-                node["inputs"]["audio"] = audio_file
-                print(f"[Parser] 🎵 Config: 音訊注入到 Node {audio_node_id}")
-                print(f"[Parser] ✅ 音訊節點 {audio_node_id}: {old_audio!r} -> {audio_file!r}")
-                audio_injected = True
-            else:
-                print(f"[Parser] ⚠️ 音訊節點 {audio_node_id} 沒有 inputs")
-        else:
-            print(f"[Parser] ⚠️ 找不到音訊節點 {audio_node_id}")
+        if set_node_input_value(workflow, audio_node_id, "audio", audio_file, "Config 音訊注入"):
+            print(f"[Parser] 🎵 Config: 音訊注入到 Node {audio_node_id}")
+            audio_injected = True
     
     # Fallback 策略: 使用 AUDIO_NODE_MAP
     if not audio_injected:
@@ -656,15 +738,8 @@ def parse_workflow(
             node_id = audio_config.get("node_id")
             input_key = audio_config.get("input_key", "audio")
             
-            if node_id and node_id in workflow:
-                node = workflow[node_id]
-                if "inputs" in node:
-                    old_audio = node["inputs"].get(input_key, "")
-                    node["inputs"][input_key] = audio_file
-                    print(f"[Parser] 🎵 Fallback: Injecting audio file: {audio_file} into node {node_id}")
-                    print(f"[Parser] ✅ 音訊節點 {node_id}: {old_audio!r} -> {audio_file!r}")
-                else:
-                    print(f"[Parser] ⚠️ 音訊節點 {node_id} 沒有 inputs")
+            if node_id and set_node_input_value(workflow, node_id, input_key, audio_file, "Fallback 音訊注入"):
+                print(f"[Parser] 🎵 Fallback: Injecting audio file: {audio_file} into node {node_id}")
             elif node_id:
                 print(f"[Parser] ⚠️ 找不到音訊節點 {node_id}")
         elif audio_config and not audio_file:

@@ -60,7 +60,8 @@ from config import (
     REDIS_HOST, REDIS_PORT, REDIS_PASSWORD,
     COMFYUI_INPUT_DIR, JOB_QUEUE, TEMP_FILE_MAX_AGE_HOURS,
     JOB_STATUS_EXPIRE_SECONDS, STORAGE_INPUT_DIR, print_config,
-    WORKER_TIMEOUT
+    WORKER_TIMEOUT, DEFAULT_UNET_MODEL, DEFAULT_CLIP_MODEL,
+    DEFAULT_VAE_MODEL,
 )
 from shared.config_base import (
     DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
@@ -643,62 +644,77 @@ def _build_warmup_workflow() -> dict:
         ComfyUI workflow dict，若無法建構則返回 None
     """
     try:
-        # 最簡單的 txt2img workflow：KSampler + EmptyLatentImage + CheckpointLoader
+        # 最簡單的 txt2img workflow：UNETLoader + CLIPLoader + VAELoader + KSampler
         return {
             "1": {
-                "class_type": "CheckpointLoaderSimple",
+                "class_type": "UNETLoader",
                 "inputs": {
-                    "ckpt_name": "z_image_turbo_fp8.safetensors"
+                    "unet_name": DEFAULT_UNET_MODEL,
+                    "weight_dtype": "default"
                 }
             },
             "2": {
-                "class_type": "CLIPTextEncode",
+                "class_type": "CLIPLoader",
                 "inputs": {
-                    "text": "warmup test",
-                    "clip": ["1", 1]
+                    "clip_name": DEFAULT_CLIP_MODEL,
+                    "type": "lumina2",
+                    "device": "default"
                 }
             },
             "3": {
                 "class_type": "CLIPTextEncode",
                 "inputs": {
-                    "text": "",
-                    "clip": ["1", 1]
+                    "text": "warmup test",
+                    "clip": ["2", 0]
                 }
             },
             "4": {
-                "class_type": "EmptyLatentImage",
+                "class_type": "CLIPTextEncode",
+                "inputs": {
+                    "text": "",
+                    "clip": ["2", 0]
+                }
+            },
+            "5": {
+                "class_type": "EmptySD3LatentImage",
                 "inputs": {
                     "width": 256,
                     "height": 256,
                     "batch_size": 1
                 }
             },
-            "5": {
+            "6": {
                 "class_type": "KSampler",
                 "inputs": {
                     "model": ["1", 0],
-                    "positive": ["2", 0],
-                    "negative": ["3", 0],
-                    "latent_image": ["4", 0],
+                    "positive": ["3", 0],
+                    "negative": ["4", 0],
+                    "latent_image": ["5", 0],
                     "seed": 42,
                     "steps": 1,
                     "cfg": 1.0,
                     "sampler_name": "euler",
-                    "scheduler": "normal",
+                    "scheduler": "simple",
                     "denoise": 1.0
                 }
             },
-            "6": {
-                "class_type": "VAEDecode",
+            "7": {
+                "class_type": "VAELoader",
                 "inputs": {
-                    "samples": ["5", 0],
-                    "vae": ["1", 2]
+                    "vae_name": DEFAULT_VAE_MODEL
                 }
             },
-            "7": {
+            "8": {
+                "class_type": "VAEDecode",
+                "inputs": {
+                    "samples": ["6", 0],
+                    "vae": ["7", 0]
+                }
+            },
+            "9": {
                 "class_type": "SaveImage",
                 "inputs": {
-                    "images": ["6", 0],
+                    "images": ["8", 0],
                     "filename_prefix": "_warmup_"
                 }
             }
