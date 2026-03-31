@@ -163,7 +163,7 @@ journalctl -u studio-worker -n 100 --no-pager
 ### Step 6：驗證 GPU 節點
 
 ```bash
-curl http://127.0.0.1:8188/system_stats
+curl http://127.0.0.1:8188/system_stats  
 redis-cli -h <BASE_VM_PRIVATE_IP> -p 6379 -a "$REDIS_PASSWORD" --no-auth-warning ping
 ```
 

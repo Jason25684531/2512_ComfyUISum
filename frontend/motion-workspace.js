@@ -504,10 +504,11 @@ function handleMotionGenerate() {
         return;
     }
 
-    var apiBase = (typeof API_BASE !== 'undefined') ? API_BASE : 'http://127.0.0.1:5000';
+    var apiBase = (typeof window.API_BASE_URL !== 'undefined') ? window.API_BASE_URL : (window.location.origin + '/api');
+    var assetBase = (typeof window.API_URL !== 'undefined') ? window.API_URL : window.location.origin;
 
 
-    fetch(apiBase + '/api/generate', {
+    fetch(apiBase + '/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -551,7 +552,7 @@ function pollMotionJobStatus(jobId, apiBase) {
             return;
         }
 
-        fetch(apiBase + '/api/status/' + jobId)
+        fetch(apiBase + '/status/' + jobId)
             .then(function (response) {
                 if (!response.ok) {
                     throw new Error('HTTP ' + response.status);
@@ -566,7 +567,10 @@ function pollMotionJobStatus(jobId, apiBase) {
 
                     var videoUrl = data.image_url || data.output_path;
                     if (videoUrl) {
-                        var fullVideoUrl = videoUrl.startsWith('http') ? videoUrl : (apiBase + videoUrl);
+                        var fullVideoUrl = videoUrl;
+                        if (!videoUrl.startsWith('http')) {
+                            fullVideoUrl = videoUrl.startsWith('/') ? (assetBase + videoUrl) : (assetBase + '/' + videoUrl);
+                        }
 
                         showMotionStatus('Video generation complete!', 'success');
                         console.log('[Motion] Video URL:', fullVideoUrl);

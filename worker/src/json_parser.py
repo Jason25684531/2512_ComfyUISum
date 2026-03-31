@@ -57,9 +57,12 @@ WORKFLOW_MAP = {
 # ⚠️ DEPRECATED: 請優先使用 config.json 中的 image_map 欄位
 # 此映射僅作為 config.json 未定義時的備用方案
 # 新增 workflow 時應直接在 config.json 中定義 image_map
+# 若重新匯出新版 ComfyUI API JSON，請優先更新 config.json 的 image_map / mapping，
+# Parser 會先依該映射動態替換 image filename、prompt、text 等節點 ID。
 # ==========================================
 IMAGE_NODE_MAP = {
     "face_swap": {
+        # ⚠️ 若重新匯出 face_swap API JSON，請先核對 501/502 是否仍是 source/target 的 LoadImage 節點
         # 節點 ID -> 前端欄位名稱
         "501": "source",   # 頭 (要換上去的臉)
         "502": "target",   # 身體 (目標圖片)
@@ -71,6 +74,7 @@ IMAGE_NODE_MAP = {
         "437": "extra",    # 場景圖 (對應前端 Image C)
     },
     "sketch_to_image": {
+        # ⚠️ 若重新匯出 sketch_to_image API JSON，請再次確認 120 是否仍是草稿圖的 LoadImage 節點
         "120": "input",    # 草稿圖
     },
     "single_image_edit": {
@@ -330,6 +334,8 @@ def parse_workflow(
         if config_path.exists():
             with open(config_path, 'r', encoding='utf-8') as f:
                 config_data = json.load(f)
+            # 新版 ComfyUI API JSON 重新匯出後，只要更新這裡對應的 image_map / prompt_node_id / text_node_id，
+            # Parser 就會優先使用新節點 ID，而不是回退到檔內常數映射。
             workflow_config = config_data.get(workflow_name, {})
             image_map_config = workflow_config.get('image_map', {})
             print(f"[Parser] 成功載入 config.json for {workflow_name}")

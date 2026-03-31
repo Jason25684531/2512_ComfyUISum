@@ -8,6 +8,7 @@ Worker Configuration
 import os
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 # 添加 shared 模組到 Python 路徑
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -35,10 +36,28 @@ from shared.config_base import (
 # ==========================================
 
 # ComfyUI 連線配置
-COMFY_HOST = os.getenv("COMFY_HOST", "127.0.0.1")
-COMFY_PORT = int(os.getenv("COMFY_PORT", "8188"))
-COMFY_HTTP_URL = f"http://{COMFY_HOST}:{COMFY_PORT}"
-COMFY_WS_URL = f"ws://{COMFY_HOST}:{COMFY_PORT}/ws"
+_raw_comfy_server_url = os.getenv("COMFYUI_SERVER_URL", "").strip()
+if _raw_comfy_server_url and "://" not in _raw_comfy_server_url:
+    _raw_comfy_server_url = f"http://{_raw_comfy_server_url}"
+
+_default_comfy_host = os.getenv("COMFY_HOST", "127.0.0.1")
+_default_comfy_port = int(os.getenv("COMFY_PORT", "8188"))
+
+if _raw_comfy_server_url:
+    _parsed_comfy_server = urlparse(_raw_comfy_server_url)
+    _comfy_scheme = _parsed_comfy_server.scheme or "http"
+    _comfy_base_path = _parsed_comfy_server.path.rstrip("/")
+    COMFY_HOST = _parsed_comfy_server.hostname or _default_comfy_host
+    COMFY_PORT = _parsed_comfy_server.port or _default_comfy_port
+else:
+    _comfy_scheme = "http"
+    _comfy_base_path = ""
+    COMFY_HOST = _default_comfy_host
+    COMFY_PORT = _default_comfy_port
+
+COMFYUI_SERVER_URL = f"{_comfy_scheme}://{COMFY_HOST}:{COMFY_PORT}{_comfy_base_path}"
+COMFY_HTTP_URL = COMFYUI_SERVER_URL
+COMFY_WS_URL = f"{'wss' if _comfy_scheme == 'https' else 'ws'}://{COMFY_HOST}:{COMFY_PORT}{_comfy_base_path}/ws"
 
 # ComfyUI 資料夾路徑
 COMFYUI_INPUT_DIR = Path(os.getenv(
@@ -63,7 +82,7 @@ TEMP_FILE_MAX_AGE_HOURS = int(os.getenv("TEMP_FILE_MAX_AGE_HOURS", "1"))
 # Phase 9: Reliability - 延長超時配置
 WORKER_TIMEOUT = int(os.getenv("WORKER_TIMEOUT", "2400"))  # 預設 40 分鐘
 COMFY_POLLING_INTERVAL = float(os.getenv("COMFY_POLLING_INTERVAL", "0.5"))
-COMFY_HTTP_TIMEOUT = float(os.getenv("COMFY_HTTP_TIMEOUT", "300"))
+COMFY_HTTP_TIMEOUT = float(os.getenv("COMFY_HTTP_TIMEOUT", "300.0"))
 
 # ==========================================
 # 除錯輸出
@@ -76,6 +95,7 @@ def print_config():
     print(f"  PROJECT_ROOT: {PROJECT_ROOT}")
     print(f"  REDIS: {REDIS_HOST}:{REDIS_PORT}")
     print(f"  COMFY: {COMFY_HOST}:{COMFY_PORT}")
+    print(f"  COMFYUI_SERVER_URL: {COMFYUI_SERVER_URL}")
     print(f"  COMFY_HTTP_TIMEOUT: {COMFY_HTTP_TIMEOUT}")
     print(f"  COMFYUI_INPUT_DIR: {COMFYUI_INPUT_DIR}")
     print(f"  COMFYUI_OUTPUT_DIR: {COMFYUI_OUTPUT_DIR}")
