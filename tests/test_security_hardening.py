@@ -201,7 +201,7 @@ def test_get_db_engine_requires_password(monkeypatch):
     monkeypatch.delenv("DB_PASSWORD", raising=False)
     monkeypatch.setenv("DB_NAME", "studio_db")
 
-    with pytest.raises(ValueError, match="DB_PASSWORD is not set"):
+    with pytest.raises(ValueError, match="Database credentials are not set"):
         shared_database.get_db_engine()
 
 

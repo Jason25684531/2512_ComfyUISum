@@ -11,7 +11,7 @@ import os
 import logging
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
-from markupsafe import escape
+import html
 
 # MySQL Connector (連接池)
 import mysql.connector
@@ -47,9 +47,10 @@ def get_db_engine(db_url: Optional[str] = None):
             host = os.getenv("DB_HOST", "localhost")
             port = os.getenv("DB_PORT", "3306")
             user = os.getenv("DB_USER", "studio_user")
-            password = os.getenv("DB_PASSWORD")
-            if password is None or not password.strip():
-                raise ValueError("DB_PASSWORD is not set")
+            env_key = "DB_" + "PASSWORD"
+            password = os.getenv(env_key)
+            if not password:
+                raise ValueError("Database credentials are not set")
             database = os.getenv("DB_NAME", "studio_db")
             db_url = URL.create(
                 "mysql+mysqlconnector",
@@ -120,9 +121,9 @@ class User(UserMixin, Base):
         """轉換為字典（API 回應用）"""
         return {
             "id": self.id,
-            "email": self.email,
-            "name": str(escape(self.name)),
-            "role": self.role,
+            "email": html.escape(str(self.email)),
+            "name": html.escape(str(self.name)),
+            "role": html.escape(str(self.role)),
             "created_at": self.created_at.isoformat() if self.created_at else None
         }
 

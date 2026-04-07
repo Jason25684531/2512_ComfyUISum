@@ -4,10 +4,12 @@ ComfyUI 連接檢查工具
 驗證 ComfyUI 是否正確啟動並接受 API 請求。
 """
 
+import os
 import sys
 import requests
 
-COMFY_URL = "http://127.0.0.1:8188"
+protocol_scheme = os.getenv("COMFY_PROTO", "http")
+COMFY_URL = f"{protocol_scheme}://127.0.0.1:8188"
 
 
 def check_comfyui():

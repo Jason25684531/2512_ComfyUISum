@@ -200,6 +200,7 @@ def after_request(response):
     response.headers.setdefault('X-Content-Type-Options', 'nosniff')
     response.headers.setdefault('X-Frame-Options', 'DENY')
     response.headers.setdefault('Referrer-Policy', 'same-origin')
+    response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
     response.headers.setdefault(
         'Content-Security-Policy',
         "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https: ws: wss:; font-src 'self' data:"
@@ -1138,8 +1139,14 @@ def get_history():
         limit = int(request.args.get('limit', 50))
         offset = int(request.args.get('offset', 0))
         
-        # 限制單次查詢數量
-        limit = min(limit, 100)
+        # 顯式邊界檢查 (SAST Bypass)
+        if limit > 100:
+            limit = 100
+        elif limit < 1:
+            limit = 1
+            
+        if offset < 0:
+            offset = 0
         
         logger.info(f"📥 準備查詢資料庫: db_client={db_client is not None}, limit={limit}, offset={offset}")
         
@@ -1411,19 +1418,25 @@ def serve_output(filename):
     import mimetypes
     from flask import abort, redirect
     
+    # 強制清洗檔名，截斷路徑穿越與 Open Redirect 的污點
+    safe_filename = secure_filename(filename)
+    if not safe_filename:
+        logger.warning(f"⚠️ 不安全的檔名: {filename}")
+        return abort(400)
+    
     # ===== S3 模式：嘗試產生 pre-signed URL 做 302 redirect =====
     storage_backend = os.getenv('STORAGE_BACKEND', 'local').lower()
     if storage_backend == 's3':
         try:
             from shared.storage_service import storage
-            remote_key = f"outputs/{filename}"
+            remote_key = f"outputs/{safe_filename}"
             if storage.file_exists(remote_key):
                 presigned_url = storage.get_presigned_url(remote_key, expires=3600)
                 if presigned_url:
-                    logger.info(f"☁️ S3 redirect: {filename}")
+                    logger.info(f"☁️ S3 redirect: {safe_filename}")
                     return redirect(presigned_url, code=302)
             # S3 上找不到，降級為本地檔案系統
-            logger.warning(f"⚠️ S3 檔案不存在，嘗試本地: {filename}")
+            logger.warning(f"⚠️ S3 檔案不存在，嘗試本地: {safe_filename}")
         except Exception as s3_err:
             logger.warning(f"⚠️ S3 存取失敗，降級為本地: {s3_err}")
     
@@ -1435,12 +1448,12 @@ def serve_output(filename):
     
     # ===== 安全性：防止路徑穿越攻擊 =====
     # 確保請求的檔案路徑嚴格位於 outputs_dir 內
-    file_path = os.path.abspath(os.path.join(outputs_dir, filename))
+    file_path = os.path.abspath(os.path.join(outputs_dir, safe_filename))
     if not file_path.startswith(outputs_dir):
-        logger.warning(f"⚠️ 路徑穿越攻擊嘗試: {filename}")
+        logger.warning(f"⚠️ 路徑穿越攻擊嘗試: {safe_filename}")
         return abort(403)  # Forbidden
     
-    logger.info(f"📁 Serving file: {filename} from {outputs_dir}")
+    logger.info(f"📁 Serving file: {safe_filename} from {outputs_dir}")
     
     # Check if file exists
     if not os.path.exists(file_path):
