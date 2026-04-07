@@ -20,7 +20,7 @@ from flask_limiter.util import get_remote_address
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_bcrypt import Bcrypt
 from redis import Redis, RedisError
-from werkzeug.utils import secure_filename
+from werkzeug.utils import secure_filename, safe_join
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 # ============================================
@@ -28,6 +28,13 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 # ============================================
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from shared.utils import load_env
+from shared.security import (
+    INTERNAL_SERVER_ERROR_MESSAGE,
+    INVALID_INPUT_MESSAGE,
+    OPERATION_FAILED_MESSAGE,
+    get_flask_debug_mode,
+    sanitize_response_payload,
+)
 load_env()
 
 # ============================================
@@ -35,6 +42,59 @@ load_env()
 # ============================================
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
+
+FLASK_DEBUG_MODE = get_flask_debug_mode()
+DEFAULT_ALLOWED_CORS_ORIGINS = {
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    'http://localhost:5000',
+    'http://127.0.0.1:5000',
+}
+
+
+def _load_allowed_cors_origins():
+    configured_origins = os.getenv('CORS_ALLOWED_ORIGINS', '').strip()
+    if not configured_origins:
+        return DEFAULT_ALLOWED_CORS_ORIGINS
+
+    return {
+        origin.strip()
+        for origin in configured_origins.split(',')
+        if origin.strip()
+    }
+
+
+ALLOWED_CORS_ORIGINS = _load_allowed_cors_origins()
+
+
+def _get_request_origin():
+    origin = request.headers.get('Origin')
+    if origin and origin in ALLOWED_CORS_ORIGINS:
+        return origin
+    return None
+
+
+def _apply_cors_headers(response):
+    origin = _get_request_origin()
+    if origin:
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Vary'] = 'Origin'
+    return response
+
+
+def _sanitize_json_response(response):
+    if not response.is_json:
+        return response
+
+    payload = response.get_json(silent=True)
+    if payload is None:
+        return response
+
+    response.set_data(json.dumps(sanitize_response_payload(payload), ensure_ascii=False))
+    return response
 
 # ============================================
 # ProxyFix: 修正 TWCC LB → Nginx 反向代理鏈的標頭
@@ -45,12 +105,10 @@ if os.getenv('PROXY_FIX', 'false').lower() == 'true':
 
 # Session Cookie 配置 - 確保跨域請求能正確處理 cookies
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # 允許同站導航攜帶 cookie
-app.config['SESSION_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', 'false').lower() == 'true'
+app.config['SESSION_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', str(not FLASK_DEBUG_MODE)).lower() == 'true'
 app.config['SESSION_COOKIE_HTTPONLY'] = True    # 防止 JS 讀取 cookie
 app.config['REMEMBER_COOKIE_SAMESITE'] = 'Lax'
-app.config['REMEMBER_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', 'false').lower() == 'true'
-
-CORS(app)
+app.config['REMEMBER_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', str(not FLASK_DEBUG_MODE)).lower() == 'true'
 
 # ============================================
 # Flask-Login 和 Flask-Bcrypt 設定
@@ -92,7 +150,7 @@ limiter = Limiter(
 # 設定 CORS - 允許所有來源的跨域請求
 # 使用 supports_credentials=True 以支援會話 Cookie
 CORS(app, 
-     origins=["*"],
+    origins=sorted(ALLOWED_CORS_ORIGINS),
      allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
      methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
      supports_credentials=True)
@@ -132,22 +190,20 @@ def before_request_handler():
 def handle_preflight():
     if request.method == "OPTIONS":
         response = app.make_default_options_response()
-        # 使用請求的 Origin 而非 *，因為 credentials=True 時不能用 *
-        origin = request.headers.get('Origin', 'http://localhost:5000')
-        response.headers["Access-Control-Allow-Origin"] = origin
-        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
-        response.headers["Access-Control-Allow-Credentials"] = "true"
+        _apply_cors_headers(response)
         return response
 
 @app.after_request
 def after_request(response):
-    # 使用請求的 Origin 而非 *，因為 credentials=True 時不能用 *
-    origin = request.headers.get('Origin', 'http://localhost:5000')
-    response.headers["Access-Control-Allow-Origin"] = origin
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
-    response.headers["Access-Control-Allow-Credentials"] = "true"
+    response = _sanitize_json_response(response)
+    response = _apply_cors_headers(response)
+    response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+    response.headers.setdefault('X-Frame-Options', 'DENY')
+    response.headers.setdefault('Referrer-Policy', 'same-origin')
+    response.headers.setdefault(
+        'Content-Security-Policy',
+        "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https: ws: wss:; font-src 'self' data:"
+    )
     
     # 記錄請求完成 + Redis 隊列深度
     try:
@@ -196,7 +252,7 @@ try:
     )
     logger.info(f"✓ 資料庫連接成功: {DB_HOST}:{DB_PORT}/{DB_NAME}")
 except Exception as e:
-    logger.warning(f"⚠️ 資料庫連接失敗 (功能降級): {e}")
+    logger.exception("⚠️ 資料庫連接失敗 (功能降級)")
 
 # ============================================
 # Flask-Login user_loader callback
@@ -208,7 +264,7 @@ def load_user(user_id):
         session = get_db_session()
         return session.query(User).get(int(user_id))
     except Exception as e:
-        logger.error(f"載入用戶失敗: {e}")
+        logger.exception("載入用戶失敗")
         return None
 
 # ============================================
@@ -223,7 +279,7 @@ try:
     limiter.storage_uri = f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/1"
     
 except Exception as e:
-    logger.error(f"✗ Redis 连接失败: {e}")
+    logger.exception("✗ Redis 连接失败")
     redis_client = None
 
 # ============================================
@@ -882,26 +938,24 @@ def generate():
         except RedisError as redis_err:
             # Redis 失敗：回滾資料庫
             session.rollback()
-            logger.error(f"❌ Redis Push 失敗，已回滾資料庫: {redis_err}")
+            logger.exception("❌ Redis Push 失敗，已回滾資料庫")
             return jsonify({
-                'error': '任務佇列異常，請稍後再試',
-                'details': str(redis_err)
+                'error': OPERATION_FAILED_MESSAGE
             }), 500
             
         except Exception as db_err:
             # 資料庫錯誤：回滾
             session.rollback()
-            logger.error(f"❌ 資料庫操作失敗: {db_err}", exc_info=True)
+            logger.exception("❌ 資料庫操作失敗")
             return jsonify({
-                'error': '任務建立失敗',
-                'details': str(db_err)
+                'error': OPERATION_FAILED_MESSAGE
             }), 500
         
         # ===== Phase 10: 嚴格事務處理結束 =====
     
     except Exception as e:
-        logger.error(f"✗ generate 接口异常: {e}", exc_info=True)
-        return jsonify({'error': 'Internal server error'}), 500
+        logger.exception("✗ generate 接口异常")
+        return jsonify({'error': INTERNAL_SERVER_ERROR_MESSAGE}), 500
     
     finally:
         # 確保 Session 關閉
@@ -1452,8 +1506,8 @@ def serve_index():
                 return jsonify({"error": "Login page not found"}), 404
                 
     except Exception as e:
-        logger.error(f"Error serving page: {e}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        logger.exception("Error serving page")
+        return jsonify({"error": INTERNAL_SERVER_ERROR_MESSAGE}), 500
 
 @app.route('/<path:path>')
 def serve_static(path):
@@ -1467,9 +1521,13 @@ def serve_static(path):
     try:
         frontend_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'frontend')
         frontend_dir = os.path.abspath(frontend_dir)
-        file_path = os.path.join(frontend_dir, path)
+        file_path = safe_join(frontend_dir, path)
+
+        if file_path is None:
+            logger.warning("Rejected invalid frontend path request")
+            return jsonify({"error": INVALID_INPUT_MESSAGE}), 403
         
-        logger.info(f"Serving static file: {path} from {frontend_dir}")
+        logger.info(f"Serving static file from {frontend_dir}")
         logger.info(f"File exists: {os.path.exists(file_path)}")
         
         # 嘗試返回靜態文件
@@ -1481,8 +1539,8 @@ def serve_static(path):
             return send_from_directory(frontend_dir, 'index.html')
             
     except Exception as e:
-        logger.error(f"Error serving static file {path}: {e}")
-        return jsonify({"error": str(e)}), 500
+        logger.exception("Error serving static file")
+        return jsonify({"error": INTERNAL_SERVER_ERROR_MESSAGE}), 500
 
 # ==========================================
 # 啟動 Flask 應用
@@ -1510,13 +1568,13 @@ if __name__ == '__main__':
             app.run(
                 host='0.0.0.0', 
                 port=5000, 
-                debug=True, 
+                debug=FLASK_DEBUG_MODE, 
                 use_reloader=False,
                 threaded=True
             )
         else:
             # Linux/Mac: 正常使用 reloader
-            app.run(host='0.0.0.0', port=5000, debug=True)
+            app.run(host='0.0.0.0', port=5000, debug=FLASK_DEBUG_MODE)
     except KeyboardInterrupt:
         logger.info("\n⏹️ 正在關閉 Backend...")
         logger.info("✓ Backend 已優雅關閉")

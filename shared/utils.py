@@ -33,9 +33,9 @@ def load_env(base_path: Path = None) -> None:
                 if line and not line.startswith("#") and "=" in line:
                     key, value = line.split("=", 1)
                     os.environ.setdefault(key.strip(), value.strip())
-        print(f"✓ 已載入 .env 檔案: {env_path}")
+        print(f"[env] Loaded .env: {env_path}")
     else:
-        print(f"⚠️ .env 檔案不存在: {env_path}")
+        print(f"[env] Missing .env: {env_path}")
 
 
 def get_project_root() -> Path:

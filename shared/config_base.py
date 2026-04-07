@@ -8,6 +8,8 @@ Shared Configuration Base
 import os
 from pathlib import Path
 
+from shared.security import get_required_env
+
 # ==========================================
 # 專案根目錄
 # ==========================================
@@ -27,7 +29,7 @@ JOB_QUEUE = os.getenv("JOB_QUEUE", "job_queue")
 DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_PORT = int(os.getenv("DB_PORT", 3306))
 DB_USER = os.getenv("DB_USER", "studio_user")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "studio_password")
+DB_PASSWORD = get_required_env("DB_PASSWORD")
 DB_NAME = os.getenv("DB_NAME", "studio_db")
 
 # ==========================================

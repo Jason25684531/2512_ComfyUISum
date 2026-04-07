@@ -8,6 +8,9 @@ Shared Module
 """
 
 from .utils import load_env, get_project_root
+
+load_env()
+
 from .config_base import (
     PROJECT_ROOT,
     REDIS_HOST,

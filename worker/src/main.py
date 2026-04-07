@@ -45,6 +45,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 # Phase 8C: 使用新的結構化日誌系統
 # ==========================================
 from shared.utils import load_env, setup_logger, JobLogAdapter, get_redis_client
+from shared.security import get_public_error_message
 
 load_env()
 
@@ -302,6 +303,7 @@ def update_job_status(
     progress: int = 0,
     image_url: str = None,
     error: str = None,
+    public_error: bool = False,
     db_client=None
 ):
     """
@@ -326,7 +328,7 @@ def update_job_status(
     if image_url:
         data["image_url"] = image_url
     if error:
-        data["error"] = error
+        data["error"] = error if public_error else get_public_error_message(error)
     
     r.hset(status_key, mapping=data)
     r.expire(status_key, JOB_STATUS_EXPIRE_SECONDS)
@@ -350,7 +352,7 @@ def update_job_status(
             else:
                 logger.warning(f"⚠️ MySQL 狀態同步失敗: {job_id}")
         except Exception as e:
-            logger.error(f"❌ MySQL 同步錯誤: {e}")
+            logger.exception("❌ MySQL 同步錯誤")
 
 
 
@@ -630,9 +632,8 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
             job_logger.error(f"❌ 任務失敗: {error}")
             
     except Exception as e:
-        error_msg = str(e)
-        job_logger.error(f"❌ 處理錯誤: {error_msg}")
-        update_job_status(r, job_id, "failed", progress=0, error=error_msg, db_client=db_client)
+        job_logger.exception("❌ 處理錯誤")
+        update_job_status(r, job_id, "failed", progress=0, error="unexpected failure", db_client=db_client)
 
 
 def _build_warmup_workflow() -> dict:
@@ -738,7 +739,7 @@ def main():
         r.ping()
         logger.info(f"✅ Redis 連接成功 ({REDIS_HOST}:{REDIS_PORT})")
     except Exception as e:
-        logger.error(f"❌ Redis 連接失敗: {e}")
+        logger.exception("❌ Redis 連接失敗")
         sys.exit(1)
     
     # 2. 連接資料庫 (可選) - 使用共用配置 (shared.config_base)
@@ -756,7 +757,7 @@ def main():
         )
         logger.info(f"✅ 資料庫連接成功 ({DB_HOST}:{DB_PORT}/{DB_NAME})")
     except Exception as e:
-        logger.warning(f"⚠️ 資料庫連接失敗 (功能降級): {e}")
+        logger.exception("⚠️ 資料庫連接失敗 (功能降級)")
     
     # 3. 初始化 ComfyUI 客戶端
     client = ComfyClient()
@@ -839,11 +840,11 @@ def main():
                     process_job(r, client, job_data, db_client)
                     _current_job_id = None
                 except json.JSONDecodeError as e:
-                    logger.error(f"JSON 解析錯誤: {e}")
+                    logger.exception("JSON 解析錯誤")
                     _current_job_id = None
             
         except redis.ConnectionError as e:
-            logger.error(f"Redis 連接中斷，{redis_retry_delay:.0f}s 後重試: {e}")
+            logger.exception(f"Redis 連接中斷，{redis_retry_delay:.0f}s 後重試")
             time.sleep(redis_retry_delay)
             redis_retry_delay = min(redis_retry_delay * 2, REDIS_RETRY_MAX_DELAY)
             try:
@@ -851,14 +852,14 @@ def main():
                 logger.info("✅ Redis 重連成功")
                 redis_retry_delay = 2.0  # 重置
             except Exception as reconnect_err:
-                logger.warning(f"⚠️ Redis 重連失敗: {reconnect_err}")
+                logger.exception("⚠️ Redis 重連失敗")
                 
         except KeyboardInterrupt:
             logger.info("\n收到中斷信號，正在關閉...")
             break
             
         except Exception as e:
-            logger.error(f"未預期錯誤: {e}")
+            logger.exception("未預期錯誤")
             time.sleep(1)
     
     # Graceful shutdown: 確認當前任務狀態

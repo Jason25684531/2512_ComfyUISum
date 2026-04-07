@@ -18,11 +18,14 @@ from mysql.connector import pooling, Error
 
 # SQLAlchemy ORM
 from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Boolean, ForeignKey
+from sqlalchemy.engine import URL
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker, scoped_session
 from sqlalchemy.dialects.mysql import JSON
 
 # Flask-Login
 from flask_login import UserMixin
+
+from shared.security import get_required_env
 
 logger = logging.getLogger(__name__)
 
@@ -45,9 +48,16 @@ def get_db_engine(db_url: Optional[str] = None):
             host = os.getenv("DB_HOST", "localhost")
             port = os.getenv("DB_PORT", "3306")
             user = os.getenv("DB_USER", "studio_user")
-            password = os.getenv("DB_PASSWORD", "studio_password")
+            password = get_required_env("DB_PASSWORD")
             database = os.getenv("DB_NAME", "studio_db")
-            db_url = f"mysql+mysqlconnector://{user}:{password}@{host}:{port}/{database}"
+            db_url = URL.create(
+                "mysql+mysqlconnector",
+                username=user,
+                password=password,
+                host=host,
+                port=int(port),
+                database=database,
+            )
         
         _engine = create_engine(
             db_url,
@@ -222,7 +232,7 @@ class Database:
             logger.info(f"✓ MySQL 連接池建立成功: {host}:{port}/{database}")
             self._init_schema()
         except Error as e:
-            logger.error(f"✗ MySQL 連接池建立失敗: {e}")
+            logger.exception("✗ MySQL 連接池建立失敗")
             raise
     
     def _init_schema(self):
@@ -288,7 +298,7 @@ class Database:
             conn.commit()
             logger.info("✓ Users, Jobs, user_mapping 表初始化成功")
         except Error as e:
-            logger.error(f"✗ 建立表失敗: {e}")
+            logger.exception("✗ 建立表失敗")
         finally:
             if conn.is_connected():
                 cursor.close()
@@ -344,7 +354,7 @@ class Database:
             logger.info(f"✓ 任務記錄插入成功: {job_id}" + (f" (User: {user_id})" if user_id else ""))
             return True
         except Error as e:
-            logger.error(f"✗ 插入任務失敗: {e}")
+            logger.exception("✗ 插入任務失敗")
             return False
         finally:
             if conn.is_connected():
@@ -379,7 +389,7 @@ class Database:
             logger.info(f"✓ 任務狀態更新: {job_id} -> {status}")
             return True
         except Error as e:
-            logger.error(f"✗ 更新任務狀態失敗: {e}")
+            logger.exception("✗ 更新任務狀態失敗")
             return False
         finally:
             if conn.is_connected():
@@ -451,7 +461,7 @@ class Database:
             
             return results
         except Error as e:
-            logger.error(f"✗ 查詢歷史失敗: {e}", exc_info=True)
+            logger.exception("✗ 查詢歷史失敗")
             return []
         finally:
             if cursor:
@@ -479,7 +489,7 @@ class Database:
             logger.info(f"✓ 任務已軟刪除: {job_id}")
             return True
         except Error as e:
-            logger.error(f"✗ 軟刪除失敗: {e}")
+            logger.exception("✗ 軟刪除失敗")
             return False
         finally:
             if conn.is_connected():
@@ -517,7 +527,7 @@ class Database:
                 logger.debug(f"✓ 新用戶建立: User #{user_id} ({ip_address})")
                 return user_id
         except Error as e:
-            logger.error(f"✗ 獲取或建立用戶 ID 失敗: {e}")
+            logger.exception("✗ 獲取或建立用戶 ID 失敗")
             return -1
         finally:
             if conn.is_connected():
@@ -534,7 +544,7 @@ class Database:
             result = cursor.fetchone()
             return result[0] if result else 0
         except Error as e:
-            logger.error(f"✗ 查詢活躍用戶失敗: {e}")
+            logger.exception("✗ 查詢活躍用戶失敗")
             return 0
         finally:
             if conn.is_connected():
@@ -550,7 +560,7 @@ class Database:
             cursor.fetchone()
             return True
         except Error as e:
-            logger.error(f"✗ 資料庫連接檢查失敗: {e}")
+            logger.exception("✗ 資料庫連接檢查失敗")
             return False
         finally:
             if conn.is_connected():
