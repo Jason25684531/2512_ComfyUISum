@@ -5,6 +5,7 @@ Shared security helpers for API-safe serialization and runtime configuration.
 from __future__ import annotations
 
 import os
+from html import unescape as html_unescape
 from typing import Any
 
 from markupsafe import escape
@@ -26,7 +27,8 @@ def sanitize_response_payload(payload: Any) -> Any:
     if isinstance(payload, tuple):
         return [sanitize_response_payload(item) for item in payload]
     if isinstance(payload, str):
-        return str(escape(payload))
+        normalized = str(escape(html_unescape(payload)))
+        return payload if normalized == payload else normalized
     return payload
 
 

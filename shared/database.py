@@ -25,8 +25,6 @@ from sqlalchemy.dialects.mysql import JSON
 # Flask-Login
 from flask_login import UserMixin
 
-from shared.security import get_required_env
-
 logger = logging.getLogger(__name__)
 
 # ===========================================
@@ -48,12 +46,14 @@ def get_db_engine(db_url: Optional[str] = None):
             host = os.getenv("DB_HOST", "localhost")
             port = os.getenv("DB_PORT", "3306")
             user = os.getenv("DB_USER", "studio_user")
-            password = get_required_env("DB_PASSWORD")
+            password = os.getenv("DB_PASSWORD")
+            if password is None or not password.strip():
+                raise ValueError("Database password is not set")
             database = os.getenv("DB_NAME", "studio_db")
             db_url = URL.create(
                 "mysql+mysqlconnector",
                 username=user,
-                password=password,
+                password=password.strip(),
                 host=host,
                 port=int(port),
                 database=database,

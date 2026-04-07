@@ -16,7 +16,7 @@ if str(BACKEND_SRC) not in sys.path:
 
 import app as backend_app
 from shared import database as shared_database
-from shared.security import INTERNAL_SERVER_ERROR_MESSAGE, get_flask_debug_mode
+from shared.security import get_flask_debug_mode
 
 
 @pytest.fixture(autouse=True)
@@ -190,7 +190,7 @@ def test_serve_index_hides_exception_details(monkeypatch):
         response, status_code = backend_app.serve_index()
 
     assert status_code == 500
-    assert response.get_json()["error"] == INTERNAL_SERVER_ERROR_MESSAGE
+    assert response.get_json()["error"] == "Internal server error"
 
 
 def test_get_db_engine_requires_password(monkeypatch):
@@ -201,8 +201,24 @@ def test_get_db_engine_requires_password(monkeypatch):
     monkeypatch.delenv("DB_PASSWORD", raising=False)
     monkeypatch.setenv("DB_NAME", "studio_db")
 
-    with pytest.raises(ValueError, match="DB_PASSWORD is not set"):
+    with pytest.raises(ValueError, match="Database password is not set"):
         shared_database.get_db_engine()
+
+
+def test_cancel_job_uses_static_message(monkeypatch):
+    class FakeRedis:
+        def hgetall(self, key):
+            return {
+                "status": "finished",
+            }
+
+    monkeypatch.setattr(backend_app, "redis_client", FakeRedis())
+
+    client = backend_app.app.test_client()
+    response = client.post("/api/cancel/job-123")
+
+    assert response.status_code == 400
+    assert response.get_json()["message"] == "Job cannot be cancelled in its current state"
 
 
 def test_debug_mode_reads_environment(monkeypatch):

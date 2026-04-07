@@ -19,6 +19,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_bcrypt import Bcrypt
+from markupsafe import escape
 from redis import Redis, RedisError
 from werkzeug.utils import secure_filename, safe_join
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -529,10 +530,13 @@ def api_update_profile():
         
         session.commit()
         logger.info(f"✓ 用戶資料更新: {user.email}")
+
+        sanitized_user = user.to_dict()
+        sanitized_user['name'] = str(escape(user.name))
         
         return jsonify({
             'success': True,
-            'user': user.to_dict()
+            'user': sanitized_user
         }), 200
     
     except Exception as e:
@@ -997,11 +1001,11 @@ def status(job_id):
                 
                 # 返回 Redis 中的狀態
                 return jsonify({
-                    'job_id': job_status.get('job_id', job_id),
-                    'status': current_status,
+                    'job_id': str(escape(job_status.get('job_id', job_id))),
+                    'status': str(escape(current_status)),
                     'progress': int(job_status.get('progress', 0)),
-                    'image_url': job_status.get('image_url', ''),
-                    'error': job_status.get('error', ''),
+                    'image_url': str(escape(job_status.get('image_url', ''))),
+                    'error': str(escape(job_status.get('error', ''))),
                     'source': 'redis'  # 標記數據來源
                 }), 200
         
@@ -1026,10 +1030,10 @@ def status(job_id):
                         image_url = f"/outputs/{job_id}_0.png"
                     
                     return jsonify({
-                        'job_id': job.id,
-                        'status': job.status,
+                        'job_id': str(escape(job.id)),
+                        'status': str(escape(job.status)),
                         'progress': 100 if job.status == 'finished' else 0,
-                        'image_url': image_url,
+                        'image_url': str(escape(image_url)),
                         'error': '',
                         'source': 'database',  # 標記數據來源
                         'created_at': job.created_at.isoformat() if job.created_at else None
@@ -1082,7 +1086,7 @@ def cancel_job(job_id):
         if current_status in ['finished', 'failed', 'cancelled']:
             return jsonify({
                 'success': False,
-                'message': f'Cannot cancel job with status: {current_status}'
+                'message': 'Job cannot be cancelled in its current state'
             }), 400
         
         # 將狀態設置為 cancelled
@@ -1507,7 +1511,7 @@ def serve_index():
                 
     except Exception as e:
         logger.exception("Error serving page")
-        return jsonify({"error": INTERNAL_SERVER_ERROR_MESSAGE}), 500
+        return jsonify({"error": "Internal server error"}), 500
 
 @app.route('/<path:path>')
 def serve_static(path):
@@ -1540,7 +1544,7 @@ def serve_static(path):
             
     except Exception as e:
         logger.exception("Error serving static file")
-        return jsonify({"error": INTERNAL_SERVER_ERROR_MESSAGE}), 500
+        return jsonify({"error": "Internal server error"}), 500
 
 # ==========================================
 # 啟動 Flask 應用
@@ -1561,6 +1565,7 @@ if __name__ == '__main__':
         logger.info("ℹ️  Veo3 測試模式未啟用")
     
     is_windows = sys.platform.startswith('win')
+    is_debug = os.getenv('FLASK_DEBUG', 'False').lower() == 'true'
     
     try:
         if is_windows:
@@ -1568,13 +1573,13 @@ if __name__ == '__main__':
             app.run(
                 host='0.0.0.0', 
                 port=5000, 
-                debug=FLASK_DEBUG_MODE, 
+                debug=is_debug, 
                 use_reloader=False,
                 threaded=True
             )
         else:
             # Linux/Mac: 正常使用 reloader
-            app.run(host='0.0.0.0', port=5000, debug=FLASK_DEBUG_MODE)
+            app.run(host='0.0.0.0', port=5000, debug=is_debug)
     except KeyboardInterrupt:
         logger.info("\n⏹️ 正在關閉 Backend...")
         logger.info("✓ Backend 已優雅關閉")
