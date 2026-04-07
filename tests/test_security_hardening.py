@@ -177,7 +177,7 @@ def test_serve_static_rejects_traversal():
         response, status_code = backend_app.serve_static("../../README.md")
 
     assert status_code == 403
-    assert response.get_json()["error"] == "Invalid input data"
+    assert response.get_json()["error"] == "Forbidden"
 
 
 def test_serve_index_hides_exception_details(monkeypatch):
@@ -228,6 +228,19 @@ def test_debug_mode_reads_environment(monkeypatch):
 
     monkeypatch.setenv("FLASK_DEBUG", "false")
     assert get_flask_debug_mode() is False
+
+
+def test_user_to_dict_escapes_name_at_source():
+    user = shared_database.User()
+    user.id = 9
+    user.email = "member@example.com"
+    user.name = "Alice <script>"
+    user.role = "member"
+    user.created_at = datetime(2026, 4, 7, 12, 0, tzinfo=timezone.utc)
+
+    payload = user.to_dict()
+
+    assert payload["name"] == "Alice &lt;script&gt;"
 
 
 def test_flask_client_authenticated_flow_covers_login_profile_history_status(monkeypatch):

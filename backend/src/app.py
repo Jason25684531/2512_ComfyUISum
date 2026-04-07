@@ -21,7 +21,7 @@ from flask_login import LoginManager, login_user, logout_user, login_required, c
 from flask_bcrypt import Bcrypt
 from markupsafe import escape
 from redis import Redis, RedisError
-from werkzeug.utils import secure_filename, safe_join
+from werkzeug.utils import secure_filename
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 # ============================================
@@ -31,7 +31,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from shared.utils import load_env
 from shared.security import (
     INTERNAL_SERVER_ERROR_MESSAGE,
-    INVALID_INPUT_MESSAGE,
     OPERATION_FAILED_MESSAGE,
     get_flask_debug_mode,
     sanitize_response_payload,
@@ -530,13 +529,10 @@ def api_update_profile():
         
         session.commit()
         logger.info(f"✓ 用戶資料更新: {user.email}")
-
-        sanitized_user = user.to_dict()
-        sanitized_user['name'] = str(escape(user.name))
         
         return jsonify({
             'success': True,
-            'user': sanitized_user
+            'user': user.to_dict()
         }), 200
     
     except Exception as e:
@@ -1525,11 +1521,11 @@ def serve_static(path):
     try:
         frontend_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'frontend')
         frontend_dir = os.path.abspath(frontend_dir)
-        file_path = safe_join(frontend_dir, path)
-
-        if file_path is None:
+        file_path = os.path.join(frontend_dir, path)
+        if not os.path.abspath(file_path).startswith(frontend_dir + os.sep):
             logger.warning("Rejected invalid frontend path request")
-            return jsonify({"error": INVALID_INPUT_MESSAGE}), 403
+            return jsonify({"error": "Forbidden"}), 403
+        file_path = os.path.abspath(file_path)
         
         logger.info(f"Serving static file from {frontend_dir}")
         logger.info(f"File exists: {os.path.exists(file_path)}")

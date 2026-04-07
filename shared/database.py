@@ -11,6 +11,7 @@ import os
 import logging
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
+from markupsafe import escape
 
 # MySQL Connector (連接池)
 import mysql.connector
@@ -120,7 +121,7 @@ class User(UserMixin, Base):
         return {
             "id": self.id,
             "email": self.email,
-            "name": self.name,
+            "name": str(escape(self.name)),
             "role": self.role,
             "created_at": self.created_at.isoformat() if self.created_at else None
         }
