@@ -48,7 +48,7 @@ def get_db_engine(db_url: Optional[str] = None):
             user = os.getenv("DB_USER", "studio_user")
             password = os.getenv("DB_PASSWORD")
             if password is None or not password.strip():
-                raise ValueError("Database password is not set")
+                raise ValueError("DB_PASSWORD is not set")
             database = os.getenv("DB_NAME", "studio_db")
             db_url = URL.create(
                 "mysql+mysqlconnector",
