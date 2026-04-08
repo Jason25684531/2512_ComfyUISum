@@ -900,13 +900,13 @@ GET /api/history?page=1&limit=20
 # Redis 配置
 REDIS_HOST=localhost
 REDIS_PORT=6379
-REDIS_PASSWORD=mysecret
+REDIS_PASSWORD=<REPLACE_WITH_SECURE_PASSWORD>
 
 # MySQL 配置
 DB_HOST=localhost
 DB_PORT=3307
 DB_USER=studio_user
-DB_PASSWORD=studio_password
+DB_PASSWORD=<REPLACE_WITH_SECURE_PASSWORD>
 DB_NAME=studio_db
 
 # ComfyUI 配置

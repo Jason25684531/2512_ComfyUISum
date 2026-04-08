@@ -20,7 +20,7 @@ PROJECT_ROOT = Path(__file__).parent.parent.resolve()
 # ==========================================
 REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
-REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", "mysecret")
+REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
 JOB_QUEUE = os.getenv("JOB_QUEUE", "job_queue")
 
 # ==========================================

@@ -15,11 +15,13 @@ import requests
 import websocket
 from pathlib import Path
 from typing import Optional, Callable
+from urllib.parse import urlparse
 
 from config import (
     COMFY_HOST, COMFY_PORT, COMFY_HTTP_URL, COMFY_WS_URL,
     COMFYUI_OUTPUT_DIR, STORAGE_OUTPUT_DIR, COMFY_HTTP_TIMEOUT
 )
+from shared.security import get_public_error_message
 
 # 為了向後相容，保留模組級別的別名
 COMFY_OUTPUT_DIR = COMFYUI_OUTPUT_DIR
@@ -33,8 +35,17 @@ class ComfyClient:
     def __init__(self, host: str = COMFY_HOST, port: int = COMFY_PORT):
         self.host = host
         self.port = port
-        self.http_url = f"http://{host}:{port}"
-        self.ws_url = f"ws://{host}:{port}/ws"
+        parsed_http_url = urlparse(COMFY_HTTP_URL)
+        parsed_ws_url = urlparse(COMFY_WS_URL)
+        http_scheme = parsed_http_url.scheme
+        ws_scheme = parsed_ws_url.scheme
+
+        if host == COMFY_HOST and port == COMFY_PORT:
+            self.http_url = COMFY_HTTP_URL.rstrip("/")
+            self.ws_url = COMFY_WS_URL
+        else:
+            self.http_url = f"{http_scheme}://{host}:{port}"
+            self.ws_url = f"{ws_scheme}://{host}:{port}/ws"
         self.client_id = str(uuid.uuid4())
         
         # 確保輸出目錄存在
@@ -267,7 +278,7 @@ class ComfyClient:
                     elif msg_type == "execution_error":
                         if msg_data.get("prompt_id") == prompt_id:
                             error_msg = msg_data.get("exception_message", "未知錯誤")
-                            result["error"] = error_msg
+                            result["error"] = get_public_error_message(error_msg)
                             print(f"[ComfyClient] 執行錯誤: {error_msg}")
                             break
                             
@@ -277,7 +288,7 @@ class ComfyClient:
             ws.close()
             
         except Exception as e:
-            result["error"] = str(e)
+            result["error"] = get_public_error_message(str(e))
             print(f"[ComfyClient] WebSocket 錯誤: {e}")
         
         return result

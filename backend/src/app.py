@@ -6,6 +6,7 @@ import os
 import sys
 import json
 import uuid
+import html
 import logging
 import threading
 import time
@@ -703,7 +704,7 @@ def upload_audio():
         # 6. 回傳結果
         return jsonify({
             'filename': safe_filename,
-            'original_name': file.filename  # 使用原始檔名（未經 secure_filename 處理）
+            'original_name': html.escape(str(file.filename))
         }), 200
     
     except Exception as e:
@@ -1139,7 +1140,7 @@ def get_history():
         limit = int(request.args.get('limit', 50))
         offset = int(request.args.get('offset', 0))
         
-        # 顯式邊界檢查 (SAST Bypass)
+        # 顯式邊界檢查
         if limit > 100:
             limit = 100
         elif limit < 1:
@@ -1464,7 +1465,7 @@ def serve_output(filename):
     mimetype, _ = mimetypes.guess_type(file_path)
     if mimetype is None:
         # 根據副檔名手動設定
-        ext = os.path.splitext(filename)[1].lower()
+        ext = os.path.splitext(safe_filename)[1].lower()
         mime_map = {
             '.mp4': 'video/mp4',
             '.webm': 'video/webm',
@@ -1479,7 +1480,7 @@ def serve_output(filename):
         mimetype = mime_map.get(ext, 'application/octet-stream')
     
     logger.info(f"📹 MIME Type: {mimetype}")
-    return send_from_directory(outputs_dir, filename, mimetype=mimetype)
+    return send_from_directory(outputs_dir, safe_filename, mimetype=mimetype)
 
 # ============================================
 # Application Entry Point

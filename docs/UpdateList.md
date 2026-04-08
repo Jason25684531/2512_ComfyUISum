@@ -49,7 +49,7 @@ worker/src/
 DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_PORT = int(os.getenv("DB_PORT", 3306))
 DB_USER = os.getenv("DB_USER", "studio_user")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "studio_password")
+DB_PASSWORD = os.getenv("DB_PASSWORD")
 DB_NAME = os.getenv("DB_NAME", "studio_db")
 
 # 修改後 (使用共用配置)
@@ -142,7 +142,7 @@ worker:
 redis:
   command: >
     redis-server 
-    --requirepass ${REDIS_PASSWORD:-mysecret} 
+    --requirepass ${REDIS_PASSWORD} 
     --appendonly yes 
     --maxmemory 512mb              # 新增：限制最大記憶體
     --maxmemory-policy allkeys-lru  # 新增：LRU 淘汰策略
@@ -1374,7 +1374,7 @@ ComfyUISum/
 db_host = os.getenv("DB_HOST", "localhost")
 db_port = int(os.getenv("DB_PORT", 3306))
 db_user = os.getenv("DB_USER", "studio_user")
-db_password = os.getenv("DB_PASSWORD", "studio_password")
+db_password = os.getenv("DB_PASSWORD")
 db_name = os.getenv("DB_NAME", "studio_db")
 ```
 

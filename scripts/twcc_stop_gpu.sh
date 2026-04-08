@@ -37,7 +37,7 @@ done < "$ENV_FILE"
 : "${GPU_VM_REDIS_HOST:?❌ GPU_VM_REDIS_HOST 未設定（Base VM 內網 IP）}"
 TWCCLI_PATH="${TWCCLI_PATH:-/home/ubuntu/.local/bin/twccli}"
 REDIS_PORT="${REDIS_PORT:-6379}"
-REDIS_PASSWORD="${REDIS_PASSWORD:-mysecret}"
+REDIS_PASSWORD="${REDIS_PASSWORD:?❌ REDIS_PASSWORD 未設定}"
 
 TIMESTAMP="$(date '+%Y-%m-%d %H:%M:%S')"
 LOG_FILE="${PROJECT_DIR}/logs/twcc-schedule.log"

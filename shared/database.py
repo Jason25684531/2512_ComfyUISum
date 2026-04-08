@@ -47,8 +47,7 @@ def get_db_engine(db_url: Optional[str] = None):
             host = os.getenv("DB_HOST", "localhost")
             port = os.getenv("DB_PORT", "3306")
             user = os.getenv("DB_USER", "studio_user")
-            env_key = "DB_" + "PASSWORD"
-            password = os.getenv(env_key)
+            password = os.getenv("DB_PASSWORD")
             if not password:
                 raise ValueError("Database credentials are not set")
             database = os.getenv("DB_NAME", "studio_db")
@@ -176,13 +175,13 @@ class Job(Base):
         return {
             "id": self.id,
             "user_id": self.user_id,
-            "prompt": self.prompt,
-            "workflow": self.workflow_name,
-            "model": self.model,
+            "prompt": html.escape(str(self.prompt)) if self.prompt else None,
+            "workflow": html.escape(str(self.workflow_name)) if self.workflow_name else None,
+            "model": html.escape(str(self.model)) if self.model else None,
             "aspect_ratio": self.aspect_ratio,
             "batch_size": self.batch_size,
             "seed": self.seed,
-            "status": self.status,
+            "status": html.escape(str(self.status)) if self.status else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None
         }

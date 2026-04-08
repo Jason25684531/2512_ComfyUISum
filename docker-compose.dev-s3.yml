@@ -23,13 +23,13 @@ services:
       - "6379:6379"
     command: >
       redis-server
-      --requirepass mysecret
+      --requirepass ${REDIS_PASSWORD}
       --appendonly yes
     volumes:
       - ./redis_data:/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "mysecret", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a $$REDIS_PASSWORD ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -43,15 +43,15 @@ services:
     ports:
       - "3307:3306"
     environment:
-      - MYSQL_ROOT_PASSWORD=rootpassword
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
       - MYSQL_DATABASE=studio_db
       - MYSQL_USER=studio_user
-      - MYSQL_PASSWORD=studio_password
+      - MYSQL_PASSWORD=${DB_PASSWORD}
     volumes:
       - ./mysql_data:/var/lib/mysql
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$$MYSQL_ROOT_PASSWORD"]
       interval: 10s
       timeout: 5s
       retries: 5

@@ -2,6 +2,8 @@
 venv/
 storage/
 .env
+.env.dev-s3
+.env.twcc
 redis_data/
 mysql_data/
 __pycache__/

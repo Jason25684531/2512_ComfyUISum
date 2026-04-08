@@ -197,6 +197,18 @@ def get_redis_client(decode_responses: bool = True, max_retries: int = 10,
     import time
     from redis import Redis
     from shared.config_base import REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
+
+    retry_override = os.getenv("REDIS_CONNECT_RETRIES")
+    if retry_override is not None:
+        max_retries = max(0, int(retry_override))
+
+    initial_delay_override = os.getenv("REDIS_CONNECT_INITIAL_DELAY")
+    if initial_delay_override is not None:
+        initial_delay = max(0.0, float(initial_delay_override))
+
+    max_delay_override = os.getenv("REDIS_CONNECT_MAX_DELAY")
+    if max_delay_override is not None:
+        max_delay = max(0.0, float(max_delay_override))
     
     last_error = None
     delay = initial_delay

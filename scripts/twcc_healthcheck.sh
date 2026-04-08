@@ -23,7 +23,6 @@ NGINX_CONTAINER="studio-nginx"
 BACKEND_CONTAINER="studio-backend"
 REDIS_CONTAINER="studio-redis"
 MYSQL_CONTAINER="studio-mysql"
-REDIS_PASSWORD="${REDIS_PASSWORD:-mysecret}"
 
 # 載入環境變數
 if [ -f "$PROJECT_DIR/.env" ]; then
@@ -31,6 +30,9 @@ if [ -f "$PROJECT_DIR/.env" ]; then
     source "$PROJECT_DIR/.env"
     set +a
 fi
+
+REDIS_PASSWORD="${REDIS_PASSWORD:-}"
+MYSQL_ROOT_PASSWORD="${MYSQL_ROOT_PASSWORD:-}"
 
 echo "=========================================="
 echo "  Studio Core — TWCC 健康檢查"
@@ -101,22 +103,28 @@ echo ""
 # ==========================================
 echo "--- Redis ---"
 
-check "Redis PING 回應" \
-    "docker exec ${REDIS_CONTAINER} redis-cli -a '${REDIS_PASSWORD}' --no-auth-warning ping | grep -q PONG"
+if [ -n "$REDIS_PASSWORD" ]; then
+    check "Redis PING 回應" \
+        "docker exec ${REDIS_CONTAINER} redis-cli -a '${REDIS_PASSWORD}' --no-auth-warning ping | grep -q PONG"
 
-warn_check "Redis 記憶體使用率 < 80%" \
-    "docker exec ${REDIS_CONTAINER} redis-cli -a '${REDIS_PASSWORD}' --no-auth-warning info memory | grep used_memory_peak_human"
+    warn_check "Redis 記憶體使用率 < 80%" \
+        "docker exec ${REDIS_CONTAINER} redis-cli -a '${REDIS_PASSWORD}' --no-auth-warning info memory | grep used_memory_peak_human"
 
-# 任務佇列
-QUEUE_LEN=$(docker exec ${REDIS_CONTAINER} redis-cli -a "${REDIS_PASSWORD}" --no-auth-warning LLEN job_queue 2>/dev/null || echo "0")
-if [ "$QUEUE_LEN" -gt 10 ] 2>/dev/null; then
-    TOTAL=$((TOTAL + 1))
-    WARNED=$((WARNED + 1))
-    echo -e "$WARN 任務佇列長度: $QUEUE_LEN (> 10，可能需要關注)"
+    # 任務佇列
+    QUEUE_LEN=$(docker exec ${REDIS_CONTAINER} redis-cli -a "${REDIS_PASSWORD}" --no-auth-warning LLEN job_queue 2>/dev/null || echo "0")
+    if [ "$QUEUE_LEN" -gt 10 ] 2>/dev/null; then
+        TOTAL=$((TOTAL + 1))
+        WARNED=$((WARNED + 1))
+        echo -e "$WARN 任務佇列長度: $QUEUE_LEN (> 10，可能需要關注)"
+    else
+        TOTAL=$((TOTAL + 1))
+        PASSED=$((PASSED + 1))
+        echo -e "$PASS 任務佇列長度: $QUEUE_LEN"
+    fi
 else
     TOTAL=$((TOTAL + 1))
-    PASSED=$((PASSED + 1))
-    echo -e "$PASS 任務佇列長度: $QUEUE_LEN"
+    WARNED=$((WARNED + 1))
+    echo -e "$WARN REDIS_PASSWORD 未設定，跳過 Redis 驗證"
 fi
 echo ""
 
@@ -125,7 +133,7 @@ echo ""
 # ==========================================
 echo "--- MySQL ---"
 
-MYSQL_PWD="${MYSQL_ROOT_PASSWORD:-}"
+MYSQL_PWD="${MYSQL_ROOT_PASSWORD}"
 if [ -n "$MYSQL_PWD" ]; then
     check "MySQL 連線正常" \
         "docker exec ${MYSQL_CONTAINER} mysql -u root -p'$MYSQL_PWD' -e 'SELECT 1;' > /dev/null 2>&1"

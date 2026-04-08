@@ -160,7 +160,7 @@ redis:
   image: redis:7.2
   command: >
     redis-server 
-    --requirepass ${REDIS_PASSWORD:-mysecret} 
+    --requirepass ${REDIS_PASSWORD} 
     --appendonly yes 
     --maxmemory 512mb         # 🔧 限制最大記憶體
     --maxmemory-policy allkeys-lru  # 🔧 LRU 淘汰策略
@@ -219,7 +219,7 @@ import os
 r = redis.Redis(
     host=os.getenv("REDIS_HOST", "localhost"),
     port=int(os.getenv("REDIS_PORT", 6379)),
-    password=os.getenv("REDIS_PASSWORD", "mysecret"),
+    password=os.getenv("REDIS_PASSWORD"),
     decode_responses=True
 )
 
