@@ -11,5 +11,10 @@
         "*.rdb",
         "*.aof"
     ],
-    "liveServer.settings.port": 5501
+    "liveServer.settings.port": 5501,
+    "chat.tools.terminal.autoApprove": {
+        "Get-CimInstance": true,
+        "Get-Command": true,
+        "Move-Item": true
+    }
 }

@@ -326,15 +326,34 @@ https://[your-id].ngrok-free.app/  → 對應 localhost:5000/
 
 ### 本地開發環境 (Windows)
 
-#### 方式 1: 統一架構部署 (推薦 ⭐)
+#### Canonical 本地 compose (推薦 ⭐)
 
-使用 Docker Compose Profiles 實現跨平台統一部署。
+本地正式邊界為 `docker-compose.yml`、`.env.local` 與 `ComfyUIworkflow/`。
+
+```powershell
+# 1. 建立本地環境契約
+copy .env.local.example .env.local
+
+# 2. 啟動本地 canonical compose
+docker compose -f docker-compose.yml --env-file .env.local up -d
+
+# 3. 若需要直接啟動 Python 行程，顯式指定 env contract
+set STUDIO_ENV_FILE=.env.local
+python backend/src/app.py
+python worker/src/main.py
+```
+
+📚 邊界說明：`docs/Environment_Boundary_Guide.md`
+
+#### 方式 1: 統一架構部署 (相容模式)
+
+使用 Docker Compose Profiles 實現跨平台統一部署。此模式保留做跨平台相容與參考，不取代上方的本地 canonical 邊界。
 
 **Windows 開發環境 (5分鐘)**
 ```batch
 # 1. 配置環境
-copy .env.unified.example .env
-# 編輯 .env 設定為 Windows 環境
+copy .env.local.example .env.local
+# 編輯 .env.local 設定為 Windows 本地環境
 
 # 2. 啟動服務
 cd scripts
@@ -404,8 +423,8 @@ start_ngrok.bat
 **Linux 環境 (5分鐘)**
 ```bash
 # 1. 配置環境
-cp .env.unified.example .env
-# 編輯 .env 設定為 Linux 環境
+cp .env.local.example .env.local
+# 編輯 .env.local 設定為 Linux 開發環境
 
 # 2. 啟動服務
 cd scripts
@@ -415,6 +434,8 @@ chmod +x start_unified_linux.sh
 ```
 
 📚 **完整指南**: [HYBRID_DEPLOYMENT_STRATEGY.md](HYBRID_DEPLOYMENT_STRATEGY.md)
+
+TWCC canonical 邊界另請參考 [docs/TWCC_HFS_COS_Mount_Guide.md](docs/TWCC_HFS_COS_Mount_Guide.md) 與 `nginx/`。
 
 #### 方式 2: 傳統部署 (向後兼容)
 
@@ -552,21 +573,24 @@ ssh ubuntu@<BASE_VM_IP>
 cd ~/studio-core
 git pull origin feature/twcc-linux-migration
 
-# 3. 設定環境變數（首次需填入所有 TWCC 實際值）
-cp .env.twcc .env
-nano .env
+# 3. 設定 TWCC 環境契約（首次可由 example 建立）
+cp .env.twcc.example .env.twcc
+nano .env.twcc
+set -a
+source .env.twcc
+set +a
 
 # 4. 首次部署：初始化資料庫
-docker compose -f docker-compose.base.yml up -d mysql
+docker compose -f docker-compose.base.yml --env-file .env.twcc up -d mysql
 sleep 30
-docker compose -f docker-compose.base.yml exec mysql \
+docker compose -f docker-compose.base.yml --env-file .env.twcc exec mysql \
   mysql -u root -p${MYSQL_ROOT_PASSWORD} studio_db < backend/schema.sql
 
 # 5. 啟動全部服務（Nginx + Flask + Redis + MySQL）
-docker compose -f docker-compose.base.yml up -d
+docker compose -f docker-compose.base.yml --env-file .env.twcc up -d
 
 # 6. 確認服務狀態
-docker compose -f docker-compose.base.yml ps
+docker compose -f docker-compose.base.yml --env-file .env.twcc ps
 curl http://localhost/api/health
 ```
 
@@ -580,9 +604,12 @@ ssh ubuntu@<GPU_VM_PRIVATE_IP>
 cd ~/studio-core
 git pull origin feature/twcc-linux-migration
 
-# 3. 設定環境（特別注意 GPU_VM_REDIS_HOST 填 Base VM 的私有 IP）
-cp .env.twcc .env
-nano .env
+# 3. 設定環境（特別注意 GPU_VM_REDIS_HOST 填 Base VM 的私有 host / 私網位址）
+cp .env.twcc.example .env.twcc
+nano .env.twcc
+set -a
+source .env.twcc
+set +a
 
 # 4. 一鍵初始化 GPU VM（僅首次執行）
 chmod +x scripts/twcc_gpu_setup.sh
@@ -723,7 +750,6 @@ ComfyUISum/
 │
 ├── openspec/                   # ⭐ OpenSpec 規格文件系統 (Phase 10 新增)
 │   ├── AGENTS.md              # OpenSpec 代理指南
-│   ├── project.md             # 專案概述
 │   ├── specs/                 # 規格文件目錄
 │   │   └── 001-stability-refactor.md  # 穩定性重構規格
 │   └── changes/               # 變更提案目錄
@@ -741,6 +767,7 @@ ComfyUISum/
 │   ├── Phase9_Completion_Report.md    # Phase 9 完成報告
 │   ├── PersonalGallery_Debug_Guide.md # Gallery 除錯指南
 │   ├── Stability_Refactor_Validation_Guide.md  # 穩定性驗證指南
+│   ├── Environment_Boundary_Guide.md  # 環境邊界與維護入口
 │   ├── Veo3_LongVideo_Guide.md        # Veo3 長片指南
 │   ├── VEO3_TEST_MODE_DEBUG.md        # Veo3 測試模式除錯
 │   └── VEO3_TEST_MODE_README.md       # Veo3 測試模式說明
@@ -1594,7 +1621,7 @@ curl http://localhost:5000/api/metrics
 
 **GPU VM 服務化**
 - ✅ 雙 systemd 服務：`comfyui.service` + `worker.service`（相依順序）
-- ✅ VRAM GPU 暖機機制（冷啟動後自動發送 256×256 預熱任務）
+- ✅ 受管 GPU 暖機機制（`WARMUP_MODE=managed|legacy|off`，預設先送 heartbeat，再以低成本 image profile 預熱 GPU）
 - ✅ `scripts/twcc_gpu_setup.sh`：GPU VM 一鍵初始建置
 
 **自動化腳本**

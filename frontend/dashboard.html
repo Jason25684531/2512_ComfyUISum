@@ -6,9 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AIGEN.IO - Creative Studio</title>
     <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="tailwind.generated.css">
     <!-- Lucide Icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="vendor/lucide.min.js"></script>
     <!-- API Configuration -->
     <script src="config.js"></script>
     <!-- Google Fonts - Orbitron (Tech/Futuristic Font) -->
@@ -366,7 +366,7 @@
             <button onclick="showCompositionMenu()"
                 class="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium text-gray-400 group nav-item hover:bg-white/5 hover:text-white transition-all"
                 data-id="canvas">
-                <i data-lucide="layers" class="w-5 h-5 group-hover:text-purple-300"></i>
+                <i data-lucide="layers-3" class="w-5 h-5 group-hover:text-purple-300"></i>
                 Image Composition
             </button>
 
@@ -380,7 +380,7 @@
             <button onclick="navigateTo('avatar')"
                 class="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium text-gray-400 group nav-item hover:bg-white/5 hover:text-white transition-all"
                 data-id="avatar">
-                <i data-lucide="user-circle-2" class="w-5 h-5 group-hover:text-emerald-300"></i>
+                <i data-lucide="circle-user-round" class="w-5 h-5 group-hover:text-emerald-300"></i>
                 Avatar Studio
             </button>
 
@@ -465,7 +465,7 @@
                 <button onclick="showCompositionMenu()"
                     class="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium text-gray-400 group nav-item hover:bg-white/5 hover:text-white transition-all"
                     data-id="canvas">
-                    <i data-lucide="layers" class="w-5 h-5 group-hover:text-purple-300"></i>
+                    <i data-lucide="layers-3" class="w-5 h-5 group-hover:text-purple-300"></i>
                     Image Composition
                 </button>
 
@@ -479,7 +479,7 @@
                 <button onclick="navigateTo('avatar')"
                     class="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium text-gray-400 group nav-item hover:bg-white/5 hover:text-white transition-all"
                     data-id="avatar">
-                    <i data-lucide="user-circle-2" class="w-5 h-5 group-hover:text-emerald-300"></i>
+                    <i data-lucide="circle-user-round" class="w-5 h-5 group-hover:text-emerald-300"></i>
                     Avatar Studio
                 </button>
 
@@ -559,7 +559,7 @@
                             class="tool-icon glass-card rounded-2xl p-6 w-72 flex flex-col items-center justify-center gap-5 group">
                             <div
                                 class="w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-500/20 to-cyan-600/20 border border-blue-500/30 flex items-center justify-center group-hover:border-blue-500/60 transition-all">
-                                <i data-lucide="layers" class="w-10 h-10 text-blue-400"></i>
+                                <i data-lucide="layers-3" class="w-10 h-10 text-blue-400"></i>
                             </div>
                             <div class="text-center">
                                 <h3 class="text-xl font-semibold text-white mb-1"
@@ -587,7 +587,7 @@
                             class="tool-icon glass-card rounded-2xl p-6 w-72 flex flex-col items-center justify-center gap-5 group">
                             <div
                                 class="w-20 h-20 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-600/20 border border-emerald-500/30 flex items-center justify-center group-hover:border-emerald-500/60 transition-all">
-                                <i data-lucide="user-circle-2" class="w-10 h-10 text-emerald-400"></i>
+                                <i data-lucide="circle-user-round" class="w-10 h-10 text-emerald-400"></i>
                             </div>
                             <div class="text-center">
                                 <h3 class="text-xl font-semibold text-white mb-1"
@@ -1169,7 +1169,7 @@
                                 <div class="flex items-center gap-4 mb-6">
                                     <div
                                         class="p-3 rounded-xl bg-gradient-to-r from-emerald-500/20 to-teal-600/20 border border-emerald-500/30">
-                                        <i data-lucide="user-circle-2" class="w-8 h-8 text-emerald-400"></i>
+                                        <i data-lucide="circle-user-round" class="w-8 h-8 text-emerald-400"></i>
                                     </div>
                                     <div>
                                         <h1 class="text-2xl font-bold text-white"
@@ -1589,7 +1589,7 @@
 
         const toolInfo = {
             'face_swap': { name: 'Face Swap', desc: '換臉', icon: 'users', color: 'purple' },
-            'multi_image_blend': { name: 'Multi-Blend', desc: '多圖融合', icon: 'layers', color: 'amber' },
+            'multi_image_blend': { name: 'Multi-Blend', desc: '多圖融合', icon: 'layers-3', color: 'amber' },
             'sketch_to_image': { name: 'Sketch to Image', desc: '草稿轉精稿', icon: 'pencil', color: 'emerald' },
             'text_to_image': { name: 'Text to Image', desc: '文生圖', icon: 'type', color: 'blue' },
             'single_image_edit': { name: 'Single Image Edit', desc: '單圖編輯', icon: 'image', color: 'pink' }
@@ -2059,7 +2059,7 @@
                 // Switch to Single Mode
                 modeLabel.textContent = '切換至多段模式';
                 if (toggleBtn && toggleBtn.querySelector('i')) {
-                    toggleBtn.querySelector('i').setAttribute('data-lucide', 'layers');
+                    toggleBtn.querySelector('i').setAttribute('data-lucide', 'layers-3');
                 }
                 if (singlePrompt) {
                     singlePrompt.style.display = 'flex';
@@ -2071,29 +2071,16 @@
             }
             lucide.createIcons();
         }
+                } else {
+                    console.log('[Auth] Not logged in, redirecting to login...');
+                    window.location.replace('/login.html');
+                    return;
+                }
 
-        function updateMultiPrompts() {
-            const container = document.getElementById('veo3-multi-prompts');
-            if (!container) return;
-
-            // 清除現有內容（保留標題）
-            const existingPrompts = container.querySelectorAll('.shot-prompt-input');
-            existingPrompts.forEach(el => el.remove());
-
-            // 為有圖片的 shot 添加 prompt 輸入框
-            for (let i = 1; i <= 5; i++) {
-                const preview = document.getElementById(`motion-preview-${i}`);
-                if (preview && !preview.classList.contains('hidden')) {
-                    const promptDiv = document.createElement('div');
+                lucide.createIcons();
                     promptDiv.className = 'shot-prompt-input';
                     promptDiv.innerHTML = `
-                        <label class="text-xs text-gray-400 mb-1 block">Shot ${i} Prompt</label>
-                        <textarea id="motion-prompt-${i}" 
-                            class="w-full custom-input rounded-lg p-2 text-xs resize-none h-12" 
-                            placeholder="Describe shot ${i}..."></textarea>
-                    `;
-                    container.appendChild(promptDiv);
-                }
+                window.location.replace('/login.html');
             }
         }
 

@@ -44,10 +44,10 @@ cd /path/to/project
 ### Step 2：放置環境檔
 
 ```bash
-cp .env.twcc .env
-nano .env
+cp .env.twcc.example .env.twcc
+nano .env.twcc
 set -a
-source .env
+source .env.twcc
 set +a
 ```
 
@@ -64,13 +64,13 @@ set +a
 
 補充：
 
-1. `set -a; source .env; set +a` 會把 `.env` 載入目前 shell，後續 `docker compose exec` 和測試指令才能直接使用 `$REDIS_PASSWORD`、`$MYSQL_ROOT_PASSWORD` 等變數。
+1. `set -a; source .env.twcc; set +a` 會把 `.env.twcc` 載入目前 shell，後續 `docker compose exec` 和測試指令才能直接使用 `$REDIS_PASSWORD`、`$MYSQL_ROOT_PASSWORD` 等變數。
 
 ### Step 3：先啟 MySQL
 
 ```bash
-docker compose -f docker-compose.base.yml --env-file .env up -d mysql
-docker compose -f docker-compose.base.yml ps
+docker compose -f docker-compose.base.yml --env-file .env.twcc up -d mysql
+docker compose -f docker-compose.base.yml --env-file .env.twcc ps
 ```
 
 ### Step 4：初始化資料庫
@@ -78,17 +78,19 @@ docker compose -f docker-compose.base.yml ps
 若有 schema：
 
 ```bash
-docker compose -f docker-compose.base.yml exec mysql \
+docker compose -f docker-compose.base.yml --env-file .env.twcc exec mysql \
   mysql -u root -p"$MYSQL_ROOT_PASSWORD" studio_db < backend/schema.sql
 ```
 
 ### Step 5：啟動 Base VM 全部服務
 
 ```bash
-docker compose -f docker-compose.base.yml --env-file .env up -d
-docker compose -f docker-compose.base.yml ps
-docker compose -f docker-compose.base.yml logs -f
+docker compose -f docker-compose.base.yml --env-file .env.twcc up -d
+docker compose -f docker-compose.base.yml --env-file .env.twcc ps
+docker compose -f docker-compose.base.yml --env-file .env.twcc logs -f
 ```
+
+雲端 canonical 邊界請同時參考 `docker-compose.unified.yml`、`nginx/` 與 `docs/TWCC_HFS_COS_Mount_Guide.md`。
 
 ### Step 6：驗證 Base VM
 

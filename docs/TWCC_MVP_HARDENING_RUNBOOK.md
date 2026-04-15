@@ -132,9 +132,9 @@ flowchart LR
 ### 5.1 CPU Web Node 啟動
 
 ```bash
-docker compose -f docker-compose.base.yml --env-file .env up -d
-docker compose -f docker-compose.base.yml ps
-docker compose -f docker-compose.base.yml logs -f
+docker compose -f docker-compose.base.yml --env-file .env.twcc up -d
+docker compose -f docker-compose.base.yml --env-file .env.twcc ps
+docker compose -f docker-compose.base.yml --env-file .env.twcc logs -f
 ```
 
 應啟動服務：

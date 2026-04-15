@@ -129,7 +129,9 @@ class ComfyClient:
         self, 
         prompt_id: str, 
         timeout: int = None,  # Phase 9: 改為 None，使用 config 預設值
-        on_progress: Optional[Callable] = None
+        on_progress: Optional[Callable] = None,
+        should_abort: Optional[Callable[[], Optional[str]]] = None,
+        on_abort: Optional[Callable[[], None]] = None,
     ) -> dict:
         """
         使用 WebSocket 等待任務完成
@@ -159,14 +161,16 @@ class ComfyClient:
             "images": [],
             "videos": [],
             "gifs": [],
-            "error": None
+            "error": None,
+            "aborted": False,
+            "abort_reason": None,
         }
         all_images = []  # 收集所有輸出圖片
         all_videos = []  # 收集所有輸出影片
         all_gifs = []    # 收集所有輸出 GIF
         
         try:
-            ws = websocket.create_connection(ws_url, timeout=timeout)
+            ws = websocket.create_connection(ws_url, timeout=COMFY_POLLING_INTERVAL)
             print(f"[ComfyClient] WebSocket 已連接，等待任務完成（超時: {timeout}s）...")
             
             start_time = time.time()
@@ -179,6 +183,20 @@ class ComfyClient:
                     result["error"] = f"執行超時（已等待 {int(elapsed)}s）"
                     print(f"[ComfyClient] ❌ 任務超時: {prompt_id} ({int(elapsed)}s)")
                     break
+
+                if should_abort:
+                    abort_reason = should_abort()
+                    if abort_reason:
+                        result["aborted"] = True
+                        result["abort_reason"] = str(abort_reason)
+                        result["error"] = "執行已中止"
+                        if on_abort:
+                            try:
+                                on_abort()
+                            except Exception as abort_error:
+                                print(f"[ComfyClient] ⚠️ 中止回呼失敗: {abort_error}")
+                        print(f"[ComfyClient] ⚠️ 任務中止: {prompt_id} ({abort_reason})")
+                        break
                 
                 # Phase 9: 每 60 秒輸出一次心跳日誌（保持連接存活，證明沒有卡死）
                 if elapsed - last_heartbeat >= 60:

@@ -6,6 +6,7 @@
 #
 # 使用方式：
 #   docker compose -f docker-compose.base.yml --env-file .env.twcc up -d
+# Repo 級 TWCC 邊界請搭配 docker-compose.unified.yml、nginx/ 與 docs/TWCC_HFS_COS_Mount_Guide.md 一併理解
 #
 # ============================================
 
@@ -60,6 +61,7 @@ services:
       - REDIS_HOST=${REDIS_HOST:-redis}
       - REDIS_PORT=${REDIS_INTERNAL_PORT:-6379}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - STUDIO_ENV_FILE=.env.selected
       - FLASK_HOST=0.0.0.0
       - FLASK_PORT=5000
       - DB_HOST=${DB_HOST:-mysql}
@@ -101,6 +103,7 @@ services:
       start_period: 15s
       retries: 3
     volumes:
+      - ${ENV_CONTRACT_FILE:-./.env.twcc}:/app/.env.selected:ro
       - ./frontend:/app/frontend:ro
       - ${STORAGE_OUTPUT_DIR:-./storage/outputs}:/app/storage/outputs
       - ${LOG_DIR:-./logs}:/app/logs

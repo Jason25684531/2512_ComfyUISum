@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "env_contract": {
+    "local": {
+      "env_file": ".env.local",
+      "example_file": ".env.local.example",
+      "canonical_assets": [
+        "docker-compose.yml",
+        ".env.local",
+        "ComfyUIworkflow/"
+      ]
+    },
+    "twcc": {
+      "env_file": ".env.twcc",
+      "example_file": ".env.twcc.example",
+      "canonical_assets": [
+        "docker-compose.unified.yml",
+        "nginx/",
+        "docs/TWCC_HFS_COS_Mount_Guide.md"
+      ]
+    }
+  },
+  "governed_paths": {
+    "common": [
+      "openspec/config.yaml",
+      "shared/utils.py",
+      "README.md",
+      ".env.local.example",
+      ".env.twcc.example",
+      ".env.unified.example",
+      "docs/Environment_Boundary_Guide.md"
+    ],
+    "local": [
+      "docker-compose.yml",
+      "ComfyUIworkflow/",
+      "scripts/start_unified_windows.bat",
+      "scripts/start_unified_linux.sh",
+      "docs/Windows_BAT_Compatibility.md"
+    ],
+    "twcc": [
+      "docker-compose.unified.yml",
+      "docker-compose.base.yml",
+      "nginx/",
+      "worker/worker.service.template",
+      "docs/TWCC_Deployment_Guide.md",
+      "docs/TWCC_PRODUCTION_LAUNCH_SOP.md",
+      "docs/TWCC_HFS_COS_Mount_Guide.md",
+      "scripts/twcc_gpu_setup.sh"
+    ]
+  },
+  "non_canonical_assets": [
+    "docker-compose.base.yml",
+    "docker-compose.dev.yml",
+    "docker-compose.dev-s3.yml",
+    "ComfyUIworkflow_Windows/",
+    ".env.unified.example"
+  ],
+  "path_allowlist": [
+    "openspec/config.yaml",
+    "shared/utils.py",
+    "README.md",
+    ".env.local.example",
+    ".env.twcc.example",
+    ".env.unified.example",
+    "docker-compose.yml",
+    "docker-compose.unified.yml",
+    "docker-compose.base.yml",
+    "docs/",
+    "nginx/",
+    "worker/worker.service.template",
+    "scripts/start_unified_windows.bat",
+    "scripts/start_unified_linux.sh",
+    "scripts/twcc_gpu_setup.sh"
+  ],
+  "scan_exclude_prefixes": [
+    "openspec/changes/environment-preservation-spec/",
+    "openspec/specs/environment-spec.md"
+  ],
+  "forbidden_literals": [
+    "202.5.255.9"
+  ]
+}

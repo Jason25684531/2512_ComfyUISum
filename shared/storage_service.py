@@ -113,7 +113,7 @@ class S3Storage:
             raise ValueError(
                 "S3_ENDPOINT 未設定！TWCC COS 必須指定 endpoint_url，"
                 "否則 boto3 會預設連向 AWS。"
-                "請在 .env.twcc 中設定 S3_ENDPOINT=https://cos.twcc.ai"
+                "請確認雲端環境合約已提供 S3_ENDPOINT。"
             )
 
         # 初始化 S3 client（強制指定 endpoint_url）

@@ -11,25 +11,39 @@ echo.
 cd /d "%~dp0"
 cd ..
 
-:: 檢查 .env 檔案
-if not exist ".env" (
-    echo [WARNING] .env file not found^^!
-    echo Creating .env from .env.unified.example...
-    copy .env.unified.example .env >nul
-    echo Please edit .env file and configure your environment.
+set "ENV_FILE=.env.local"
+
+:: 檢查本地 env contract
+if not exist "%ENV_FILE%" (
+    echo [WARNING] %ENV_FILE% file not found^^!
+    echo Creating %ENV_FILE% from .env.local.example...
+    copy .env.local.example %ENV_FILE% >nul
+    echo Please edit %ENV_FILE% and configure your local environment.
     echo.
     pause
     exit /b 1
 )
 
 :: 載入環境變數 (跳過註解和空行)
-for /f "usebackq tokens=1,* delims==" %%a in (".env") do (
+for /f "usebackq tokens=1,* delims==" %%a in ("%ENV_FILE%") do (
     set "line=%%a"
     if not "!line:~0,1!"=="#" (
         if not "!line!"=="" (
             set "%%a=%%b"
         )
     )
+)
+
+set "MISSING_ENV=0"
+call :require_env REDIS_PASSWORD
+call :require_env DB_PASSWORD
+call :require_env MYSQL_ROOT_PASSWORD
+if "!MISSING_ENV!"=="1" (
+    echo.
+    echo [ERROR] Missing required secrets in %ENV_FILE%.
+    echo Please update %ENV_FILE% and run this script again.
+    pause
+    exit /b 1
 )
 
 :: 檢查 Docker
@@ -123,7 +137,7 @@ echo.
 echo [2/5] Starting Infrastructure services...
 call :check_infra_ports
 if errorlevel 1 goto end
-docker compose -f docker-compose.unified.yml up -d redis mysql
+docker compose --env-file %ENV_FILE% -f docker-compose.unified.yml up -d redis mysql
 goto check_docker_result
 
 :: ===== Option 2: Full stack Docker =====
@@ -132,7 +146,7 @@ echo.
 echo [2/5] Starting Full stack services (Docker)...
 call :check_infra_ports
 if errorlevel 1 goto end
-docker compose -f docker-compose.unified.yml --profile windows-dev up -d
+docker compose --env-file %ENV_FILE% -f docker-compose.unified.yml --profile windows-dev up -d
 goto check_docker_result
 
 :: ===== Option 3: Local Backend + Worker =====
@@ -154,7 +168,7 @@ for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":5000" ^| findstr "LISTENING
 echo [3/5] Starting Infrastructure services...
 call :check_infra_ports
 if errorlevel 1 goto end
-docker compose -f docker-compose.unified.yml up -d redis mysql
+docker compose --env-file %ENV_FILE% -f docker-compose.unified.yml up -d redis mysql
 if errorlevel 1 goto docker_error
 
 echo [OK] Docker services started
@@ -164,9 +178,9 @@ echo [INFO] Waiting for MySQL and Redis to be ready...
 set "INFRA_READY=0"
 for /L %%i in (1,1,12) do (
     if !INFRA_READY!==0 (
-        docker compose -f docker-compose.unified.yml ps --format "{{.Health}}" 2>nul | findstr /C:"unhealthy" >nul 2>&1
+        docker compose --env-file %ENV_FILE% -f docker-compose.unified.yml ps --format "{{.Health}}" 2>nul | findstr /C:"unhealthy" >nul 2>&1
         if errorlevel 1 (
-            docker compose -f docker-compose.unified.yml ps --format "{{.Health}}" 2>nul | findstr /C:"healthy" >nul 2>&1
+            docker compose --env-file %ENV_FILE% -f docker-compose.unified.yml ps --format "{{.Health}}" 2>nul | findstr /C:"healthy" >nul 2>&1
             if not errorlevel 1 (
                 set "INFRA_READY=1"
             )
@@ -188,13 +202,13 @@ echo [OK] Virtual environment found
 echo [5/5] Starting Backend and Worker locally...
 
 :: 啟動 Backend
-start "ComfyUI Studio Backend" cmd /k "cd /d %cd% && call venv\Scripts\activate.bat && cd backend\src && echo Starting Backend... && python app.py"
+start "ComfyUI Studio Backend" cmd /k "cd /d %cd% && call venv\Scripts\activate.bat && set STUDIO_ENV_FILE=%ENV_FILE% && cd backend\src && echo Starting Backend... && python app.py"
 
 echo Waiting 8 seconds for Backend to initialize...
 timeout /t 8 /nobreak >nul
 
 :: 啟動 Worker
-start "ComfyUI Studio Worker" cmd /k "cd /d %cd% && call venv\Scripts\activate.bat && cd worker\src && echo Starting Worker... && python main.py"
+start "ComfyUI Studio Worker" cmd /k "cd /d %cd% && call venv\Scripts\activate.bat && set STUDIO_ENV_FILE=%ENV_FILE% && cd worker\src && echo Starting Worker... && python main.py"
 
 echo.
 echo ============================================
@@ -217,7 +231,7 @@ echo   1. Docker Desktop pipe not ready - restart Docker Desktop and try again.
 echo   2. Port conflict - another service is using the required port.
 echo   3. Docker Desktop in Windows containers mode - switch to Linux containers.
 echo.
-echo Run "docker compose -f docker-compose.unified.yml logs" for details.
+echo Run "docker compose --env-file %ENV_FILE% -f docker-compose.unified.yml logs" for details.
 pause
 exit /b 1
 
@@ -230,7 +244,7 @@ exit /b 1
 :check_docker_result
 if errorlevel 1 (
     echo [ERROR] Failed to start Docker services^^!
-    echo Run "docker compose -f docker-compose.unified.yml logs" for details.
+    echo Run "docker compose --env-file %ENV_FILE% -f docker-compose.unified.yml logs" for details.
     pause
     exit /b 1
 )
@@ -246,7 +260,7 @@ timeout /t 5 /nobreak >nul
 :: 檢查服務狀態
 echo.
 echo [4/5] Checking service status...
-docker compose -f docker-compose.unified.yml ps
+docker compose --env-file %ENV_FILE% -f docker-compose.unified.yml ps
 
 :: 顯示連接資訊
 echo.
@@ -261,31 +275,31 @@ echo.
 echo [SUCCESS] Services are running!
 echo.
 echo Useful commands:
-echo   docker compose -f docker-compose.unified.yml logs -f    (view logs)
-echo   docker compose -f docker-compose.unified.yml down       (stop all)
-echo   docker compose -f docker-compose.unified.yml ps         (check status)
+echo   docker compose --env-file %ENV_FILE% -f docker-compose.unified.yml logs -f    (view logs)
+echo   docker compose --env-file %ENV_FILE% -f docker-compose.unified.yml down       (stop all)
+echo   docker compose --env-file %ENV_FILE% -f docker-compose.unified.yml ps         (check status)
 echo.
 goto end
 
 :stop_services
 echo.
 echo [INFO] Stopping all services...
-docker compose -f docker-compose.unified.yml --profile windows-dev down
+docker compose --env-file %ENV_FILE% -f docker-compose.unified.yml --profile windows-dev down
 echo [OK] All services stopped
 goto end
 
 :view_logs
 echo.
 echo [INFO] Viewing logs (Press Ctrl+C to exit)...
-docker compose -f docker-compose.unified.yml logs -f
+docker compose --env-file %ENV_FILE% -f docker-compose.unified.yml logs -f
 goto end
 
 :rebuild
 echo.
 echo [INFO] Rebuilding containers...
-docker compose -f docker-compose.unified.yml --profile windows-dev down
-docker compose -f docker-compose.unified.yml --profile windows-dev build --no-cache
-docker compose -f docker-compose.unified.yml --profile windows-dev up -d
+docker compose --env-file %ENV_FILE% -f docker-compose.unified.yml --profile windows-dev down
+docker compose --env-file %ENV_FILE% -f docker-compose.unified.yml --profile windows-dev build --no-cache
+docker compose --env-file %ENV_FILE% -f docker-compose.unified.yml --profile windows-dev up -d
 echo [OK] Containers rebuilt
 goto end
 
@@ -305,22 +319,30 @@ if "%REDIS_PORT_VAL%"=="" set "REDIS_PORT_VAL=6379"
 netstat -ano 2>nul | findstr ":%MYSQL_PORT_VAL%" | findstr "LISTENING" >nul 2>&1
 if not errorlevel 1 (
     :: 排除 Docker 自己的容器
-    docker compose -f docker-compose.unified.yml ps --format "{{.Name}}" 2>nul | findstr "studio-mysql" >nul 2>&1
+    docker compose --env-file %ENV_FILE% -f docker-compose.unified.yml ps --format "{{.Name}}" 2>nul | findstr "studio-mysql" >nul 2>&1
     if errorlevel 1 (
         echo [WARN] Port %MYSQL_PORT_VAL% ^(MySQL^) is already in use by another process.
         echo        This may cause MySQL container to fail to start.
-        echo        To fix: stop the process using port %MYSQL_PORT_VAL%, or change MYSQL_PORT in .env
+        echo        To fix: stop the process using port %MYSQL_PORT_VAL%, or change MYSQL_PORT in %ENV_FILE%
     )
 )
 
 :: 檢查 Redis 端口
 netstat -ano 2>nul | findstr ":%REDIS_PORT_VAL%" | findstr "LISTENING" >nul 2>&1
 if not errorlevel 1 (
-    docker compose -f docker-compose.unified.yml ps --format "{{.Name}}" 2>nul | findstr "studio-redis" >nul 2>&1
+    docker compose --env-file %ENV_FILE% -f docker-compose.unified.yml ps --format "{{.Name}}" 2>nul | findstr "studio-redis" >nul 2>&1
     if errorlevel 1 (
         echo [WARN] Port %REDIS_PORT_VAL% ^(Redis^) is already in use by another process.
         echo        This may cause Redis container to fail to start.
-        echo        To fix: stop the process using port %REDIS_PORT_VAL%, or change REDIS_PORT in .env
+        echo        To fix: stop the process using port %REDIS_PORT_VAL%, or change REDIS_PORT in %ENV_FILE%
     )
+)
+exit /b 0
+
+:require_env
+set "ENV_VALUE=!%~1!"
+if "!ENV_VALUE!"=="" (
+    echo [ERROR] Required env var missing: %~1
+    set "MISSING_ENV=1"
 )
 exit /b 0

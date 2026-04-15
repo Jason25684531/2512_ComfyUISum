@@ -77,10 +77,10 @@ Windows / Linux 無縫切換
 
 ```batch
 cd d:\01_Project\2512_ComfyUISum
-copy .env.unified.example .env
+copy .env.local.example .env.local
 ```
 
-編輯 `.env` 檔案：
+編輯 `.env.local` 檔案：
 
 ```env
 # 平台設定
@@ -149,8 +149,8 @@ sudo apt install docker.io docker-compose nvidia-docker2
 
 ```bash
 cd /opt/ComfyUIStudio  # 或你的專案路徑
-cp .env.unified.example .env
-nano .env
+cp .env.local.example .env.local
+nano .env.local
 ```
 
 設定內容：
@@ -218,8 +218,8 @@ sudo chown -R $USER:$USER /mnt/storage
 
 ```bash
 cd /opt/ComfyUIStudio
-cp .env.unified.example .env
-nano .env
+cp .env.twcc.example .env.twcc
+nano .env.twcc
 ```
 
 **生產環境設定：**
@@ -721,8 +721,8 @@ docker-compose -f docker-compose.unified.yml restart
 
 1. **首次設定**
    ```batch
-   copy .env.unified.example .env
-   # 編輯 .env 設定為 Windows 環境
+   copy .env.local.example .env.local
+   # 編輯 .env.local 設定為 Windows 環境
    cd scripts && start_unified_windows.bat
    選擇 [1] Infrastructure only
    ```
@@ -749,8 +749,8 @@ docker-compose -f docker-compose.unified.yml restart
 
 1. **首次設定**
    ```bash
-   cp .env.unified.example .env
-   # 編輯 .env 設定為 Linux 環境
+   cp .env.local.example .env.local
+   # 編輯 .env.local 設定為 Linux 開發環境
    chmod +x scripts/start_unified_linux.sh
    cd scripts && ./start_unified_linux.sh
    選擇 [1] Development

@@ -442,14 +442,14 @@ ComfyUISum/
 │   ├── UpdateList.md          # 更新日誌 (本檔案)
 │   └── *.md                   # 各類說明文檔
 │
-├── scripts/                    # 啟動腳本 (9 個)
+├── scripts/                    # 啟動與維護腳本
+│   ├── maintenance.sh          # 環境感知維護入口
 │   ├── start_unified_windows.bat   # Windows 統一啟動 ⭐
 │   ├── start_unified_linux.sh      # Linux 統一啟動
 │   └── *.bat, *.ps1           # 其他腳本
 │
 ├── openspec/                   # OpenSpec 規格文件
 │   ├── AGENTS.md              # 代理指南
-│   ├── project.md             # 專案概述
 │   ├── specs/                 # 規格文件
 │   └── changes/               # 變更提案
 │

@@ -152,14 +152,14 @@ git checkout feature/twcc-linux-migration
 
 ```bash
 # 從範本建立環境檔
-cp .env.twcc .env
+cp .env.twcc.example .env.twcc
 
 # 編輯實際值
-nano .env
+nano .env.twcc
 
 # 載入到目前 shell，讓後續檢查指令可直接使用變數
 set -a
-source .env
+source .env.twcc
 set +a
 ```
 
@@ -187,30 +187,30 @@ set +a
 
 ```bash
 # 先單獨啟動 MySQL
-docker compose -f docker-compose.base.yml up -d mysql
+docker compose -f docker-compose.base.yml --env-file .env.twcc up -d mysql
 
 # 等待 MySQL 啟動完成（約 30 秒）
 sleep 30
 
 # 執行資料庫初始化（如有 schema 檔案）
-docker compose -f docker-compose.base.yml exec mysql \
+docker compose -f docker-compose.base.yml --env-file .env.twcc exec mysql \
   mysql -u root -p${MYSQL_ROOT_PASSWORD} studio_db < backend/schema.sql
 
 # 確認資料庫正常
-docker compose -f docker-compose.base.yml exec mysql \
+docker compose -f docker-compose.base.yml --env-file .env.twcc exec mysql \
   mysql -u root -p${MYSQL_ROOT_PASSWORD} -e "SHOW DATABASES;"
 ```
 
 ### 3.5 啟動全部服務
 
 ```bash
-docker compose -f docker-compose.base.yml up -d
+docker compose -f docker-compose.base.yml --env-file .env.twcc up -d
 
 # 檢查所有容器狀態
-docker compose -f docker-compose.base.yml ps
+docker compose -f docker-compose.base.yml --env-file .env.twcc ps
 
 # 查看 logs
-docker compose -f docker-compose.base.yml logs -f
+docker compose -f docker-compose.base.yml --env-file .env.twcc logs -f
 ```
 
 ### 3.6 驗證 Base VM
@@ -223,11 +223,11 @@ curl -I http://localhost
 curl http://localhost/api/health
 
 # Redis
-docker compose -f docker-compose.base.yml exec redis redis-cli -a "$REDIS_PASSWORD" --no-auth-warning ping
+docker compose -f docker-compose.base.yml --env-file .env.twcc exec redis redis-cli -a "$REDIS_PASSWORD" --no-auth-warning ping
 # 預期回應：PONG
 
 # MySQL
-docker compose -f docker-compose.base.yml exec mysql \
+docker compose -f docker-compose.base.yml --env-file .env.twcc exec mysql \
   mysql -u root -p${MYSQL_ROOT_PASSWORD} -e "SELECT 1;"
 ```
 
@@ -248,13 +248,15 @@ cd studio-core
 git checkout feature/twcc-linux-migration
 
 # 複製環境設定
-cp .env.twcc .env
-nano .env  # 填入實際值，特別是 GPU_VM_REDIS_HOST
+cp .env.twcc.example .env.twcc
+nano .env.twcc  # 填入實際值，特別是 GPU_VM_REDIS_HOST
 
 # 執行一鍵設定腳本
 chmod +x scripts/twcc_gpu_setup.sh
 sudo bash scripts/twcc_gpu_setup.sh
 ```
+
+雲端邊界與掛載說明請同步參考 `docs/TWCC_HFS_COS_Mount_Guide.md`。
 
 此腳本會自動完成：
 - 安裝系統套件（git, python3.10-venv, ffmpeg, nvidia-driver 等）
@@ -573,14 +575,36 @@ aws s3api get-bucket-cors \
 
 **預期行為：** ComfyUI 冷啟動需要 20-60 秒載入模型。
 
-Worker 有 **VRAM 暖機** 機制，啟動後會自動發送一個極小的 256x256 測試任務來預熱 GPU。
+Worker 現在使用 **受管 VRAM 暖機** 機制，預設模式為 `WARMUP_MODE=managed`：
+
+- Worker 會先開始送出 heartbeat，避免冷啟動期間被誤判為離線。
+- 暖機會在背景預熱低成本 image profile，不再阻塞整個啟動流程。
+- 如果啟動時 Redis 佇列裡已經有真實任務，暖機會標記為 `deferred`，讓真實任務優先。
+- 暖機狀態會出現在 `/health`、`/api/health`、`/api/metrics` 的 `warmup_*` 欄位中。
 
 如果暖機失敗不影響正常使用，只是第一個真實任務可能稍慢。
 
+**VRAM 成本取捨：**
+
+- 預設只預熱低成本 image profile，避免在冷啟動時主動載入高成本影片鏈路。
+- 高成本 video warmup 必須明確 opt-in，且建議只在確定需要時才啟用。
+
 ```bash
-# 可用環境變數跳過暖機
-# .env 中設定：
+# 預設：受管暖機（推薦）
+WARMUP_MODE=managed
+WARMUP_PROFILES=default-image
+WARMUP_MAX_PROFILES=1
+
+# 如需保留舊式同步暖機，可回退：
+# WARMUP_MODE=legacy
+
+# 如需完全停用暖機：
 SKIP_WARMUP=true
+
+# 如需明確 opt-in 高成本 video warmup：
+# WARMUP_MODE=managed
+# WARMUP_PROFILES=default-image,video-opt-in
+# WARMUP_VIDEO_WORKFLOW_PATH=ComfyUIworkflow/Veo3_VideoConnection.json
 ```
 
 ### Q5: GPU VM 沒有自動開機

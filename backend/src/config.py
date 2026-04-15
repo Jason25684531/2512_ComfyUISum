@@ -5,7 +5,6 @@ Backend Configuration
 繼承共用配置，並擴展 Backend 專用設定。
 """
 
-import os
 import sys
 from pathlib import Path
 
@@ -27,6 +26,9 @@ from shared.config_base import (
     JOB_STATUS_EXPIRE_SECONDS,
     COMFYUI_ROOT,
     COMFYUI_MODELS_DIR,
+    get_env_bool,
+    get_env_int,
+    get_env_str,
 )
 
 # ==========================================
@@ -34,9 +36,9 @@ from shared.config_base import (
 # ==========================================
 
 # Flask 配置
-FLASK_DEBUG = os.getenv("FLASK_DEBUG", "false").lower() == "true"
-FLASK_HOST = os.getenv("FLASK_HOST", "0.0.0.0")
-FLASK_PORT = int(os.getenv("FLASK_PORT", "5001"))
+FLASK_DEBUG = get_env_bool("FLASK_DEBUG", False)
+FLASK_HOST = get_env_str("FLASK_HOST", "0.0.0.0") or "0.0.0.0"
+FLASK_PORT = get_env_int("FLASK_PORT", 5001)
 
 # ComfyUI 模型路徑（模型掃描用）
 COMFYUI_CHECKPOINTS_DIR = COMFYUI_MODELS_DIR / "checkpoints"
@@ -46,8 +48,8 @@ COMFYUI_UNET_DIR = COMFYUI_MODELS_DIR / "unet"
 # [TEMP] Veo3 測試模式 (Veo3 Test Mode)
 # ==========================================
 # 當啟用時，veo3_long_video 工作流只要上傳圖片就直接返回測試視頻
-VEO3_TEST_MODE = os.getenv("VEO3_TEST_MODE", "false").lower() == "true"
-VEO3_TEST_VIDEO_PATH = os.getenv("VEO3_TEST_VIDEO_PATH", "tests/IU_Final/IU_Combine.mp4")
+VEO3_TEST_MODE = get_env_bool("VEO3_TEST_MODE", False)
+VEO3_TEST_VIDEO_PATH = get_env_str("VEO3_TEST_VIDEO_PATH", "tests/IU_Final/IU_Combine.mp4")
 
 # ==========================================
 # 除錯輸出

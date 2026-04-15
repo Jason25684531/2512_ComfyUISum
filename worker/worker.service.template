@@ -28,6 +28,7 @@ WorkingDirectory=/opt/studio-worker
 
 # 從 .env.twcc 載入環境變數
 EnvironmentFile=/opt/studio-worker/.env.twcc
+Environment=STUDIO_ENV_FILE=.env.twcc
 
 # 使用 GPU VM 專用的 Redis 連線設定（覆蓋 .env.twcc 中 Docker 預設的 redis）
 # Base VM 私有網路 IP — 安裝時由 twcc_gpu_setup.sh 替換

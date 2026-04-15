@@ -119,6 +119,36 @@ class FakeRedis:
         return self.status_map.get(key, {})
 
 
+class FakeWarmupRedis:
+    def __init__(self, warmup_map=None, queue_length=0, active_jobs=None, worker_alive=True):
+        self.warmup_map = warmup_map or {}
+        self.queue_length = queue_length
+        self.active_jobs = active_jobs or {}
+        self.worker_alive = worker_alive
+
+    def ping(self):
+        return True
+
+    def get(self, key):
+        if key == 'worker:heartbeat':
+            return 'alive' if self.worker_alive else None
+        return None
+
+    def llen(self, key):
+        return self.queue_length
+
+    def keys(self, pattern):
+        return list(self.active_jobs.keys())
+
+    def hget(self, key, field):
+        return self.active_jobs.get(key, {}).get(field)
+
+    def hgetall(self, key):
+        if key == backend_app.WARMUP_STATUS_KEY:
+            return dict(self.warmup_map)
+        return self.active_jobs.get(key, {})
+
+
 def test_status_response_escapes_dynamic_strings(monkeypatch):
     class FakeRedis:
         def hgetall(self, key):
@@ -200,6 +230,7 @@ def test_get_db_engine_requires_password(monkeypatch):
     monkeypatch.setenv("DB_USER", "studio_user")
     monkeypatch.delenv("DB_PASSWORD", raising=False)
     monkeypatch.setenv("DB_NAME", "studio_db")
+    monkeypatch.setattr(shared_database, "DB_PASSWORD", None)
 
     with pytest.raises(ValueError, match="Database credentials are not set"):
         shared_database.get_db_engine()
@@ -241,6 +272,84 @@ def test_user_to_dict_escapes_name_at_source():
     payload = user.to_dict()
 
     assert payload["name"] == "Alice &lt;script&gt;"
+
+
+def test_metrics_include_backward_compatible_warmup_fields(monkeypatch):
+    fake_redis = FakeWarmupRedis(
+        warmup_map={
+            'status': 'running',
+            'profile': 'default-image',
+            'last_error': '',
+            'mode': 'managed',
+            'started_at': '2026-04-14T12:00:00Z',
+            'completed_at': '',
+            'updated_at': '2026-04-14T12:00:30Z',
+            'enabled': 'true',
+            'terminal': 'false',
+            'timeout_seconds': '120',
+        },
+        queue_length=3,
+        active_jobs={
+            'job:status:1': {'status': 'processing'},
+            'job:status:2': {'status': 'finished'},
+        },
+        worker_alive=True,
+    )
+    monkeypatch.setattr(backend_app, 'redis_client', fake_redis)
+    monkeypatch.setattr(backend_app, 'db_client', FakeDbClient([]))
+
+    client = backend_app.app.test_client()
+    response = client.get('/api/metrics')
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload['queue_length'] == 3
+    assert payload['worker_status'] == 'online'
+    assert payload['active_jobs'] == 1
+    assert payload['warmup_status'] == 'running'
+    assert payload['warmup_profile'] == 'default-image'
+    assert payload['warmup_enabled'] is True
+    assert payload['warmup_terminal'] is False
+    assert payload['warmup_timeout_seconds'] == 120
+
+
+def test_health_and_metrics_escape_warmup_strings(monkeypatch):
+    fake_redis = FakeWarmupRedis(
+        warmup_map={
+            'status': 'running<script>',
+            'profile': 'default-image<script>',
+            'last_error': '<script>alert(1)</script>',
+            'mode': 'managed<script>',
+            'started_at': '2026-04-14T12:00:00Z',
+            'completed_at': '',
+            'updated_at': '2026-04-14T12:00:30Z',
+            'enabled': 'true',
+            'terminal': 'false',
+            'timeout_seconds': '120',
+        },
+        queue_length=0,
+        active_jobs={},
+        worker_alive=True,
+    )
+    monkeypatch.setattr(backend_app, 'redis_client', fake_redis)
+    monkeypatch.setattr(backend_app, 'db_client', FakeDbClient([]))
+
+    client = backend_app.app.test_client()
+    metrics_response = client.get('/api/metrics')
+    health_response = client.get('/api/health')
+
+    assert metrics_response.status_code == 200
+    assert health_response.status_code == 200
+
+    metrics_payload = metrics_response.get_json()
+    health_payload = health_response.get_json()
+
+    assert metrics_payload['warmup_status'] == 'running&lt;script&gt;'
+    assert metrics_payload['warmup_profile'] == 'default-image&lt;script&gt;'
+    assert metrics_payload['warmup_last_error'] == '&lt;script&gt;alert(1)&lt;/script&gt;'
+    assert health_payload['warmup_status'] == 'running&lt;script&gt;'
+    assert health_payload['warmup_profile'] == 'default-image&lt;script&gt;'
+    assert health_payload['warmup_last_error'] == '&lt;script&gt;alert(1)&lt;/script&gt;'
 
 
 def test_flask_client_authenticated_flow_covers_login_profile_history_status(monkeypatch):

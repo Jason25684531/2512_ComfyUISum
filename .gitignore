@@ -2,12 +2,14 @@
 venv/
 storage/
 .env
+.env.local
 .env.dev-s3
 .env.twcc
 redis_data/
 mysql_data/
 __pycache__/
 openspec/
+.vscode/
 
 # 日誌檔案 (保留目錄結構)
 logs/*.log
@@ -16,8 +18,14 @@ logs/*.log.*
 
 # 日誌文件
 *.log
+*.backup
 
 # # Ngrok 自動生成配置 (包含臨時 URL)
 # frontend/config.js
 
 ComfyUI/
+node_modules/
+.agent/
+.github/
+.vscode/
+.pytest_cache/

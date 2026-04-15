@@ -12,6 +12,7 @@ import logging
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
 import html
+from uuid import UUID
 
 # MySQL Connector (連接池)
 import mysql.connector
@@ -25,6 +26,8 @@ from sqlalchemy.dialects.mysql import JSON
 
 # Flask-Login
 from flask_login import UserMixin
+
+from shared.config_base import DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
 
 logger = logging.getLogger(__name__)
 
@@ -43,14 +46,14 @@ def get_db_engine(db_url: Optional[str] = None):
     global _engine
     if _engine is None:
         if db_url is None:
-            # 從環境變數建立 URL
-            host = os.getenv("DB_HOST", "localhost")
-            port = os.getenv("DB_PORT", "3306")
-            user = os.getenv("DB_USER", "studio_user")
-            password = os.getenv("DB_PASSWORD")
+            # 從共用配置建立 URL，確保本機與容器模式一致
+            host = DB_HOST
+            port = DB_PORT
+            user = DB_USER
+            password = DB_PASSWORD
             if not password:
                 raise ValueError("Database credentials are not set")
-            database = os.getenv("DB_NAME", "studio_db")
+            database = DB_NAME
             db_url = URL.create(
                 "mysql+mysqlconnector",
                 username=user,
@@ -481,7 +484,9 @@ class Database:
             是否成功
         """
         sql = "UPDATE jobs SET deleted_at = CURRENT_TIMESTAMP, is_deleted = TRUE WHERE id = %s"
-        
+
+        conn = None
+        cursor = None
         try:
             conn = self.pool.get_connection()
             cursor = conn.cursor()
@@ -493,9 +498,34 @@ class Database:
             logger.exception("✗ 軟刪除失敗")
             return False
         finally:
-            if conn.is_connected():
+            if cursor:
                 cursor.close()
+            if conn and conn.is_connected():
                 conn.close()
+
+    def soft_delete_by_output_path(self, output_path: str) -> bool:
+        """
+        向後相容：從 output_path 或檔名推導 job_id 並執行軟刪除。
+
+        Args:
+            output_path: 可為 `/outputs/<job_id>.png` 或純檔名 `<job_id>.png`
+
+        Returns:
+            是否成功
+        """
+        if not output_path:
+            return False
+
+        filename = os.path.basename(str(output_path).strip())
+        job_id, _ = os.path.splitext(filename)
+
+        try:
+            normalized_job_id = str(UUID(job_id))
+        except (ValueError, TypeError, AttributeError):
+            logger.debug(f"略過無法對應 job_id 的輸出檔: {output_path}")
+            return False
+
+        return self.soft_delete_job(normalized_job_id)
     
     def get_or_create_user_id(self, ip_address: str) -> int:
         """

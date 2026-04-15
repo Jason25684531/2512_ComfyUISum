@@ -57,12 +57,13 @@ logger.info("=" * 60)
 
 from json_parser import parse_workflow
 from comfy_client import ComfyClient
+from warmup import WarmupController
 from config import (
     REDIS_HOST, REDIS_PORT, REDIS_PASSWORD,
     COMFYUI_INPUT_DIR, JOB_QUEUE, TEMP_FILE_MAX_AGE_HOURS,
     JOB_STATUS_EXPIRE_SECONDS, STORAGE_INPUT_DIR, print_config,
     WORKER_TIMEOUT, DEFAULT_UNET_MODEL, DEFAULT_CLIP_MODEL,
-    DEFAULT_VAE_MODEL,
+    DEFAULT_VAE_MODEL, WARMUP_MODE,
 )
 from shared.config_base import (
     DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
@@ -636,95 +637,6 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
         update_job_status(r, job_id, "failed", progress=0, error="unexpected failure", db_client=db_client)
 
 
-def _build_warmup_workflow() -> dict:
-    """
-    建構最小化的暖機 workflow（256x256, step=1）
-    強制 ComfyUI 將模型載入 GPU 顯存，避免第一筆真實任務過慢
-    
-    Returns:
-        ComfyUI workflow dict，若無法建構則返回 None
-    """
-    try:
-        # 最簡單的 txt2img workflow：UNETLoader + CLIPLoader + VAELoader + KSampler
-        return {
-            "1": {
-                "class_type": "UNETLoader",
-                "inputs": {
-                    "unet_name": DEFAULT_UNET_MODEL,
-                    "weight_dtype": "default"
-                }
-            },
-            "2": {
-                "class_type": "CLIPLoader",
-                "inputs": {
-                    "clip_name": DEFAULT_CLIP_MODEL,
-                    "type": "lumina2",
-                    "device": "default"
-                }
-            },
-            "3": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {
-                    "text": "warmup test",
-                    "clip": ["2", 0]
-                }
-            },
-            "4": {
-                "class_type": "CLIPTextEncode",
-                "inputs": {
-                    "text": "",
-                    "clip": ["2", 0]
-                }
-            },
-            "5": {
-                "class_type": "EmptySD3LatentImage",
-                "inputs": {
-                    "width": 256,
-                    "height": 256,
-                    "batch_size": 1
-                }
-            },
-            "6": {
-                "class_type": "KSampler",
-                "inputs": {
-                    "model": ["1", 0],
-                    "positive": ["3", 0],
-                    "negative": ["4", 0],
-                    "latent_image": ["5", 0],
-                    "seed": 42,
-                    "steps": 1,
-                    "cfg": 1.0,
-                    "sampler_name": "euler",
-                    "scheduler": "simple",
-                    "denoise": 1.0
-                }
-            },
-            "7": {
-                "class_type": "VAELoader",
-                "inputs": {
-                    "vae_name": DEFAULT_VAE_MODEL
-                }
-            },
-            "8": {
-                "class_type": "VAEDecode",
-                "inputs": {
-                    "samples": ["6", 0],
-                    "vae": ["7", 0]
-                }
-            },
-            "9": {
-                "class_type": "SaveImage",
-                "inputs": {
-                    "images": ["8", 0],
-                    "filename_prefix": "_warmup_"
-                }
-            }
-        }
-    except Exception as e:
-        logger.warning(f"⚠️ 暖機 workflow 建構失敗: {e}")
-        return None
-
-
 def main():
     """
     Worker 主迴圈
@@ -761,55 +673,40 @@ def main():
     
     # 3. 初始化 ComfyUI 客戶端
     client = ComfyClient()
-    
-    # 4. 檢查 ComfyUI 連接
-    if client.check_connection():
-        logger.info("✅ ComfyUI 連接成功")
-        
-        # 4.1 VRAM 暖機：強制模型載入 GPU 顯存
-        # A100 首次載入 6GB 模型約需 20 秒，暖機避免第一筆任務過慢
-        skip_warmup = os.getenv('SKIP_WARMUP', 'false').lower() == 'true'
-        if not skip_warmup:
-            logger.info("🔥 執行 VRAM 暖機（載入模型到 GPU 顯存）...")
-            try:
-                warmup_workflow = _build_warmup_workflow()
-                if warmup_workflow:
-                    prompt_id = client.queue_prompt(warmup_workflow)
-                    if prompt_id:
-                        logger.info(f"🔥 暖機任務已提交 (prompt_id: {prompt_id})")
-                        # 等待暖機完成（最多 120 秒）
-                        warmup_result = client.wait_for_completion(prompt_id, timeout=120)
-                        if warmup_result and warmup_result.get("success"):
-                            logger.info("✅ VRAM 暖機完成，模型已載入 GPU 顯存")
-                        else:
-                            logger.warning("⚠️ 暖機任務未成功完成，但不影響後續運作")
-                    else:
-                        logger.warning("⚠️ 暖機任務提交失敗，跳過暖機")
-                else:
-                    logger.info("ℹ️ 未找到適用的暖機 workflow，跳過暖機")
-            except Exception as warmup_err:
-                logger.warning(f"⚠️ 暖機過程發生錯誤（不影響正常運作）: {warmup_err}")
-        else:
-            logger.info("ℹ️ SKIP_WARMUP=true，跳過 VRAM 暖機")
-    else:
-        logger.warning("⚠️ ComfyUI 尚未啟動，將持續等待...")
-    
-    # 5. 清理舊的暫存檔案
-    logger.info("🗑️ 清理過期暫存檔案...")
-    cleanup_old_temp_files()
-    
-    # 6. 清理超過 30 天的輸出圖片 (並同步資料庫)
-    logger.info("🗑️ 清理超過 30 天的輸出圖片...")
-    cleanup_old_output_files(db_client)
-    
-    # 7. 啟動 Worker 心跳線程
+    warmup_controller = WarmupController(
+        redis_client=r,
+        comfy_client=client,
+        logger=logger,
+        queue_name=JOB_QUEUE,
+    )
+
+    # 4. 啟動 Worker 心跳線程
     logger.info("💓 啟動 Worker 心跳線程...")
     heartbeat_thread = threading.Thread(target=worker_heartbeat, args=(r,), daemon=True)
     heartbeat_thread.start()
     
+    # 5. 檢查 ComfyUI 連接
+    if client.check_connection():
+        logger.info("✅ ComfyUI 連接成功")
+
+        # 5.1 啟動受管暖機流程或回退模式
+        warmup_controller.start()
+    else:
+        logger.warning("⚠️ ComfyUI 尚未啟動，將持續等待...")
+        warmup_controller.mark_unavailable()
+    
+    # 6. 清理舊的暫存檔案
+    logger.info("🗑️ 清理過期暫存檔案...")
+    cleanup_old_temp_files()
+    
+    # 7. 清理超過 30 天的輸出圖片 (並同步資料庫)
+    logger.info("🗑️ 清理超過 30 天的輸出圖片...")
+    cleanup_old_output_files(db_client)
+
     # 8. 開始處理佇列
     logger.info(f"\n監聽佇列: {JOB_QUEUE}")
     logger.info(f"ComfyUI Input 目錄: {COMFYUI_INPUT_DIR}")
+    logger.info(f"暖機模式: {WARMUP_MODE}")
     logger.info("等待任務中...\n")
     
     last_cleanup_time = time.time()
@@ -837,6 +734,7 @@ def main():
                 try:
                     job_data = json.loads(job_json)
                     _current_job_id = job_data.get('job_id', 'unknown')
+                    warmup_controller.request_priority_handoff()
                     process_job(r, client, job_data, db_client)
                     _current_job_id = None
                 except json.JSONDecodeError as e:

@@ -1,3 +1,8 @@
+# ============================================
+# 本地 canonical compose
+# 使用方式：docker compose -f docker-compose.yml --env-file .env.local up -d
+# 本地環境邊界：docker-compose.yml + .env.local + ComfyUIworkflow/
+# ============================================
 version: '3.8'
 
 services:
@@ -98,6 +103,7 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - STUDIO_ENV_FILE=.env.selected
       - FLASK_HOST=0.0.0.0
       - FLASK_PORT=5000
       - DB_HOST=mysql
@@ -115,6 +121,7 @@ services:
       - studio-net
     working_dir: /app
     volumes:
+      - ${ENV_CONTRACT_FILE:-./.env.local}:/app/.env.selected:ro
       - ./storage/outputs:/app/storage/outputs
       - ./logs:/app/logs
 
@@ -131,6 +138,7 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - STUDIO_ENV_FILE=.env.selected
       
       # [修改點] 這裡改為使用 container_name "studio-engine" 確保連線
       - COMFY_HOST=studio-engine
@@ -157,6 +165,7 @@ services:
     networks:
       - studio-net
     volumes:
+      - ${ENV_CONTRACT_FILE:-./.env.local}:/worker/.env.selected:ro
       - ./storage:/worker/storage
       - ./logs:/worker/logs
       # [確認] 這裡掛載你的工作流資料夾

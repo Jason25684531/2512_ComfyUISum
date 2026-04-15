@@ -13,9 +13,52 @@ from datetime import datetime
 from logging.handlers import TimedRotatingFileHandler
 
 
+ENV_FILE_MAP = {
+    "local": ".env.local",
+    "twcc": ".env.twcc",
+    "dev-s3": ".env.dev-s3",
+    "default": ".env",
+}
+
+
+def _resolve_env_path(base_path: Path) -> tuple[Path, str]:
+    explicit_env_file = os.getenv("STUDIO_ENV_FILE", "").strip()
+    explicit_env_name = os.getenv("STUDIO_ENV", "").strip().lower()
+
+    if explicit_env_file:
+        env_path = Path(explicit_env_file)
+        if not env_path.is_absolute():
+            env_path = (base_path / env_path).resolve()
+        return env_path, f"STUDIO_ENV_FILE={explicit_env_file}"
+
+    if explicit_env_name:
+        mapped_file = ENV_FILE_MAP.get(explicit_env_name)
+        if mapped_file is None:
+            supported = ", ".join(sorted(ENV_FILE_MAP))
+            raise ValueError(
+                f"Unsupported STUDIO_ENV='{explicit_env_name}'. Supported values: {supported}"
+            )
+        return (base_path / mapped_file).resolve(), f"STUDIO_ENV={explicit_env_name}"
+
+    local_env_path = (base_path / ".env.local").resolve()
+    legacy_env_path = (base_path / ".env").resolve()
+
+    if local_env_path.exists() and legacy_env_path.exists():
+        raise RuntimeError(
+            "Ambiguous environment selection: both .env.local and .env exist. "
+            "Set STUDIO_ENV_FILE or STUDIO_ENV explicitly."
+        )
+
+    if local_env_path.exists():
+        return local_env_path, "auto-detect .env.local"
+
+    return legacy_env_path, "default .env"
+
+
 def load_env(base_path: Path = None) -> None:
     """
-    自動載入專案根目錄的 .env 檔案
+    自動載入專案根目錄的環境檔案。
+    優先順序：STUDIO_ENV_FILE -> STUDIO_ENV -> .env.local -> .env
     
     Args:
         base_path: 基礎路徑，預設為呼叫檔案的上上層目錄
@@ -23,9 +66,10 @@ def load_env(base_path: Path = None) -> None:
     if base_path is None:
         # 預設使用專案根目錄
         base_path = Path(__file__).parent.parent
-    
-    env_path = base_path / ".env"
-    
+
+    base_path = base_path.resolve()
+    env_path, source = _resolve_env_path(base_path)
+
     if env_path.exists():
         with open(env_path, "r", encoding="utf-8") as f:
             for line in f:
@@ -33,9 +77,11 @@ def load_env(base_path: Path = None) -> None:
                 if line and not line.startswith("#") and "=" in line:
                     key, value = line.split("=", 1)
                     os.environ.setdefault(key.strip(), value.strip())
-        print(f"[env] Loaded .env: {env_path}")
+        print(f"[env] Loaded env file via {source}: {env_path}")
     else:
-        print(f"[env] Missing .env: {env_path}")
+        if source.startswith("STUDIO_ENV"):
+            raise FileNotFoundError(f"[env] Missing explicit env file: {env_path}")
+        print(f"[env] Missing env file via {source}: {env_path}")
 
 
 def get_project_root() -> Path:

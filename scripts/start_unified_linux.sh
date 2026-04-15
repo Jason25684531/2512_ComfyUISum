@@ -20,24 +20,6 @@ echo ""
 # 切換到腳本所在目錄的上一層（專案根目錄）
 cd "$(dirname "$0")/.."
 
-# 檢查 .env 檔案
-if [ ! -f ".env" ]; then
-    echo -e "${YELLOW}[WARNING]${NC} .env file not found!"
-    if [ -f ".env.unified.example" ]; then
-        echo "Creating .env from .env.unified.example..."
-        cp .env.unified.example .env
-        echo -e "${YELLOW}Please edit .env file and configure your environment.${NC}"
-        echo ""
-        exit 1
-    else
-        echo -e "${RED}[ERROR]${NC} .env.unified.example not found!"
-        exit 1
-    fi
-fi
-
-# 載入環境變數
-export $(grep -v '^#' .env | xargs)
-
 # 檢查 Docker
 echo "[1/6] Checking Docker..."
 if ! command -v docker &> /dev/null; then
@@ -58,6 +40,10 @@ if ! command -v docker-compose &> /dev/null; then
 else
     COMPOSE_CMD="docker-compose"
 fi
+
+run_compose() {
+    $COMPOSE_CMD --env-file "$ENV_FILE" -f docker-compose.unified.yml "$@"
+}
 
 # 檢查 NVIDIA GPU (可選)
 echo ""
@@ -85,14 +71,17 @@ case $CHOICE in
     1)
         PROFILE="linux-dev"
         MODE="Development"
+        DEFAULT_ENV_FILE=".env.local"
         ;;
     2)
         PROFILE="linux-prod"
         MODE="Production"
+        DEFAULT_ENV_FILE=".env.twcc"
         ;;
     3)
         PROFILE="infra-only"
         MODE="Infrastructure Only"
+        DEFAULT_ENV_FILE=".env.local"
         ;;
     4)
         echo ""
@@ -125,6 +114,27 @@ case $CHOICE in
         ;;
 esac
 
+ENV_FILE="${ENV_FILE:-$DEFAULT_ENV_FILE}"
+EXAMPLE_FILE="${ENV_FILE}.example"
+
+if [ ! -f "$ENV_FILE" ]; then
+    echo -e "${YELLOW}[WARNING]${NC} $ENV_FILE file not found!"
+    if [ -f "$EXAMPLE_FILE" ]; then
+        echo "Creating $ENV_FILE from $EXAMPLE_FILE..."
+        cp "$EXAMPLE_FILE" "$ENV_FILE"
+        echo -e "${YELLOW}Please edit $ENV_FILE and rerun this script.${NC}"
+        echo ""
+        exit 1
+    fi
+
+    echo -e "${RED}[ERROR]${NC} Missing environment contract: $ENV_FILE"
+    exit 1
+fi
+
+set -a
+source "$ENV_FILE"
+set +a
+
 # 創建必要的目錄
 echo ""
 echo "[3/6] Creating required directories..."
@@ -135,18 +145,18 @@ echo -e "${GREEN}[OK]${NC} Directories created"
 echo ""
 echo "[4/6] Pulling latest images..."
 if [ "$PROFILE" = "infra-only" ]; then
-    $COMPOSE_CMD -f docker-compose.unified.yml pull redis mysql
+    run_compose pull redis mysql
 else
-    $COMPOSE_CMD -f docker-compose.unified.yml --profile $PROFILE pull
+    run_compose --profile $PROFILE pull
 fi
 
 # 啟動服務
 echo ""
 echo "[5/6] Starting services in $MODE mode..."
 if [ "$PROFILE" = "infra-only" ]; then
-    $COMPOSE_CMD -f docker-compose.unified.yml up -d redis mysql
+    run_compose up -d redis mysql
 else
-    $COMPOSE_CMD -f docker-compose.unified.yml --profile $PROFILE up -d
+    run_compose --profile $PROFILE up -d
 fi
 
 if [ $? -ne 0 ]; then
@@ -165,7 +175,7 @@ sleep 5
 echo ""
 echo "Service status:"
 echo "----------------------------------------"
-$COMPOSE_CMD -f docker-compose.unified.yml ps
+run_compose ps
 
 # 顯示連接資訊
 echo ""
@@ -182,8 +192,8 @@ echo ""
 echo -e "${GREEN}[SUCCESS]${NC} Deployment completed!"
 echo ""
 echo "Useful commands:"
-echo "  $COMPOSE_CMD -f docker-compose.unified.yml logs -f              (view logs)"
-echo "  $COMPOSE_CMD -f docker-compose.unified.yml --profile $PROFILE down    (stop)"
-echo "  $COMPOSE_CMD -f docker-compose.unified.yml ps                   (status)"
-echo "  $COMPOSE_CMD -f docker-compose.unified.yml restart <service>    (restart)"
+echo "  $COMPOSE_CMD --env-file $ENV_FILE -f docker-compose.unified.yml logs -f              (view logs)"
+echo "  $COMPOSE_CMD --env-file $ENV_FILE -f docker-compose.unified.yml --profile $PROFILE down    (stop)"
+echo "  $COMPOSE_CMD --env-file $ENV_FILE -f docker-compose.unified.yml ps                   (status)"
+echo "  $COMPOSE_CMD --env-file $ENV_FILE -f docker-compose.unified.yml restart <service>    (restart)"
 echo ""

@@ -14,7 +14,7 @@ import base64  # <--- 🟢 請補上這一行！
 from logging.handlers import RotatingFileHandler
 from datetime import datetime
 from pathlib import Path
-from flask import Flask, request, jsonify, send_from_directory, g
+from flask import Flask, request, jsonify, send_from_directory, g, redirect
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -104,12 +104,27 @@ def _sanitize_json_response(response):
 if os.getenv('PROXY_FIX', 'false').lower() == 'true':
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
+# Local HTTP development must not mark auth cookies as Secure, otherwise
+# browsers and test clients will store them but never send them back.
+def _get_cookie_secure_setting() -> bool:
+    configured = os.getenv('SESSION_COOKIE_SECURE')
+    if configured is not None:
+        return configured.strip().lower() == 'true'
+
+    if FLASK_DEBUG_MODE:
+        return False
+
+    return os.getenv('PROXY_FIX', 'false').lower() == 'true'
+
+
+COOKIE_SECURE = _get_cookie_secure_setting()
+
 # Session Cookie 配置 - 確保跨域請求能正確處理 cookies
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # 允許同站導航攜帶 cookie
-app.config['SESSION_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', str(not FLASK_DEBUG_MODE)).lower() == 'true'
+app.config['SESSION_COOKIE_SECURE'] = COOKIE_SECURE
 app.config['SESSION_COOKIE_HTTPONLY'] = True    # 防止 JS 讀取 cookie
 app.config['REMEMBER_COOKIE_SAMESITE'] = 'Lax'
-app.config['REMEMBER_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', str(not FLASK_DEBUG_MODE)).lower() == 'true'
+app.config['REMEMBER_COOKIE_SECURE'] = COOKIE_SECURE
 
 # ============================================
 # Flask-Login 和 Flask-Bcrypt 設定
@@ -117,6 +132,13 @@ app.config['REMEMBER_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', str(no
 bcrypt = Bcrypt(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'api_login'  # 未登入時重定向的端點
+
+
+@login_manager.unauthorized_handler
+def handle_unauthorized():
+    if request.path.startswith('/api/'):
+        return jsonify({'error': 'Authentication required'}), 401
+    return redirect('/login.html')
 
 # ============================================
 # 自訂日誌過濾器
@@ -233,6 +255,7 @@ from config import (
     PROJECT_ROOT  # 需要用於定位測試視頻文件
 )
 REDIS_QUEUE_NAME = JOB_QUEUE
+WARMUP_STATUS_KEY = os.getenv('WARMUP_STATUS_KEY', 'worker:warmup:status')
 
 # ============================================
 # Database Connection Setup
@@ -1219,6 +1242,7 @@ def metrics():
         # 2. 檢查 Worker 心跳狀態
         worker_heartbeat = redis_client.get('worker:heartbeat')
         worker_status = 'online' if worker_heartbeat else 'offline'
+        warmup_snapshot = _get_worker_warmup_snapshot()
         
         # 3. 統計當前正在處理的任務（status='processing'）
         active_jobs = 0
@@ -1234,7 +1258,8 @@ def metrics():
         return jsonify({
             'queue_length': queue_length,
             'worker_status': worker_status,
-            'active_jobs': active_jobs
+            'active_jobs': active_jobs,
+            **warmup_snapshot,
         }), 200
     
     except Exception as e:
@@ -1247,17 +1272,35 @@ def metrics():
 def health():
     """健康检查接口 - 檢查 Redis 和 MySQL 狀態"""
     redis_status = 'healthy' if redis_client and redis_client.ping() else 'unavailable'
+    worker_status = 'offline'
+    warnings = []
+    warmup_snapshot = _get_worker_warmup_snapshot()
+    if redis_client:
+        try:
+            worker_status = 'online' if redis_client.get('worker:heartbeat') else 'offline'
+        except Exception as exc:
+            logger.warning(f"讀取 Worker 心跳失敗: {exc.__class__.__name__}")
     
     mysql_status = 'unavailable'
     if db_client:
         mysql_status = 'healthy' if db_client.check_connection() else 'error'
     
     overall_status = 'ok' if redis_status == 'healthy' else 'degraded'
+
+    if worker_status == 'offline':
+        warnings.append('Worker heartbeat unavailable')
+    if warmup_snapshot['warmup_status'] == 'running':
+        warnings.append('GPU warmup in progress')
+    if warmup_snapshot['warmup_status'] == 'failed' and warmup_snapshot['warmup_last_error']:
+        warnings.append(warmup_snapshot['warmup_last_error'])
     
     return jsonify({
         'status': overall_status,
         'redis': redis_status,
-        'mysql': mysql_status
+        'mysql': mysql_status,
+        'worker': worker_status,
+        **warmup_snapshot,
+        'warnings': warnings,
     }), 200
 
 
@@ -1321,6 +1364,58 @@ def get_models():
 # Statistics & Monitoring Functions (Phase 3)
 # ============================================
 
+def _parse_redis_bool(value) -> bool:
+    return str(value).strip().lower() == 'true'
+
+
+def _parse_redis_int(value, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _get_worker_warmup_snapshot() -> dict:
+    snapshot = {
+        'warmup_status': 'unknown',
+        'warmup_profile': '',
+        'warmup_last_error': '',
+        'warmup_mode': '',
+        'warmup_started_at': '',
+        'warmup_completed_at': '',
+        'warmup_updated_at': '',
+        'warmup_enabled': False,
+        'warmup_terminal': False,
+        'warmup_timeout_seconds': 0,
+    }
+
+    if not redis_client:
+        return snapshot
+
+    try:
+        raw_snapshot = redis_client.hgetall(WARMUP_STATUS_KEY) or {}
+    except Exception as exc:
+        logger.warning(f"讀取暖機狀態失敗: {exc.__class__.__name__}")
+        snapshot['warmup_last_error'] = 'Warmup status unavailable'
+        return snapshot
+
+    if not raw_snapshot:
+        return snapshot
+
+    snapshot.update({
+        'warmup_status': html.escape(str(raw_snapshot.get('status', 'unknown'))),
+        'warmup_profile': html.escape(str(raw_snapshot.get('profile', ''))),
+        'warmup_last_error': html.escape(str(raw_snapshot.get('last_error', ''))),
+        'warmup_mode': html.escape(str(raw_snapshot.get('mode', ''))),
+        'warmup_started_at': html.escape(str(raw_snapshot.get('started_at', ''))),
+        'warmup_completed_at': html.escape(str(raw_snapshot.get('completed_at', ''))),
+        'warmup_updated_at': html.escape(str(raw_snapshot.get('updated_at', ''))),
+        'warmup_enabled': _parse_redis_bool(raw_snapshot.get('enabled', 'false')),
+        'warmup_terminal': _parse_redis_bool(raw_snapshot.get('terminal', 'false')),
+        'warmup_timeout_seconds': _parse_redis_int(raw_snapshot.get('timeout_seconds', 0)),
+    })
+    return snapshot
+
 def get_redis_stats() -> dict:
     """
     獲取 Redis 統計信息
@@ -1332,7 +1427,8 @@ def get_redis_stats() -> dict:
         'queue_length': 0,
         'memory_mb': 0,
         'total_keys': 0,
-        'worker_online': False
+        'worker_online': False,
+        'warmup_status': 'unknown',
     }
     
     if not redis_client:
@@ -1353,6 +1449,7 @@ def get_redis_stats() -> dict:
         
         # Worker 線上狀態
         stats['worker_online'] = bool(redis_client.get('worker:heartbeat'))
+        stats['warmup_status'] = _get_worker_warmup_snapshot()['warmup_status']
     except Exception as e:
         logger.warning(f"獲取 Redis 統計資訊失敗: {e}")
     
@@ -1535,6 +1632,33 @@ def serve_static(path):
     try:
         frontend_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'frontend')
         frontend_dir = os.path.abspath(frontend_dir)
+
+        guest_only_pages = {'login.html'}
+        member_only_pages = {'dashboard.html', 'profile.html'}
+        legacy_pages = {'index.html'}
+
+        if path in guest_only_pages and current_user.is_authenticated:
+            return redirect('/dashboard.html', code=302)
+
+        if path in member_only_pages and not current_user.is_authenticated:
+            return redirect('/login.html', code=302)
+
+        if path in legacy_pages:
+            return redirect('/dashboard.html' if current_user.is_authenticated else '/login.html', code=302)
+
+        if path == 'favicon.ico':
+            favicon_path = os.path.join(frontend_dir, 'favicon.ico')
+            logo_dir = os.path.join(frontend_dir, 'image')
+            logo_path = os.path.join(logo_dir, 'LOGO.png')
+
+            if os.path.exists(favicon_path) and os.path.isfile(favicon_path):
+                return send_from_directory(frontend_dir, 'favicon.ico')
+
+            if os.path.exists(logo_path) and os.path.isfile(logo_path):
+                return send_from_directory(logo_dir, 'LOGO.png', mimetype='image/png')
+
+            return '', 204
+
         file_path = os.path.join(frontend_dir, path)
         if not os.path.abspath(file_path).startswith(frontend_dir + os.sep):
             logger.warning("Rejected invalid frontend path request")
