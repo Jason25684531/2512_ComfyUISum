@@ -42,6 +42,7 @@
         "/^\\$paths = @\\('C:\\\\ComfyUI_windows_portable\\\\ComfyUI\\\\output','C:\\\\ComfyUI_windows_portable\\\\ComfyUI','D:\\\\01_Project\\\\ComfyUI_windows_portable\\\\ComfyUI\\\\output','D:\\\\01_Project\\\\ComfyUI_windows_portable\\\\ComfyUI','D:\\\\01_Project\\\\2512_ComfyUISum\\\\storage\\\\outputs'\\); foreach \\(\\$path in \\$paths\\) \\{ \\[PSCustomObject\\]@\\{ Path = \\$path; Exists = Test-Path \\$path \\} \\} \\| Format-Table -AutoSize \\| Out-String$/": {
             "approve": true,
             "matchCommandLine": true
-        }
+        },
+        "ConvertFrom-Json": true
     }
 }

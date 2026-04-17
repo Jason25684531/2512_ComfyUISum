@@ -659,7 +659,7 @@
         "Node name for S&R": "LoraLoaderModelOnly"
       },
       "widgets_values": [
-        "Qwen_Edit/Lightning/Qwen-Image-Lightning-4steps-V1.0.safetensors",
+        "Qwen_Image_Edit/Qwen-Image-Edit-2509-Lightning-4steps-V1.0-bf16.safetensors",
         1
       ]
     }
