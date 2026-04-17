@@ -57,7 +57,12 @@ services:
     container_name: studio-redis
     ports:
       - "6379:6379"
-    command: redis-server --requirepass ${REDIS_PASSWORD} --appendonly yes
+    command:
+      - redis-server
+      - --requirepass
+      - ${REDIS_PASSWORD}
+      - --appendonly
+      - yes
     volumes:
       - ./redis_data:/data
     restart: always
@@ -152,6 +157,7 @@ services:
       
       # 指定輸入路徑
       - COMFYUI_INPUT_DIR=/worker/storage/inputs
+      - COMFYUI_OUTPUT_DIR=/worker/storage/outputs
 
       # Phase 9: Reliability
       - WORKER_TIMEOUT=${WORKER_TIMEOUT:-3600}

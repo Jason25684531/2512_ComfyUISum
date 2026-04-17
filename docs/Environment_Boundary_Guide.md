@@ -1,13 +1,15 @@
 # Environment Boundary Guide
 
-本文件是 `environment-spec` 的實作入口，對應 [environment_boundary_manifest.json](../environment_boundary_manifest.json)。
+本文件是 `environment-spec` 的實作入口，對應 [environment_boundary_manifest.json](../environment_boundary_manifest.json) 與 [openspec/specs/environment-spec.md](../openspec/specs/environment-spec.md)。
 
 ## Canonical 邊界
 
 | 環境 | Canonical 資產 | Env 契約 | 說明 |
 |------|----------------|----------|------|
 | 本地 | `docker-compose.yml`、`.env.local`、`ComfyUIworkflow/` | `.env.local` | 本地開發、WSL/Windows Compose 與工作流調整都以這組為準。 |
-| TWCC | `docker-compose.unified.yml`、`nginx/`、`docs/TWCC_HFS_COS_Mount_Guide.md` | `.env.twcc` 或部署注入 | 雲端部署入口、對外反向代理與 HFS/COS 掛載說明都以這組為準。 |
+| TWCC | `docker-compose.unified.yml`、`nginx/`、`docs/TWCC_HFS_COS_Mount_Guide.md` | `.env.twcc` 或部署注入 | Repo 級雲端 canonical 邊界、反向代理設定與 HFS/COS 掛載說明都以這組為準。 |
+
+> `docker-compose.base.yml` 仍可作為 TWCC split VM 的 operator runtime 相容資產，但它不再是 repo 級 canonical 邊界的一部分。
 
 ## 受治理範圍
 

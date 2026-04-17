@@ -7,6 +7,7 @@
 # Linux 開發:      docker compose -f docker-compose.unified.yml --env-file .env.local --profile linux-dev up -d
 # Linux / TWCC:    docker compose -f docker-compose.unified.yml --env-file .env.twcc --profile linux-prod up -d
 # 注意：正式本地 canonical 邊界仍為 docker-compose.yml + .env.local + ComfyUIworkflow/
+# 若未在 env contract 中顯式提供 ENV_CONTRACT_FILE，統一 compose 應直接失敗，不允許隱式退回其他環境
 
 services:
   # =========================================
@@ -24,12 +25,16 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-    command: >
-      redis-server
-      --requirepass ${REDIS_PASSWORD}
-      --appendonly yes
-      --maxmemory 512mb
-      --maxmemory-policy allkeys-lru
+    command:
+      - redis-server
+      - --requirepass
+      - ${REDIS_PASSWORD}
+      - --appendonly
+      - yes
+      - --maxmemory
+      - 512mb
+      - --maxmemory-policy
+      - allkeys-lru
     volumes:
       - ${REDIS_DATA_PATH:-./redis_data}:/data
     restart: ${RESTART_POLICY:-unless-stopped}
@@ -126,7 +131,7 @@ services:
           memory: 512M
     working_dir: /app
     volumes:
-      - ${ENV_CONTRACT_FILE:-./.env.twcc}:/app/.env.selected:ro
+      - ${ENV_CONTRACT_FILE:?Set ENV_CONTRACT_FILE to ./.env.local or ./.env.twcc}:/app/.env.selected:ro
       - ./frontend:/frontend
       - ${STORAGE_OUTPUT_DIR:-./storage/outputs}:/app/storage/outputs
       - ${LOG_DIR:-./logs}:/app/logs
@@ -162,6 +167,7 @@ services:
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_NAME=${DB_NAME:-studio_db}
       - COMFYUI_INPUT_DIR=/worker/storage/inputs
+      - COMFYUI_OUTPUT_DIR=/worker/storage/outputs
 
       # Phase 9: Reliability
       - WORKER_TIMEOUT=${WORKER_TIMEOUT:-3600}
@@ -182,7 +188,7 @@ services:
           cpus: '1.0'
           memory: 1G
     volumes:
-      - ${ENV_CONTRACT_FILE:-./.env.twcc}:/worker/.env.selected:ro
+      - ${ENV_CONTRACT_FILE:?Set ENV_CONTRACT_FILE to ./.env.local or ./.env.twcc}:/worker/.env.selected:ro
       - ${STORAGE_DIR:-./storage}:/worker/storage
       - ${LOG_DIR:-./logs}:/worker/logs
       - ${WORKFLOW_DIR:-./ComfyUIworkflow}:/app/ComfyUIworkflow

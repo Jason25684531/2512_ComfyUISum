@@ -33,6 +33,7 @@ from shared.config_base import (
     get_env_str,
     parse_csv_env,
     parse_key_int_map,
+    resolve_path_setting,
     resolve_service_endpoint,
 )
 
@@ -68,14 +69,16 @@ COMFY_HTTP_URL = COMFYUI_SERVER_URL
 COMFY_WS_URL = _comfy_endpoint.ws_url
 
 # ComfyUI 資料夾路徑
-COMFYUI_INPUT_DIR = Path(get_env_str(
+COMFYUI_INPUT_DIR = resolve_path_setting(
     "COMFYUI_INPUT_DIR",
-    str(COMFYUI_ROOT / "input")
-))
-COMFYUI_OUTPUT_DIR = Path(get_env_str(
+    COMFYUI_ROOT / "input",
+    PROJECT_ROOT,
+)
+COMFYUI_OUTPUT_DIR = resolve_path_setting(
     "COMFYUI_OUTPUT_DIR",
-    str(COMFYUI_ROOT / "output")
-))
+    COMFYUI_ROOT / "output",
+    PROJECT_ROOT,
+)
 
 # 確保 ComfyUI 輸入目錄存在
 COMFYUI_INPUT_DIR.mkdir(parents=True, exist_ok=True)

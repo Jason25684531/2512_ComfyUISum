@@ -36,6 +36,14 @@
             scrollbar-width: none;
         }
 
+        .noise-overlay {
+            background-image:
+                radial-gradient(rgba(255, 255, 255, 0.08) 0.7px, transparent 0.7px),
+                radial-gradient(rgba(255, 255, 255, 0.04) 0.5px, transparent 0.5px);
+            background-position: 0 0, 13px 17px;
+            background-size: 24px 24px, 31px 31px;
+        }
+
         /* Mobile-first Responsive Adjustments */
         @media (max-width: 768px) {
             #sidebar {
@@ -312,8 +320,7 @@
             style="animation-duration: 20s; animation-delay: 5s;"></div>
         <div class="liquid-blob bg-[#06b6d4] w-[150px] md:w-[300px] h-[150px] md:h-[300px] top-[40%] right-[30%] opacity-30 blur-[80px]"
             style="animation-duration: 25s;"></div>
-        <div
-            class="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-30 mix-blend-overlay">
+        <div class="noise-overlay absolute inset-0 opacity-30 mix-blend-overlay">
         </div>
     </div>
 

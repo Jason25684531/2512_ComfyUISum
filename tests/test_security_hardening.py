@@ -1,3 +1,4 @@
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,6 +14,14 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 if str(BACKEND_SRC) not in sys.path:
     sys.path.insert(0, str(BACKEND_SRC))
+
+os.environ.setdefault("STUDIO_ENV_FILE", ".env.local")
+os.environ.setdefault("REDIS_CONNECT_RETRIES", "0")
+os.environ.setdefault("REDIS_HOST", "127.0.0.1")
+os.environ.setdefault("REDIS_PORT", "1")
+os.environ.setdefault("DB_HOST", "127.0.0.1")
+os.environ.setdefault("DB_PORT", "1")
+os.environ.setdefault("DB_PASSWORD", "test-password")
 
 import app as backend_app
 from shared import database as shared_database

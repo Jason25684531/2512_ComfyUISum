@@ -552,6 +552,10 @@ print('Storage type:', type(storage).__name__)
 
 ### TWCC 雲端部署（生產環境）
 
+> Repo 級 TWCC canonical 邊界以 `docker-compose.unified.yml`、`nginx/` 與 `docs/TWCC_HFS_COS_Mount_Guide.md` 為準；`docker-compose.base.yml` 則保留給 split VM runtime 的相容操作流程。
+
+📚 邊界與掛載說明：`docs/Environment_Boundary_Guide.md`、`docs/TWCC_HFS_COS_Mount_Guide.md`
+
 #### 快速部署流程
 
 ```

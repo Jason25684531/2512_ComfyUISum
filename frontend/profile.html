@@ -165,6 +165,14 @@
                 background-position: -200% 0;
             }
         }
+
+        .noise-overlay {
+            background-image:
+                radial-gradient(rgba(255, 255, 255, 0.08) 0.7px, transparent 0.7px),
+                radial-gradient(rgba(255, 255, 255, 0.04) 0.5px, transparent 0.5px);
+            background-position: 0 0, 13px 17px;
+            background-size: 24px 24px, 31px 31px;
+        }
     </style>
 </head>
 
@@ -179,8 +187,7 @@
         <div class="liquid-blob bg-[#3b0764] w-[400px] h-[400px] top-[30%] right-[10%]"
             style="animation-duration: 18s; animation-delay: 2s;"></div>
         <div class="absolute inset-0 bg-[#020205]/40"></div>
-        <div
-            class="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-30 mix-blend-overlay">
+        <div class="noise-overlay absolute inset-0 opacity-30 mix-blend-overlay">
         </div>
     </div>
 

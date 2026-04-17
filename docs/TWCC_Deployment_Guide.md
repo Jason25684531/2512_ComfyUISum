@@ -3,8 +3,8 @@
 > Studio Core (ComfyUI Middleware) — 從單機 Windows 遷移至 TWCC Linux 雙 VM 架構
 
 > **執行主檔說明**
-> TWCC 目前的 CPU Web Node 生產執行檔是 [docker-compose.base.yml](d:/01_Project/2512_ComfyUISum/docker-compose.base.yml)。
-> [docker-compose.unified.yml](d:/01_Project/2512_ComfyUISum/docker-compose.unified.yml) 仍保留給跨平台開發、單機 Linux 與共用配置參考，不是目前 TWCC Web Node 的正式 runtime 檔。
+> Repo 級 TWCC canonical 邊界為 `docker-compose.unified.yml`、`nginx/` 與 `docs/TWCC_HFS_COS_Mount_Guide.md`。
+> `docker-compose.base.yml` 仍保留作為 split VM CPU Web Node 的相容 runtime 檔，用於實際 Base VM 啟動流程。
 
 ---
 

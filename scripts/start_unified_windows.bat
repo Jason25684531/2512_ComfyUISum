@@ -49,59 +49,22 @@ if "!MISSING_ENV!"=="1" (
 :: 檢查 Docker
 echo [1/5] Checking Docker...
 
-:: 先確認 Docker Desktop 進程存在
-tasklist /FI "IMAGENAME eq Docker Desktop.exe" 2>nul | find /I "Docker Desktop.exe" >nul
+:: 只要 docker compose CLI 可用就放行，實際 daemon 可用性由後續 compose up 判定
+docker compose version >nul 2>&1
 if errorlevel 1 (
-    echo [ERROR] Docker Desktop is not running^^!
-    echo Please start Docker Desktop first.
+    echo [ERROR] docker compose command is not available^^!
+    echo Please install Docker Desktop or ensure docker is on PATH.
     pause
     exit /b 1
 )
 
-:: 切換到 desktop-linux context (Linux containers 模式)
+:: 嘗試切換到 desktop-linux context (Linux containers 模式)，失敗僅警告
 docker context use desktop-linux >nul 2>&1
 if errorlevel 1 (
     echo [WARN] Could not switch to desktop-linux context, using default context.
 )
 
-:: 測試 Docker engine 是否可用 (含重試機制)
-set "DOCKER_READY=0"
-for /L %%i in (1,1,5) do (
-    if !DOCKER_READY!==0 (
-        docker info >nul 2>&1
-        if not errorlevel 1 (
-            set "DOCKER_READY=1"
-        ) else (
-            echo [INFO] Waiting for Docker engine to be ready... ^(attempt %%i/5^)
-            timeout /t 3 /nobreak >nul
-        )
-    )
-)
-if !DOCKER_READY!==0 (
-    echo [ERROR] Docker engine is not available^^!
-    echo.
-    echo Possible causes:
-    echo   1. Docker Desktop is still starting up - wait and try again.
-    echo   2. Docker Desktop is in Windows containers mode.
-    echo.
-    echo FIX: Right-click the Docker Desktop icon in the system tray,
-    echo      then select "Switch to Linux containers..."
-    echo      Wait ~30 seconds for Docker to restart, then run this script again.
-    echo.
-    pause
-    exit /b 1
-)
-
-:: 額外驗證: 確認 docker compose 可連接 (防止 pipe 錯誤)
-docker compose version >nul 2>&1
-if errorlevel 1 (
-    echo [ERROR] docker compose is not available^^!
-    echo Please ensure Docker Desktop is fully started.
-    pause
-    exit /b 1
-)
-
-echo [OK] Docker is running ^(Linux containers mode^)
+echo [OK] docker compose command is available. Continuing startup flow...
 
 :: 檢查 docker-compose.unified.yml
 if not exist "docker-compose.unified.yml" (
@@ -173,42 +136,24 @@ if errorlevel 1 goto docker_error
 
 echo [OK] Docker services started
 
-:: 等待 MySQL 和 Redis 完全啟動
-echo [INFO] Waiting for MySQL and Redis to be ready...
-set "INFRA_READY=0"
-for /L %%i in (1,1,12) do (
-    if !INFRA_READY!==0 (
-        docker compose --env-file %ENV_FILE% -f docker-compose.unified.yml ps --format "{{.Health}}" 2>nul | findstr /C:"unhealthy" >nul 2>&1
-        if errorlevel 1 (
-            docker compose --env-file %ENV_FILE% -f docker-compose.unified.yml ps --format "{{.Health}}" 2>nul | findstr /C:"healthy" >nul 2>&1
-            if not errorlevel 1 (
-                set "INFRA_READY=1"
-            )
-        )
-        if !INFRA_READY!==0 (
-            echo [INFO] Services starting... ^(%%i/12^)
-            timeout /t 5 /nobreak >nul
-        )
-    )
-)
-if !INFRA_READY!==0 (
-    echo [WARN] Services may not be fully ready yet. Continuing anyway...
-)
+:: 優先等待 Redis / MySQL healthy，逾時只警告不阻斷，避免 Backend 在 DB 尚未 ready 時進入降級模式
+call :wait_for_local_infra
 
 echo [4/5] Checking virtual environment...
 if not exist "venv\Scripts\activate.bat" goto venv_error
+if not exist "venv\Scripts\python.exe" goto venv_error
 echo [OK] Virtual environment found
 
 echo [5/5] Starting Backend and Worker locally...
 
 :: 啟動 Backend
-start "ComfyUI Studio Backend" cmd /k "cd /d %cd% && call venv\Scripts\activate.bat && set STUDIO_ENV_FILE=%ENV_FILE% && cd backend\src && echo Starting Backend... && python app.py"
+start "ComfyUI Studio Backend" cmd /k "cd /d %cd% && set STUDIO_ENV_FILE=%ENV_FILE% && cd backend\src && echo Starting Backend... && ..\..\venv\Scripts\python.exe app.py"
 
 echo Waiting 8 seconds for Backend to initialize...
-timeout /t 8 /nobreak >nul
+call :sleep_seconds 8
 
 :: 啟動 Worker
-start "ComfyUI Studio Worker" cmd /k "cd /d %cd% && call venv\Scripts\activate.bat && set STUDIO_ENV_FILE=%ENV_FILE% && cd worker\src && echo Starting Worker... && python main.py"
+start "ComfyUI Studio Worker" cmd /k "cd /d %cd% && set STUDIO_ENV_FILE=%ENV_FILE% && cd worker\src && echo Starting Worker... && ..\..\venv\Scripts\python.exe main.py"
 
 echo.
 echo ============================================
@@ -255,7 +200,7 @@ echo [OK] Docker services started
 :: 等待服務就緒
 echo.
 echo [3/5] Waiting for services to be ready...
-timeout /t 5 /nobreak >nul
+call :sleep_seconds 5
 
 :: 檢查服務狀態
 echo.
@@ -337,6 +282,35 @@ if not errorlevel 1 (
         echo        To fix: stop the process using port %REDIS_PORT_VAL%, or change REDIS_PORT in %ENV_FILE%
     )
 )
+exit /b 0
+
+:wait_for_local_infra
+echo [INFO] Waiting for Redis and MySQL health checks...
+set "WAIT_REDIS_HEALTH=unknown"
+set "WAIT_MYSQL_HEALTH=unknown"
+for /L %%i in (1,1,12) do (
+    set "WAIT_REDIS_HEALTH=unknown"
+    set "WAIT_MYSQL_HEALTH=unknown"
+
+    for /f "delims=" %%r in ('docker inspect --format "{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}" studio-redis 2^>nul') do set "WAIT_REDIS_HEALTH=%%r"
+    for /f "delims=" %%m in ('docker inspect --format "{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}" studio-mysql 2^>nul') do set "WAIT_MYSQL_HEALTH=%%m"
+
+    if /I "!WAIT_REDIS_HEALTH!"=="healthy" (
+        if /I "!WAIT_MYSQL_HEALTH!"=="healthy" (
+            echo [OK] Redis and MySQL are healthy.
+            exit /b 0
+        )
+    )
+
+    echo [INFO] Infra not ready yet ^(attempt %%i/12^): redis=!WAIT_REDIS_HEALTH!, mysql=!WAIT_MYSQL_HEALTH!
+    call :sleep_seconds 5
+)
+
+echo [WARN] Redis/MySQL are not healthy yet. Continuing startup anyway...
+exit /b 0
+
+:sleep_seconds
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Sleep -Seconds %~1" >nul
 exit /b 0
 
 :require_env

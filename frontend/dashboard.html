@@ -11,11 +11,6 @@
     <script src="vendor/lucide.min.js"></script>
     <!-- API Configuration -->
     <script src="config.js"></script>
-    <!-- Google Fonts - Orbitron (Tech/Futuristic Font) -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&display=swap"
-        rel="stylesheet">
 
     <style>
         /* Hide Scrollbar */
@@ -316,6 +311,14 @@
                 left: 200%;
             }
         }
+
+        .noise-overlay {
+            background-image:
+                radial-gradient(rgba(255, 255, 255, 0.08) 0.7px, transparent 0.7px),
+                radial-gradient(rgba(255, 255, 255, 0.04) 0.5px, transparent 0.5px);
+            background-position: 0 0, 13px 17px;
+            background-size: 24px 24px, 31px 31px;
+        }
     </style>
 </head>
 
@@ -331,8 +334,7 @@
         <!-- Gradient Overlay -->
         <div class="absolute inset-0 bg-gradient-to-b from-[#020205]/0 via-[#020205]/90 to-[#020205]/100"></div>
         <!-- Noise Texture -->
-        <div
-            class="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-40 mix-blend-overlay">
+        <div class="noise-overlay absolute inset-0 opacity-40 mix-blend-overlay">
         </div>
     </div>
 
@@ -978,8 +980,9 @@
                                     <!-- Shot Upload Zones -->
                                     <div class="space-y-3" id="motion-shots-upload"></div>
                                     <!-- Multi Prompts (in sidebar for multi mode) -->
-                                    <div id="veo3-multi-prompts" class="hidden space-y-2 mt-4">
+                                    <div id="motion-prompt-summary" class="hidden space-y-2 mt-4">
                                         <h4 class="text-[10px] font-bold text-white uppercase">Shot Prompts</h4>
+                                        <div id="motion-prompt-summary-list" class="space-y-1"></div>
                                     </div>
                                 </div>
 
@@ -1120,19 +1123,19 @@
                                     <div class="space-y-2">
                                         <input type="text" id="veo3-segment-0"
                                             class="w-full custom-input rounded-lg p-3 text-sm"
-                                            placeholder="Segment 1 (Optional)" />
+                                            placeholder="Segment 1 (Optional)" oninput="updateMotionPromptSummary()" />
                                         <input type="text" id="veo3-segment-1"
                                             class="w-full custom-input rounded-lg p-3 text-sm"
-                                            placeholder="Segment 2 (Optional)" />
+                                            placeholder="Segment 2 (Optional)" oninput="updateMotionPromptSummary()" />
                                         <input type="text" id="veo3-segment-2"
                                             class="w-full custom-input rounded-lg p-3 text-sm"
-                                            placeholder="Segment 3 (Optional)" />
+                                            placeholder="Segment 3 (Optional)" oninput="updateMotionPromptSummary()" />
                                         <input type="text" id="veo3-segment-3"
                                             class="w-full custom-input rounded-lg p-3 text-sm"
-                                            placeholder="Segment 4 (Optional)" />
+                                            placeholder="Segment 4 (Optional)" oninput="updateMotionPromptSummary()" />
                                         <input type="text" id="veo3-segment-4"
                                             class="w-full custom-input rounded-lg p-3 text-sm"
-                                            placeholder="Segment 5 (Optional)" />
+                                            placeholder="Segment 5 (Optional)" oninput="updateMotionPromptSummary()" />
                                     </div>
                                     <button id="btn-motion-generate-multi" type="button"
                                         onclick="handleMotionGenerate()"
@@ -1381,7 +1384,8 @@
         });
 
         // API Configuration
-        const API_BASE = (typeof window.API_URL !== 'undefined') ? window.API_URL : '';
+        const API_BASE = (typeof window.API_URL !== 'undefined' && window.API_URL) ? window.API_URL : '';
+        const API_URL = API_BASE;
         console.log('[Dashboard] API_BASE:', API_BASE || '(relative path)');
 
         // Current View State
@@ -1471,6 +1475,7 @@
             const authUser = document.getElementById('auth-user');
             const topbarGuest = document.getElementById('topbar-guest');
             const topbarUser = document.getElementById('topbar-user');
+            const sidebarUserName = document.getElementById('sidebar-user-name');
 
             try {
                 const response = await fetch(`${API_BASE}/api/me`, {
@@ -1490,6 +1495,9 @@
                     topbarUser.classList.add('flex');
 
                     document.getElementById('topbar-user-name').textContent = data.user.name || '會員中心';
+                    if (sidebarUserName) {
+                        sidebarUserName.textContent = data.user.name || '會員中心';
+                    }
                     console.log('[Auth] Logged in as:', data.user.email);
                 } else {
                     // Not logged in
@@ -1500,6 +1508,9 @@
                     topbarGuest.classList.remove('hidden');
                     topbarGuest.classList.add('flex');
                     topbarUser.classList.add('hidden');
+                    if (sidebarUserName) {
+                        sidebarUserName.textContent = '會員中心';
+                    }
 
                     console.log('[Auth] Not logged in');
                 }
@@ -1514,6 +1525,9 @@
                 topbarGuest.classList.remove('hidden');
                 topbarGuest.classList.add('flex');
                 topbarUser.classList.add('hidden');
+                if (sidebarUserName) {
+                    sidebarUserName.textContent = '會員中心';
+                }
             }
         }
 
@@ -1548,9 +1562,11 @@
             checkLoginStatus();
 
             // Initialize Multi-Shot UI if motion workspace exists
-            if (document.getElementById('motion-shots-upload')) {
+            const motionShotsUpload = document.getElementById('motion-shots-upload');
+            if (motionShotsUpload && !motionShotsUpload.children.length) {
                 initMotionShotsUI();
             }
+            syncMotionPromptMode();
 
             // Final icon initialization
             console.log('[Lucide] DOMContentLoaded - Final initialization');
@@ -1985,9 +2001,11 @@
             });
 
             // 初始化 Motion Shots UI
-            if (document.getElementById('motion-shots-upload')) {
+            const motionShotsUpload = document.getElementById('motion-shots-upload');
+            if (motionShotsUpload && !motionShotsUpload.children.length) {
                 initMotionShotsUI();
             }
+            syncMotionPromptMode();
 
             lucide.createIcons();
         }
@@ -2028,60 +2046,106 @@
             const descs = { veo3_long_video: 'Multi-Shot', t2v_veo3: 'Text to Video', flf_veo3: 'First-Last Frame' };
             document.getElementById('video-tool-name').textContent = names[toolId] || '';
             document.getElementById('video-tool-desc').textContent = descs[toolId] || '';
+            syncMotionPromptMode();
             lucide.createIcons();
         }
 
         // Veo3 Mode Toggle
         window.veo3MultiMode = false; // Default to Single Mode
-        function toggleVeo3Mode() {
-            window.veo3MultiMode = !window.veo3MultiMode;
+
+        function updateMotionPromptSummary() {
+            const summaryContainer = document.getElementById('motion-prompt-summary');
+            const summaryList = document.getElementById('motion-prompt-summary-list');
+            if (!summaryContainer || !summaryList) {
+                return;
+            }
+
+            summaryList.replaceChildren();
+
+            let summaryCount = 0;
+            for (let shotIndex = 1; shotIndex <= 5; shotIndex++) {
+                const shotInput = document.getElementById(`motion-file-${shotIndex}`);
+                const hasImage = Boolean(shotInput && shotInput.files && shotInput.files[0]);
+                if (!hasImage) {
+                    continue;
+                }
+
+                const segmentInput = document.getElementById(`veo3-segment-${shotIndex - 1}`);
+                const item = document.createElement('div');
+                item.className = 'text-[10px] text-gray-400 leading-relaxed';
+                item.textContent = `Shot ${shotIndex}: ${segmentInput && segmentInput.value.trim() ? segmentInput.value.trim() : '待補提示詞'}`;
+                summaryList.appendChild(item);
+                summaryCount += 1;
+            }
+
+            const shouldShowSummary = currentVideoTool === 'veo3_long_video' && window.veo3MultiMode && summaryCount > 0;
+            summaryContainer.classList.toggle('hidden', !shouldShowSummary);
+        }
+
+        function syncMotionPromptMode() {
+            const isLongVideoTool = currentVideoTool === 'veo3_long_video';
             const modeLabel = document.getElementById('mode-label');
             const singlePrompt = document.getElementById('motion-single-prompt');
             const multiPrompts = document.getElementById('motion-multi-prompts');
             const toggleBtn = document.getElementById('toggle-veo3-mode');
+            const summaryContainer = document.getElementById('motion-prompt-summary');
 
-            console.log('[Video Studio] Toggling mode to:', window.veo3MultiMode ? 'Multi' : 'Single');
+            if (toggleBtn) {
+                toggleBtn.classList.toggle('hidden', !isLongVideoTool);
+                const icon = toggleBtn.querySelector('i');
+                if (icon) {
+                    icon.setAttribute('data-lucide', window.veo3MultiMode ? 'layout' : 'layers-3');
+                }
+            }
 
-            if (window.veo3MultiMode) {
-                // Switch to Multi Mode
-                modeLabel.textContent = '切換至單段模式';
-                if (toggleBtn && toggleBtn.querySelector('i')) {
-                    toggleBtn.querySelector('i').setAttribute('data-lucide', 'layout');
+            if (!isLongVideoTool) {
+                if (modeLabel) {
+                    modeLabel.textContent = '切換至多段模式';
                 }
                 if (singlePrompt) {
-                    singlePrompt.style.display = 'none';
-                }
-                if (multiPrompts) {
-                    multiPrompts.classList.remove('hidden');
-                    multiPrompts.style.display = 'flex';
-                }
-            } else {
-                // Switch to Single Mode
-                modeLabel.textContent = '切換至多段模式';
-                if (toggleBtn && toggleBtn.querySelector('i')) {
-                    toggleBtn.querySelector('i').setAttribute('data-lucide', 'layers-3');
-                }
-                if (singlePrompt) {
+                    singlePrompt.classList.remove('hidden');
                     singlePrompt.style.display = 'flex';
                 }
                 if (multiPrompts) {
                     multiPrompts.classList.add('hidden');
                     multiPrompts.style.display = 'none';
                 }
-            }
-            lucide.createIcons();
-        }
-                } else {
-                    console.log('[Auth] Not logged in, redirecting to login...');
-                    window.location.replace('/login.html');
-                    return;
+                if (summaryContainer) {
+                    summaryContainer.classList.add('hidden');
                 }
-
-                lucide.createIcons();
-                    promptDiv.className = 'shot-prompt-input';
-                    promptDiv.innerHTML = `
-                window.location.replace('/login.html');
+                if (typeof lucide !== 'undefined') {
+                    lucide.createIcons();
+                }
+                return;
             }
+
+            if (modeLabel) {
+                modeLabel.textContent = window.veo3MultiMode ? '切換至單段模式' : '切換至多段模式';
+            }
+            if (singlePrompt) {
+                singlePrompt.classList.toggle('hidden', window.veo3MultiMode);
+                singlePrompt.style.display = window.veo3MultiMode ? 'none' : 'flex';
+            }
+            if (multiPrompts) {
+                multiPrompts.classList.toggle('hidden', !window.veo3MultiMode);
+                multiPrompts.style.display = window.veo3MultiMode ? 'flex' : 'none';
+            }
+
+            updateMotionPromptSummary();
+
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
+            }
+        }
+
+        function toggleVeo3Mode() {
+            if (currentVideoTool !== 'veo3_long_video') {
+                return;
+            }
+
+            window.veo3MultiMode = !window.veo3MultiMode;
+            console.log('[Video Studio] Toggling mode to:', window.veo3MultiMode ? 'Multi' : 'Single');
+            syncMotionPromptMode();
         }
 
         // Motion Shots UI
@@ -2122,11 +2186,7 @@
                 preview.classList.remove('hidden');
                 placeholder.classList.add('hidden');
                 zone.classList.add('has-image');
-
-                // 如果是 Multi Mode，更新 prompt 輸入框
-                if (!window.veo3SingleMode) {
-                    updateMultiPrompts();
-                }
+                updateMotionPromptSummary();
             };
             reader.readAsDataURL(file);
         }
@@ -2173,11 +2233,51 @@
             });
         }
 
+        function getRequestErrorMessage(status, authMessage, defaultMessage) {
+            if (status === 401 || status === 403) {
+                return authMessage;
+            }
+            if (status === 408 || status === 504) {
+                return '請求逾時，請稍後再試';
+            }
+            return defaultMessage;
+        }
+
+        function resolveOutputUrl(outputPath) {
+            if (!outputPath) {
+                return '';
+            }
+            if (outputPath.startsWith('http')) {
+                return outputPath;
+            }
+
+            const filename = outputPath.split('/').pop().split('\\').pop();
+            return `${API_BASE}/outputs/${filename}`;
+        }
+
+        function restoreAsyncButton(btn, originalHTML) {
+            if (!btn) {
+                return;
+            }
+
+            btn.disabled = false;
+            btn.classList.remove('opacity-50', 'cursor-not-allowed');
+            btn.innerHTML = originalHTML;
+
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
+            }
+        }
+
         // Motion Generate
         async function handleMotionGenerate() {
             console.log('[Motion] Generate triggered, currentVideoTool:', currentVideoTool);
             const statusEl = document.getElementById('motion-status');
-            const btn = document.getElementById('btn-motion-generate') || document.getElementById('btn-motion-generate-multi');
+            const isMultiMode = currentVideoTool === 'veo3_long_video' && Boolean(window.veo3MultiMode);
+            const btn = isMultiMode ? document.getElementById('btn-motion-generate-multi') : document.getElementById('btn-motion-generate');
+            if (!statusEl || !btn) {
+                return;
+            }
 
             // 获取 prompt，优先使用 motion-prompt-input
             let prompt = document.getElementById('motion-prompt-input')?.value || '';
@@ -2220,7 +2320,6 @@
 
                 } else if (currentVideoTool === 'veo3_long_video') {
                     workflow = 'veo3_long_video';
-                    const isMultiMode = window.veo3MultiMode || false;
 
                     if (isMultiMode) {
                         // Multi Mode: 使用 veo3-segment-0 到 veo3-segment-4
@@ -2265,7 +2364,7 @@
                 });
 
                 if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                    throw new Error(getRequestErrorMessage(response.status, '請先登入後再使用影片生成', '影片生成提交失敗，請稍後再試'));
                 }
 
                 const data = await response.json();
@@ -2274,15 +2373,13 @@
                     statusEl.textContent = '任務已提交，正在生成...';
                     pollMotionStatus(data.job_id, btn, originalHTML);
                 } else {
-                    throw new Error('No job_id received');
+                    throw new Error('影片生成服務暫時無回應，請稍後再試');
                 }
             } catch (error) {
                 console.error('Motion generation error:', error);
-                statusEl.textContent = `錯誤: ${error.message}`;
+                statusEl.textContent = error.message || '影片生成失敗，請稍後再試';
                 statusEl.className = 'text-sm text-center mt-3 min-h-[40px] flex items-center justify-center text-red-400';
-                btn.disabled = false;
-                btn.classList.remove('opacity-50', 'cursor-not-allowed');
-                btn.innerHTML = originalHTML;
+                restoreAsyncButton(btn, originalHTML);
             }
         }
 
@@ -2295,11 +2392,9 @@
                 pollCount++;
                 if (pollCount > maxPolls) {
                     clearInterval(interval);
-                    statusEl.textContent = '生成超時';
+                    statusEl.textContent = '影片生成逾時，請稍後再試';
                     statusEl.className = 'text-sm text-center mt-3 min-h-[40px] flex items-center justify-center text-red-400';
-                    btn.disabled = false;
-                    btn.classList.remove('opacity-50', 'cursor-not-allowed');
-                    btn.innerHTML = originalHTML;
+                    restoreAsyncButton(btn, originalHTML);
                     return;
                 }
 
@@ -2307,6 +2402,9 @@
                     const response = await fetch(`${API_URL}/api/status/${jobId}`, {
                         credentials: 'include'
                     });
+                    if (!response.ok) {
+                        throw new Error(getRequestErrorMessage(response.status, '登入狀態已失效，請重新登入後再試', '影片狀態查詢失敗，請稍後再試'));
+                    }
                     const data = await response.json();
 
                     if (data.status === 'finished') {
@@ -2317,27 +2415,19 @@
                         // 🔧 修復：後端返回 image_url，需要處理完整路徑
                         const outputPath = data.image_url || data.output_path || data.result;
                         if (outputPath) {
-                            let fullVideoUrl = outputPath;
-                            if (!outputPath.startsWith('http')) {
-                                const filename = outputPath.split('/').pop().split('\\').pop();
-                                fullVideoUrl = `${API_URL}/outputs/${filename}`;
-                            }
+                            const fullVideoUrl = resolveOutputUrl(outputPath);
                             showMotionResult(fullVideoUrl);
                         } else {
                             statusEl.textContent = '⚠️ 生成完成但未返回輸出路徑';
                             statusEl.className = 'text-sm text-center mt-3 min-h-[40px] flex items-center justify-center text-yellow-400';
                         }
 
-                        btn.disabled = false;
-                        btn.classList.remove('opacity-50', 'cursor-not-allowed');
-                        btn.innerHTML = originalHTML;
+                        restoreAsyncButton(btn, originalHTML);
                     } else if (data.status === 'failed') {
                         clearInterval(interval);
-                        statusEl.textContent = `生成失敗: ${data.error || '未知錯誤'}`;
+                        statusEl.textContent = '影片生成失敗，請稍後再試';
                         statusEl.className = 'text-sm text-center mt-3 min-h-[40px] flex items-center justify-center text-red-400';
-                        btn.disabled = false;
-                        btn.classList.remove('opacity-50', 'cursor-not-allowed');
-                        btn.innerHTML = originalHTML;
+                        restoreAsyncButton(btn, originalHTML);
                     } else if (data.status === 'processing') {
                         statusEl.textContent = `處理中... (${data.progress || 0}%)`;
                     } else if (data.status === 'queued') {
@@ -2345,6 +2435,10 @@
                     }
                 } catch (error) {
                     console.error('Poll error:', error);
+                    clearInterval(interval);
+                    statusEl.textContent = error.message || '影片狀態查詢失敗，請稍後再試';
+                    statusEl.className = 'text-sm text-center mt-3 min-h-[40px] flex items-center justify-center text-red-400';
+                    restoreAsyncButton(btn, originalHTML);
                 }
             }, 2000);
         }
@@ -2496,7 +2590,7 @@
                 });
 
                 if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                    throw new Error(getRequestErrorMessage(response.status, '請先登入後再使用虛擬人影片生成', '虛擬人影片提交失敗，請稍後再試'));
                 }
 
                 const data = await response.json();
@@ -2505,15 +2599,13 @@
                     statusEl.textContent = '任務已提交，正在生成...';
                     pollAvatarStatus(data.job_id, btn, originalHTML);
                 } else {
-                    throw new Error('No job_id received');
+                    throw new Error('虛擬人服務暫時無回應，請稍後再試');
                 }
             } catch (error) {
                 console.error('Avatar generation error:', error);
-                statusEl.textContent = `錯誤: ${error.message}`;
+                statusEl.textContent = error.message || '虛擬人影片生成失敗，請稍後再試';
                 statusEl.className = 'mt-4 p-4 rounded-xl text-center min-h-[60px] flex items-center justify-center bg-red-500/10 text-red-400';
-                btn.disabled = false;
-                btn.classList.remove('opacity-50', 'cursor-not-allowed');
-                btn.innerHTML = originalHTML;
+                restoreAsyncButton(btn, originalHTML);
             }
         }
 
@@ -2526,11 +2618,9 @@
                 pollCount++;
                 if (pollCount > maxPolls) {
                     clearInterval(interval);
-                    statusEl.textContent = '生成超時';
+                    statusEl.textContent = '虛擬人影片生成逾時，請稍後再試';
                     statusEl.className = 'mt-4 p-4 rounded-xl text-center min-h-[60px] flex items-center justify-center bg-red-500/10 text-red-400';
-                    btn.disabled = false;
-                    btn.classList.remove('opacity-50', 'cursor-not-allowed');
-                    btn.innerHTML = originalHTML;
+                    restoreAsyncButton(btn, originalHTML);
                     return;
                 }
 
@@ -2538,6 +2628,9 @@
                     const response = await fetch(`${API_URL}/api/status/${jobId}`, {
                         credentials: 'include'
                     });
+                    if (!response.ok) {
+                        throw new Error(getRequestErrorMessage(response.status, '登入狀態已失效，請重新登入後再試', '虛擬人狀態查詢失敗，請稍後再試'));
+                    }
                     const data = await response.json();
 
                     if (data.status === 'finished') {
@@ -2548,28 +2641,19 @@
                         // 🔧 修復：後端返回 image_url，需要處理完整路徑
                         const outputPath = data.image_url || data.output_path || data.result;
                         if (outputPath) {
-                            // 處理路徑：如果是相對路徑，加上 API_URL 前綴
-                            let fullVideoUrl = outputPath;
-                            if (!outputPath.startsWith('http')) {
-                                const filename = outputPath.split('/').pop().split('\\').pop();
-                                fullVideoUrl = `${API_URL}/outputs/${filename}`;
-                            }
+                            const fullVideoUrl = resolveOutputUrl(outputPath);
                             showAvatarResult(fullVideoUrl);
                         } else {
                             statusEl.textContent = '⚠️ 生成完成但未返回輸出路徑';
                             statusEl.className = 'mt-4 p-4 rounded-xl text-center min-h-[60px] flex items-center justify-center bg-yellow-500/10 text-yellow-400';
                         }
 
-                        btn.disabled = false;
-                        btn.classList.remove('opacity-50', 'cursor-not-allowed');
-                        btn.innerHTML = originalHTML;
+                        restoreAsyncButton(btn, originalHTML);
                     } else if (data.status === 'failed') {
                         clearInterval(interval);
-                        statusEl.textContent = `生成失敗: ${data.error || '未知錯誤'}`;
+                        statusEl.textContent = '虛擬人影片生成失敗，請稍後再試';
                         statusEl.className = 'mt-4 p-4 rounded-xl text-center min-h-[60px] flex items-center justify-center bg-red-500/10 text-red-400';
-                        btn.disabled = false;
-                        btn.classList.remove('opacity-50', 'cursor-not-allowed');
-                        btn.innerHTML = originalHTML;
+                        restoreAsyncButton(btn, originalHTML);
                     } else if (data.status === 'processing') {
                         statusEl.textContent = `處理中... (${data.progress || 0}%)`;
                     } else if (data.status === 'queued') {
@@ -2577,6 +2661,10 @@
                     }
                 } catch (error) {
                     console.error('Poll error:', error);
+                    clearInterval(interval);
+                    statusEl.textContent = error.message || '虛擬人狀態查詢失敗，請稍後再試';
+                    statusEl.className = 'mt-4 p-4 rounded-xl text-center min-h-[60px] flex items-center justify-center bg-red-500/10 text-red-400';
+                    restoreAsyncButton(btn, originalHTML);
                 }
             }, 2000);
         }

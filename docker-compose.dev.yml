@@ -3,6 +3,7 @@
 # ============================================
 # 使用場景：本地開發、調試、測試
 # 特點：只啟動基礎服務，手動運行 Backend 和 Worker
+# 邊界定位：此檔保留作為本地相容資產，不是正式 local canonical compose
 
 version: '3.8'
 
@@ -13,7 +14,12 @@ services:
     container_name: studio-redis
     ports:
       - "6379:6379"
-    command: redis-server --requirepass ${REDIS_PASSWORD} --appendonly yes
+    command:
+      - redis-server
+      - --requirepass
+      - ${REDIS_PASSWORD}
+      - --appendonly
+      - yes
     volumes:
       - ./redis_data:/data
     restart: always

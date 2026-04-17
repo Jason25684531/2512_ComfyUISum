@@ -3,6 +3,7 @@
 # ============================================
 # 用途：在本地 Windows 環境驗證 S3/COS 邏輯
 #       推上 TWCC 前先用 MinIO 模擬 S3 API
+# 邊界定位：此檔僅供本地 S3 相容測試，不屬於 local 或 TWCC canonical 邊界
 #
 # 使用方式：
 #   docker compose -f docker-compose.dev-s3.yml --env-file .env.dev-s3 up -d
@@ -21,10 +22,12 @@ services:
     container_name: studio-redis
     ports:
       - "6379:6379"
-    command: >
-      redis-server
-      --requirepass ${REDIS_PASSWORD}
-      --appendonly yes
+    command:
+      - redis-server
+      - --requirepass
+      - ${REDIS_PASSWORD}
+      - --appendonly
+      - yes
     volumes:
       - ./redis_data:/data
     restart: unless-stopped

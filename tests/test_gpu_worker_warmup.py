@@ -4,6 +4,8 @@ import os
 import sys
 from pathlib import Path
 
+os.environ.setdefault("STUDIO_ENV_FILE", ".env.local")
+
 from shared.utils import load_env
 
 
@@ -71,6 +73,7 @@ class FakeComfyClient:
 
 
 def load_worker_modules(monkeypatch):
+    monkeypatch.setenv("STUDIO_ENV_FILE", ".env.twcc")
     load_env(PROJECT_ROOT)
     monkeypatch.setenv("DB_PASSWORD", os.getenv("DB_PASSWORD", "test-password"))
 

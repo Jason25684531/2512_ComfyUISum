@@ -28,7 +28,8 @@
       ".env.local.example",
       ".env.twcc.example",
       ".env.unified.example",
-      "docs/Environment_Boundary_Guide.md"
+      "docs/Environment_Boundary_Guide.md",
+      "openspec/specs/environment-spec.md"
     ],
     "local": [
       "docker-compose.yml",
@@ -62,6 +63,7 @@
     ".env.local.example",
     ".env.twcc.example",
     ".env.unified.example",
+    "openspec/specs/environment-spec.md",
     "docker-compose.yml",
     "docker-compose.unified.yml",
     "docker-compose.base.yml",

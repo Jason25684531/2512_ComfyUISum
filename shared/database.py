@@ -16,7 +16,7 @@ from uuid import UUID
 
 # MySQL Connector (連接池)
 import mysql.connector
-from mysql.connector import pooling, Error
+from mysql.connector import pooling, Error, errorcode
 
 # SQLAlchemy ORM
 from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Boolean, ForeignKey
@@ -230,12 +230,88 @@ class Database:
             "pool_size": pool_size,
             "pool_reset_session": True,
         }
-        
+
+        self.pool = None
+        self._initialize_pool()
+
+    @staticmethod
+    def _quote_identifier(value: str) -> str:
+        return f"`{value.replace('`', '``')}`"
+
+    @staticmethod
+    def _quote_sql_literal(value: str) -> str:
+        return "'" + value.replace("\\", "\\\\").replace("'", "''") + "'"
+
+    def _should_attempt_access_repair(self, exc: Error) -> bool:
+        root_password = os.getenv("MYSQL_ROOT_PASSWORD", "").strip()
+        if self.config["user"] == "root" or not root_password:
+            return False
+
+        errno = getattr(exc, "errno", None)
+        if errno == errorcode.ER_ACCESS_DENIED_ERROR:
+            return True
+
+        return "access denied" in str(exc).lower()
+
+    def _repair_application_user(self) -> None:
+        root_password = os.getenv("MYSQL_ROOT_PASSWORD", "").strip()
+        if not root_password:
+            raise ValueError("MYSQL_ROOT_PASSWORD is not set; cannot repair local application user")
+
+        connection = None
+        cursor = None
+        database_name = self._quote_identifier(str(self.config["database"]))
+        user_literal = self._quote_sql_literal(str(self.config["user"]))
+        password_literal = self._quote_sql_literal(str(self.config["password"]))
+
+        try:
+            connection = mysql.connector.connect(
+                host=self.config["host"],
+                port=self.config["port"],
+                user="root",
+                password=root_password,
+            )
+            cursor = connection.cursor()
+            cursor.execute(
+                f"CREATE DATABASE IF NOT EXISTS {database_name} "
+                "CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+            )
+            cursor.execute(
+                f"CREATE USER IF NOT EXISTS {user_literal}@'%' IDENTIFIED BY {password_literal}"
+            )
+            cursor.execute(
+                f"ALTER USER {user_literal}@'%' IDENTIFIED BY {password_literal}"
+            )
+            cursor.execute(
+                f"GRANT ALL PRIVILEGES ON {database_name}.* TO {user_literal}@'%'"
+            )
+            cursor.execute("FLUSH PRIVILEGES")
+            connection.commit()
+            logger.info("✓ MySQL 應用帳號已使用 root 自動同步")
+        finally:
+            if cursor is not None:
+                cursor.close()
+            if connection is not None and connection.is_connected():
+                connection.close()
+
+    def _initialize_pool(self) -> None:
         try:
             self.pool = pooling.MySQLConnectionPool(**self.config)
-            logger.info(f"✓ MySQL 連接池建立成功: {host}:{port}/{database}")
+            logger.info(
+                f"✓ MySQL 連接池建立成功: {self.config['host']}:{self.config['port']}/{self.config['database']}"
+            )
             self._init_schema()
         except Error as e:
+            if self._should_attempt_access_repair(e):
+                logger.warning("⚠️ 偵測到 MySQL 應用帳號驗證失敗，嘗試以 root 自動修復本機帳號與權限")
+                self._repair_application_user()
+                self.pool = pooling.MySQLConnectionPool(**self.config)
+                logger.info(
+                    f"✓ MySQL 連接池建立成功: {self.config['host']}:{self.config['port']}/{self.config['database']}"
+                )
+                self._init_schema()
+                return
+
             logger.exception("✗ MySQL 連接池建立失敗")
             raise
     
@@ -291,6 +367,8 @@ class Database:
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
         """
         
+        conn = None
+        cursor = None
         try:
             conn = self.pool.get_connection()
             cursor = conn.cursor()
@@ -304,8 +382,9 @@ class Database:
         except Error as e:
             logger.exception("✗ 建立表失敗")
         finally:
-            if conn.is_connected():
+            if cursor is not None:
                 cursor.close()
+            if conn is not None and conn.is_connected():
                 conn.close()
     
     def insert_job(
