@@ -191,8 +191,8 @@ services:
       - ${ENV_CONTRACT_FILE:?Set ENV_CONTRACT_FILE to ./.env.local or ./.env.twcc}:/worker/.env.selected:ro
       - ${STORAGE_DIR:-./storage}:/worker/storage
       - ${LOG_DIR:-./logs}:/worker/logs
-      - ${WORKFLOW_DIR:-./ComfyUIworkflow}:/app/ComfyUIworkflow
-      - ./ComfyUIworkflow_Windows:/ComfyUIworkflow_Windows
+      - ${WORKFLOW_DIR:-./ComfyUIworkflow}:/worker/ComfyUIworkflow
+      - ./ComfyUIworkflow_api:/worker/ComfyUIworkflow_api
   # =========================================
   # Nginx 網關 (統一入口)
   # =========================================

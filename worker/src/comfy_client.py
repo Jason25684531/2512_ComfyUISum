@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Optional, Callable
 from urllib.parse import urlparse
 
+from comfy_paths import normalize_comfy_paths
 from config import (
     COMFY_HOST, COMFY_PORT, COMFY_HTTP_URL, COMFY_WS_URL,
     COMFYUI_OUTPUT_DIR, STORAGE_OUTPUT_DIR, COMFY_HTTP_TIMEOUT
@@ -122,7 +123,7 @@ class ComfyClient:
             prompt_id: 執行 ID，失敗時返回 None
         """
         payload = {
-            "prompt": workflow,
+            "prompt": normalize_comfy_paths(workflow),
             "client_id": self.client_id
         }
         

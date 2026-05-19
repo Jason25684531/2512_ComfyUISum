@@ -14,6 +14,7 @@ COPY worker/src/ src/
 
 # 複製 Workflow 定義檔
 COPY ComfyUIworkflow/ ComfyUIworkflow/
+COPY ComfyUIworkflow_api/ ComfyUIworkflow_api/
 
 # 設定 PYTHONPATH 以正確載入 shared 模組
 ENV PYTHONPATH=/worker

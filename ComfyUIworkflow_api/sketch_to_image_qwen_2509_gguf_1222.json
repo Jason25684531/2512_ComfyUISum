@@ -1,9 +1,9 @@
 {
   "119": {
     "inputs": {
-      "filename_prefix": "集成應用1222/單圖編輯",
+      "filename_prefix": "集成應用1222/草圖轉精稿",
       "images": [
-        "123:8",
+        "124:8",
         0
       ]
     },
@@ -14,18 +14,18 @@
   },
   "120": {
     "inputs": {
-      "image": "原圖.png"
+      "image": "æ__ç__å___00059_.png"
     },
     "class_type": "LoadImage",
     "_meta": {
       "title": "圖1"
     }
   },
-  "123:75": {
+  "124:75": {
     "inputs": {
       "strength": 1,
       "model": [
-        "123:66",
+        "124:66",
         0
       ]
     },
@@ -34,11 +34,11 @@
       "title": "CFGNorm"
     }
   },
-  "123:66": {
+  "124:66": {
     "inputs": {
       "shift": 3,
       "model": [
-        "123:89",
+        "124:89",
         0
       ]
     },
@@ -47,25 +47,9 @@
       "title": "ModelSamplingAuraFlow"
     }
   },
-  "123:88": {
+  "124:38": {
     "inputs": {
-      "pixels": [
-        "123:93",
-        0
-      ],
-      "vae": [
-        "123:39",
-        0
-      ]
-    },
-    "class_type": "VAEEncode",
-    "_meta": {
-      "title": "VAE Encode"
-    }
-  },
-  "123:38": {
-    "inputs": {
-      "clip_name": "Qwen_Image_Edit\\qwen_2.5_vl_7b_fp8_scaled.safetensors",
+      "clip_name": "Qwen_Image_Edit/split_files/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors",
       "type": "qwen_image",
       "device": "default"
     },
@@ -74,37 +58,37 @@
       "title": "Load CLIP"
     }
   },
-  "123:39": {
+  "124:39": {
     "inputs": {
-      "vae_name": "Qwen_Image_Edit\\qwen_image_vae.safetensors"
+      "vae_name": "Qwen_Image_Edit/split_files/vae/qwen_image_vae.safetensors"
     },
     "class_type": "VAELoader",
     "_meta": {
       "title": "Load VAE"
     }
   },
-  "123:3": {
+  "124:3": {
     "inputs": {
-      "seed": 227550580270653,
+      "seed": 753371465939905,
       "steps": 4,
       "cfg": 1,
       "sampler_name": "euler",
       "scheduler": "simple",
       "denoise": 1,
       "model": [
-        "123:75",
+        "124:75",
         0
       ],
       "positive": [
-        "123:111",
+        "124:111",
         0
       ],
       "negative": [
-        "123:119",
+        "124:110",
         0
       ],
       "latent_image": [
-        "123:112",
+        "124:88",
         0
       ]
     },
@@ -113,7 +97,7 @@
       "title": "KSampler"
     }
   },
-  "123:93": {
+  "124:93": {
     "inputs": {
       "upscale_method": "lanczos",
       "megapixels": 1,
@@ -128,7 +112,7 @@
       "title": "ImageScaleToTotalPixels"
     }
   },
-  "123:112": {
+  "124:112": {
     "inputs": {
       "width": 1232,
       "height": 1904,
@@ -139,14 +123,14 @@
       "title": "EmptySD3LatentImage"
     }
   },
-  "123:8": {
+  "124:8": {
     "inputs": {
       "samples": [
-        "123:3",
+        "124:3",
         0
       ],
       "vae": [
-        "123:39",
+        "124:39",
         0
       ]
     },
@@ -155,12 +139,21 @@
       "title": "VAE Decode"
     }
   },
-  "123:89": {
+  "124:115": {
     "inputs": {
-      "lora_name": "Qwen_Image_Edit\\Qwen-Image-Edit-2509-Lightning-4steps-V1.0-bf16.safetensors",
+      "unet_name": "Qwen_Image_Edit/Qwen-Image-Edit-2509-Q4_K_M.gguf"
+    },
+    "class_type": "UnetLoaderGGUF",
+    "_meta": {
+      "title": "Unet Loader (GGUF)"
+    }
+  },
+  "124:89": {
+    "inputs": {
+      "lora_name": "Qwen_Edit/Lightning/Qwen-Image-Lightning-4steps-V1.0.safetensors",
       "strength_model": 1,
       "model": [
-        "123:115",
+        "124:115",
         0
       ]
     },
@@ -169,24 +162,31 @@
       "title": "LoraLoaderModelOnly"
     }
   },
-  "123:115": {
+  "124:88": {
     "inputs": {
-      "unet_name": "Qwen_Image_Edit\\Qwen-Image-Edit-2509-Q4_K_M.gguf"
-    },
-    "class_type": "UnetLoaderGGUF",
-    "_meta": {
-      "title": "Unet Loader (GGUF)"
-    }
-  },
-  "123:111": {
-    "inputs": {
-      "prompt": "飲料旁邊放一盞檯燈",
-      "clip": [
-        "123:38",
+      "pixels": [
+        "124:93",
         0
       ],
       "vae": [
-        "123:39",
+        "124:39",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAE Encode"
+    }
+  },
+  "124:111": {
+    "inputs": {
+      "prompt": "A photorealistic 3D rendered product shot",
+      "clip": [
+        "124:38",
+        0
+      ],
+      "vae": [
+        "124:39",
         0
       ],
       "image1": [
@@ -199,15 +199,15 @@
       "title": "TextEncodeQwenImageEditPlus"
     }
   },
-  "123:119": {
+  "124:110": {
     "inputs": {
       "prompt": "",
       "clip": [
-        "123:38",
+        "124:38",
         0
       ],
       "vae": [
-        "123:39",
+        "124:39",
         0
       ],
       "image1": [

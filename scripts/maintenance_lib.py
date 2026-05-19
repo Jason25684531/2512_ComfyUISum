@@ -21,6 +21,7 @@ STATIC_DEPRECATED_ASSETS = (
 )
 PROTECTED_PREFIXES = (
     Path("ComfyUIworkflow"),
+    Path("ComfyUIworkflow_api"),
     Path("storage"),
     Path("nginx"),
 )

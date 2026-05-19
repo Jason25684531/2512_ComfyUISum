@@ -24,8 +24,14 @@
 - `docker-compose.base.yml`
 - `docker-compose.dev.yml`
 - `docker-compose.dev-s3.yml`
-- `ComfyUIworkflow_Windows/`
+- `ComfyUIworkflow_api/`
 - `.env.unified.example`
+
+## Workflow Directories
+
+- `ComfyUIworkflow/` is the UI export source directory.
+- `ComfyUIworkflow_api/` stores API-ready fallback workflows that can be submitted to ComfyUI `/prompt`.
+- When the worker detects a UI-exported workflow in `ComfyUIworkflow/`, it automatically loads the matching file from `ComfyUIworkflow_api/`.
 
 以下資產已明確視為 deprecated，不得再當成正式環境輸入或長期維護基線：
 

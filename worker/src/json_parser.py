@@ -13,7 +13,7 @@ import builtins
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-API_WORKFLOW_FALLBACK_DIR = PROJECT_ROOT / "ComfyUIworkflow_Windows"
+API_WORKFLOW_FALLBACK_DIR = PROJECT_ROOT / "ComfyUIworkflow_api"
 DEFAULT_UNET_MODEL = os.getenv(
     "DEFAULT_UNET_MODEL",
     "z-image\\z-image-turbo-fp8-e4m3fn.safetensors",

@@ -316,7 +316,7 @@ class WarmupController:
         if not candidate_path.is_absolute():
             candidate_path = (PROJECT_ROOT / candidate_path).resolve()
 
-        allowed_roots = [WORKFLOW_DIR, PROJECT_ROOT / "ComfyUIworkflow_Windows"]
+        allowed_roots = [WORKFLOW_DIR, PROJECT_ROOT / "ComfyUIworkflow_api"]
         if not any(_is_within_directory(candidate_path, root) for root in allowed_roots):
             return None
         if not candidate_path.exists() or not candidate_path.is_file():

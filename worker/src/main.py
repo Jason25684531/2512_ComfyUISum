@@ -23,6 +23,7 @@ from datetime import datetime, timedelta
 # ============================================
 _shutdown_flag = False
 _current_job_id = None  # 追蹤當前處理中的任務
+GPU_SYNC_WARNING = "雙機模式需要先將圖片上傳到 GPU ComfyUI input，否則 LoadImage 會失敗"
 
 
 def _shutdown_handler(signum, frame):
@@ -201,6 +202,20 @@ def copy_audio_to_comfyui(audio_filename: str, job_id: str) -> str:
     
     logger.info(f"🎵 已複製音訊: {audio_filename} -> {new_filename} ({source_path.stat().st_size} bytes)")
     return new_filename
+
+
+def sync_image_to_comfyui_input(client: ComfyClient, filepath: Path, job_logger) -> None:
+    # TODO: Keep /upload/image as the canonical bridge for CPU/GPU split deployments.
+    job_logger.info(
+        "Syncing input image to GPU ComfyUI input via /upload/image: %s",
+        filepath.name,
+    )
+    if client.upload_image(str(filepath)):
+        return
+
+    message = f"{GPU_SYNC_WARNING}；目前上傳失敗: {filepath.name}"
+    job_logger.error(message)
+    raise RuntimeError(message)
 
 
 def cleanup_old_temp_files():
@@ -427,7 +442,7 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
                         
                         # 🌟【新增這兩行】：把存在 CPU 的檔案，透過網路推送到 GPU
                         filepath = Path(COMFYUI_INPUT_DIR) / filename
-                        client.upload_image(str(filepath))
+                        sync_image_to_comfyui_input(client, filepath, job_logger)
                         
                     except Exception as e:
                         job_logger.warning(f"⚠️ 處理圖片 {field_name} 失敗: {e}")
@@ -645,6 +660,7 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
 
 
 def main():
+    global _current_job_id
     """
     Worker 主迴圈
     """

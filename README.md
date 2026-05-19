@@ -12,6 +12,12 @@
 [功能特點](#-核心功能) • [快速開始](#-快速開始) • [架構說明](#-系統架構) • [API 文檔](#-api-端點) • [故障排除](#-故障排除)
 
 </div>
+ 
+## Workflow Fallback Notes
+
+- `ComfyUIworkflow/` keeps the original UI-exported workflow sources.
+- `ComfyUIworkflow_api/` keeps API-ready fallback workflows that can be submitted directly to ComfyUI `/prompt`.
+- When the worker detects a UI-exported workflow in `ComfyUIworkflow/`, it automatically loads the matching API fallback file from `ComfyUIworkflow_api/`.
 
 ---
 

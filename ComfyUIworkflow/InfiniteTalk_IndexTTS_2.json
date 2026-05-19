@@ -1,7 +1,7 @@
 {
   "120": {
     "inputs": {
-      "model": "InfiniTetalk\\Wan2_1-InfiniTetalk-Single_fp16.safetensors"
+      "model": "InfiniteTalk/Wan2_1-InfiniTetalk-Single_fp16.safetensors"
     },
     "class_type": "MultiTalkModelLoader",
     "_meta": {
@@ -10,7 +10,7 @@
   },
   "122": {
     "inputs": {
-      "model": "Wan2.2\\wan2.1_i2v_720p_14B_fp16.safetensors",
+      "model": "Wan2.2/wan2.1_i2v_720p_14B_fp16.safetensors",
       "base_precision": "fp16_fast",
       "quantization": "disabled",
       "load_device": "offload_device",
@@ -73,7 +73,7 @@
   },
   "129": {
     "inputs": {
-      "model_name": "Wan2.1\\Wan2_1_VAE_bf16.safetensors",
+      "model_name": "Wan2.1/Wan2_1_VAE_bf16.safetensors",
       "precision": "bf16",
       "use_cpu_cache": false
     },
@@ -136,7 +136,7 @@
   },
   "138": {
     "inputs": {
-      "lora": "Wan2.2\\lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors",
+      "lora": "Wan2.2/lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors",
       "strength": 1,
       "low_mem_load": false,
       "merge_loras": false
@@ -248,7 +248,7 @@
   },
   "238": {
     "inputs": {
-      "clip_name": "Wan2.1\\clip_vision_h.safetensors"
+      "clip_name": "Wan2.1/clip_vision_h.safetensors"
     },
     "class_type": "CLIPVisionLoader",
     "_meta": {
@@ -257,7 +257,7 @@
   },
   "241": {
     "inputs": {
-      "model_name": "wan2.1\\umt5-xxl-enc-bf16.safetensors",
+      "model_name": "Wan2.1/umt5-xxl-enc-bf16.safetensors",
       "precision": "bf16",
       "positive_prompt": "",
       "negative_prompt": "bright tones, overexposed, static, blurred details, subtitles, style, works, paintings, images, static, overall gray, worst quality, low quality, JPEG compression residue, ugly, incomplete, extra fingers, poorly drawn hands, poorly drawn faces, deformed, disfigured, misshapen limbs, fused fingers, still picture, messy background, three legs, many people in the background, walking backwards",
