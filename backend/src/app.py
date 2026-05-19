@@ -1540,8 +1540,9 @@ def serve_output(filename):
     
     # ===== 本地模式（或 S3 降級）=====
     # Get the absolute path to storage/outputs
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    outputs_dir = os.path.join(current_dir, '..', '..', 'storage', 'outputs')
+    outputs_dir = os.getenv("STORAGE_OUTPUT_DIR")
+    if not outputs_dir:
+        outputs_dir = os.path.join(app.root_path, "..", "storage", "outputs")
     outputs_dir = os.path.abspath(outputs_dir)
     
     # ===== 安全性：防止路徑穿越攻擊 =====

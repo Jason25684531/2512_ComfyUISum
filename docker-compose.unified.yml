@@ -113,6 +113,7 @@ services:
       - DB_NAME=${DB_NAME:-studio_db}
       - COMFYUI_HOST=${COMFYUI_HOST:-localhost}
       - COMFYUI_PORT=${COMFYUI_PORT:-8188}
+      - STORAGE_OUTPUT_DIR=/app/storage/outputs
     depends_on:
       mysql:
         condition: service_healthy
