@@ -194,6 +194,7 @@ services:
       - ${LOG_DIR:-./logs}:/worker/logs
       - ${WORKFLOW_DIR:-./ComfyUIworkflow}:/worker/ComfyUIworkflow
       - ./ComfyUIworkflow_api:/worker/ComfyUIworkflow_api
+      - ./ComfyUIworkflow_api:/ComfyUIworkflow_api:ro
   # =========================================
   # Nginx 網關 (統一入口)
   # =========================================

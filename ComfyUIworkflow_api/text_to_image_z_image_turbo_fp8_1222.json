@@ -27,7 +27,7 @@
   },
   "33:17": {
     "inputs": {
-      "vae_name": "z-image/ae.safetensors"
+      "vae_name": "z-image/split_files/vae/ae.safetensors"
     },
     "class_type": "VAELoader",
     "_meta": {
@@ -36,7 +36,7 @@
   },
   "33:18": {
     "inputs": {
-      "clip_name": "z-image/qwen_3_4b.safetensors",
+      "clip_name": "z-image/split_files/text_encoders/qwen_3_4b.safetensors",
       "type": "lumina2",
       "device": "default"
     },
