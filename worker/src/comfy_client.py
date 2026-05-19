@@ -93,6 +93,27 @@ class ComfyClient:
         
         return False
     
+    def upload_image(self, filepath: str) -> bool:
+        """
+        將 CPU 機台本地的圖片檔案，透過 API 上傳到 GPU 機台的 ComfyUI
+        """
+        url = f"{self.http_url}/upload/image"
+        try:
+            with open(filepath, 'rb') as f:
+                # ComfyUI 的 API 規定欄位名稱必須是 'image'
+                files = {'image': f}
+                response = requests.post(url, files=files, timeout=30)
+            
+            if response.status_code == 200:
+                print(f"[ComfyClient] 📤 圖片跨機上傳成功: {Path(filepath).name}")
+                return True
+            else:
+                print(f"[ComfyClient] ❌ 圖片上傳失敗: {response.status_code} - {response.text}")
+                return False
+        except Exception as e:
+            print(f"[ComfyClient] ❌ 圖片上傳異常: {e}")
+            return False
+
     def queue_prompt(self, workflow: dict) -> Optional[str]:
         """
         提交 workflow 到 ComfyUI 佇列

@@ -412,6 +412,7 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
         job_logger.info(f"Images: {list(images.keys()) if images else 'None'}")
         
         # 3. 處理上傳的圖片 (base64 -> 檔案)
+        # 3. 處理上傳的圖片 (base64 -> 檔案)
         update_job_status(r, job_id, "processing", progress=15, db_client=db_client)
         
         image_files = {}  # 儲存檔名映射 {"source": "upload_xxx_source.png"}
@@ -420,8 +421,14 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
             for field_name, base64_data in images.items():
                 if base64_data:
                     try:
+                        # 原本的邏輯：存到 CPU 機台本地
                         filename = save_base64_image(base64_data, job_id, field_name)
                         image_files[field_name] = filename
+                        
+                        # 🌟【新增這兩行】：把存在 CPU 的檔案，透過網路推送到 GPU
+                        filepath = Path(COMFYUI_INPUT_DIR) / filename
+                        client.upload_image(str(filepath))
+                        
                     except Exception as e:
                         job_logger.warning(f"⚠️ 處理圖片 {field_name} 失敗: {e}")
         
