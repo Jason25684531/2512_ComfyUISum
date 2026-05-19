@@ -397,6 +397,49 @@ class ComfyClient:
             print(f"[ComfyClient] History API 錯誤: {e}")
         
         return result
+
+    def download_output_via_view(
+        self,
+        filename: str,
+        subfolder: str = "",
+        file_type: str = "output",
+    ) -> Optional[Path]:
+        params = {
+            "filename": filename,
+            "subfolder": subfolder or "",
+            "type": file_type or "output",
+        }
+        cache_path = STORAGE_OUTPUT_DIR / subfolder / filename if subfolder else STORAGE_OUTPUT_DIR / filename
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+
+        try:
+            response = requests.get(
+                f"{self.http_url}/view",
+                params=params,
+                timeout=COMFY_HTTP_TIMEOUT,
+                stream=True,
+            )
+        except Exception as e:
+            print(f"[ComfyClient] /view download failed: {e}")
+            return None
+
+        if response.status_code != 200:
+            print(
+                f"[ComfyClient] /view download failed: {response.status_code} "
+                f"(filename={filename}, subfolder={subfolder}, type={file_type})"
+            )
+            return None
+
+        try:
+            with open(cache_path, "wb") as file:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        file.write(chunk)
+            print(f"[ComfyClient] Downloaded output via /view: {cache_path}")
+            return cache_path
+        except Exception as e:
+            print(f"[ComfyClient] Failed to write /view download: {e}")
+            return None
     
     def copy_output_file(
         self, 
@@ -486,7 +529,50 @@ class ComfyClient:
             return None
             
     # 向後相容別名
-    copy_output_image = copy_output_file
+    copy_output_file_local_only = copy_output_file
+
+    def copy_output_with_fallback(
+        self,
+        filename: str,
+        subfolder: str = "",
+        file_type: str = "output",
+        job_id: str = None
+    ) -> Optional[str]:
+        local_result = self.copy_output_file_local_only(
+            filename=filename,
+            subfolder=subfolder,
+            file_type=file_type,
+            job_id=job_id,
+        )
+        if local_result:
+            return local_result
+
+        downloaded_path = self.download_output_via_view(
+            filename=filename,
+            subfolder=subfolder,
+            file_type=file_type,
+        )
+        if downloaded_path is None:
+            print("[ComfyClient] Warning: failed to recover output via /view")
+            return None
+
+        ext = downloaded_path.suffix
+        if job_id:
+            new_filename = f"{job_id}{ext}"
+        else:
+            new_filename = f"{int(time.time())}_{filename}"
+
+        dest_path = STORAGE_OUTPUT_DIR / new_filename
+        try:
+            shutil.copy2(downloaded_path, dest_path)
+            print(f"[ComfyClient] Recovered output via /view: {downloaded_path} -> {dest_path}")
+            return new_filename
+        except Exception as e:
+            print(f"[ComfyClient] Failed to persist /view download: {e}")
+            return None
+
+    copy_output_file = copy_output_with_fallback
+    copy_output_image = copy_output_with_fallback
     
     def interrupt(self) -> bool:
         """
@@ -535,7 +621,7 @@ class ComfyClient:
         
         # 1. 檢查連接
         if not self.check_connection():
-            result["error"] = "無法連接 ComfyUI，請確認是否已啟動"
+            result["error"] = "???? ComfyUI?????????"
             return result
         
         # 2. 提交任務
@@ -552,29 +638,34 @@ class ComfyClient:
             return result
         
         # 4. 複製輸出
-        output_file = None
+        output_candidates = []
         
         # 優先檢查影片/GIF
         if ws_result["videos"]:
-            output_file = ws_result["videos"][0]
+            output_candidates = ws_result["videos"]
         elif ws_result["gifs"]:
-            output_file = ws_result["gifs"][0]
+            output_candidates = ws_result["gifs"]
         elif ws_result["images"]:
-            output_file = ws_result["images"][0]
+            output_candidates = ws_result["images"]
             
-        if output_file:
-            new_filename = self.copy_output_file(
-                filename=output_file.get("filename"),
-                subfolder=output_file.get("subfolder", ""),
-                job_id=job_id
-            )
-            
-            if new_filename:
-                result["success"] = True
-                result["image_url"] = f"/outputs/{new_filename}"
+        if output_candidates:
+            for output_file in output_candidates:
+                new_filename = self.copy_output_file(
+                    filename=output_file.get("filename"),
+                    subfolder=output_file.get("subfolder", ""),
+                    file_type=output_file.get("type", "output"),
+                    job_id=job_id
+                )
+                
+                if new_filename:
+                    result["success"] = True
+                    result["image_url"] = f"/outputs/{new_filename}"
+                    break
         else:
             result["error"] = "沒有輸出檔案"
         
+        if not result["success"] and result["error"] is None:
+            result["error"] = "??????"
         return result
 
 

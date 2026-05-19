@@ -150,6 +150,89 @@ def test_queue_prompt_normalizes_payload_before_submit(monkeypatch):
     )
 
 
+def test_copy_output_file_downloads_missing_gpu_output_via_view(monkeypatch, tmp_path):
+    comfy_client = load_worker_module(monkeypatch, "comfy_client.py", "worker_runtime_test_comfy_client_view")
+    monkeypatch.setattr(comfy_client, "COMFY_OUTPUT_DIR", tmp_path / "comfy-output")
+    monkeypatch.setattr(comfy_client, "STORAGE_OUTPUT_DIR", tmp_path / "storage-outputs")
+    comfy_client.STORAGE_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    captured = {}
+
+    class FakeResponse:
+        status_code = 200
+        content = b"gpu-bytes"
+
+        @staticmethod
+        def iter_content(chunk_size=8192):
+            yield b"gpu-bytes"
+
+    def fake_get(url, params=None, timeout=None, stream=None, **kwargs):
+        captured["url"] = url
+        captured["params"] = params
+        captured["timeout"] = timeout
+        captured["stream"] = stream
+        return FakeResponse()
+
+    monkeypatch.setattr(comfy_client.requests, "get", fake_get)
+
+    client = comfy_client.ComfyClient()
+    result = client.copy_output_file(
+        filename="result.png",
+        subfolder="集成應用1222",
+        file_type="output",
+        job_id="job-1",
+    )
+
+    assert result == "job-1.png"
+    assert captured["url"].endswith("/view")
+    assert captured["params"] == {
+        "filename": "result.png",
+        "subfolder": "集成應用1222",
+        "type": "output",
+    }
+    assert (tmp_path / "storage-outputs" / "集成應用1222" / "result.png").read_bytes() == b"gpu-bytes"
+    assert (tmp_path / "storage-outputs" / "job-1.png").read_bytes() == b"gpu-bytes"
+
+
+def test_process_task_tries_next_output_when_first_download_fails(monkeypatch):
+    comfy_client = load_worker_module(monkeypatch, "comfy_client.py", "worker_runtime_test_comfy_client_outputs")
+
+    client = comfy_client.ComfyClient()
+    monkeypatch.setattr(client, "check_connection", lambda: True)
+    monkeypatch.setattr(client, "queue_prompt", lambda workflow: "prompt-1")
+    monkeypatch.setattr(
+        client,
+        "wait_for_completion",
+        lambda prompt_id: {
+            "success": True,
+            "videos": [],
+            "gifs": [],
+            "images": [
+                {"filename": "missing.png", "subfolder": "集成應用1222", "type": "output"},
+                {"filename": "good.png", "subfolder": "", "type": "output"},
+            ],
+        },
+    )
+
+    seen = []
+
+    def fake_copy_output_file(filename, subfolder="", file_type="output", job_id=None):
+        seen.append((filename, subfolder, file_type, job_id))
+        if filename == "missing.png":
+            return None
+        return "job-2.png"
+
+    monkeypatch.setattr(client, "copy_output_file", fake_copy_output_file)
+
+    result = client.process_task({"1": {"inputs": {}}}, job_id="job-2")
+
+    assert result["success"] is True
+    assert result["image_url"] == "/outputs/job-2.png"
+    assert seen == [
+        ("missing.png", "集成應用1222", "output", "job-2"),
+        ("good.png", "", "output", "job-2"),
+    ]
+
+
 def test_main_shutdown_path_does_not_raise_unboundlocal(monkeypatch):
     main_module = load_worker_module(monkeypatch, "main.py", "worker_runtime_test_main")
 
