@@ -61,7 +61,7 @@ from comfy_client import ComfyClient
 from warmup import WarmupController
 from config import (
     REDIS_HOST, REDIS_PORT, REDIS_PASSWORD,
-    COMFYUI_INPUT_DIR, JOB_QUEUE, TEMP_FILE_MAX_AGE_HOURS,
+    COMFYUI_INPUT_DIR, COMFYUI_OUTPUT_DIR, JOB_QUEUE, TEMP_FILE_MAX_AGE_HOURS,
     JOB_STATUS_EXPIRE_SECONDS, STORAGE_INPUT_DIR, print_config,
     WORKER_TIMEOUT, DEFAULT_UNET_MODEL, DEFAULT_CLIP_MODEL,
     DEFAULT_VAE_MODEL, WARMUP_MODE,
@@ -242,6 +242,29 @@ def cleanup_old_temp_files():
         logger.info(f"🗑️ 已清理 {deleted_count} 個過期暫存檔案")
 
 
+def resolve_output_path(filename: str) -> Path:
+    """將輸出檔名解析到 Worker 本地輸出目錄，並阻擋路徑穿越。"""
+    safe_name = Path(filename).name
+    output_root = Path(COMFYUI_OUTPUT_DIR).resolve()
+    output_path = (output_root / safe_name).resolve()
+    output_path.relative_to(output_root)
+    return output_path
+
+
+def validate_local_output_file(filename: str, job_logger) -> tuple[Path, int]:
+    """驗證 comfy_client 已落地到本機的輸出檔案存在且大小正確。"""
+    output_path = resolve_output_path(filename)
+    if not output_path.exists() or not output_path.is_file():
+        raise FileNotFoundError(f"本地輸出檔案不存在: {output_path}")
+
+    file_size = output_path.stat().st_size
+    if file_size <= 0:
+        raise IOError(f"本地輸出檔案大小無效: {output_path}")
+
+    job_logger.info(f"💾 本地輸出檔案已就緒: {output_path} ({file_size} bytes)")
+    return output_path, file_size
+
+
 def cleanup_old_output_files(db_client=None):
     """
     清理 storage/outputs 中超過 30 天的圖片檔案
@@ -250,9 +273,7 @@ def cleanup_old_output_files(db_client=None):
     Args:
         db_client: Database 客戶端實例（用於同步軟刪除）
     """
-    from config import STORAGE_OUTPUT_DIR
-    
-    if not STORAGE_OUTPUT_DIR.exists():
+    if not COMFYUI_OUTPUT_DIR.exists():
         return
     
     cutoff_time = datetime.now() - timedelta(days=30)
@@ -260,7 +281,7 @@ def cleanup_old_output_files(db_client=None):
     total_size = 0
     db_synced = 0
     
-    for filepath in STORAGE_OUTPUT_DIR.glob("*"):
+    for filepath in COMFYUI_OUTPUT_DIR.glob("*"):
         if not filepath.is_file():
             continue
         
@@ -357,12 +378,20 @@ def update_job_status(
             output_path = None
             if image_url:
                 output_path = image_url.replace('/outputs/', '')
-            
-            success = db_client.update_job_status(
-                job_id=job_id,
-                status=status,
-                output_path=output_path
-            )
+
+            import inspect
+
+            update_kwargs = {
+                "job_id": job_id,
+                "status": status,
+            }
+            update_signature = inspect.signature(db_client.update_job_status)
+            if "image_url" in update_signature.parameters:
+                update_kwargs["image_url"] = image_url
+            elif "output_path" in update_signature.parameters:
+                update_kwargs["output_path"] = output_path
+
+            success = db_client.update_job_status(**update_kwargs)
             if success:
                 logger.info(f"✓ MySQL 狀態同步: {job_id} -> {status}")
             else:
@@ -605,22 +634,27 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
                             break
                 
                 if new_filename:
+                    try:
+                        local_output_path, file_size = validate_local_output_file(new_filename, job_logger)
+                    except Exception as output_err:
+                        update_job_status(
+                            r,
+                            job_id,
+                            "failed",
+                            progress=95,
+                            error="output persistence failed",
+                            db_client=db_client,
+                        )
+                        job_logger.error(f"❌ 本地輸出落庫失敗: {output_err}")
+                        return
+
                     # 無論是圖片還是影片，都通過 image_url 欄位回傳 (前端會根據副檔名判斷)
                     file_url = f"/outputs/{new_filename}"
-                    
-                    # S3/COS 上傳：若 STORAGE_BACKEND=s3，同步上傳到物件儲存
-                    try:
-                        from shared.storage_service import storage
-                        local_output_path = STORAGE_OUTPUT_DIR / new_filename
-                        remote_key = f"outputs/{new_filename}"
-                        if hasattr(storage, 'client'):  # S3Storage 才有 client 屬性
-                            storage.upload_file(str(local_output_path), remote_key)
-                            job_logger.info(f"☁️ 已上傳到 S3: {remote_key}")
-                    except Exception as s3_err:
-                        job_logger.warning(f"⚠️ S3 上傳失敗（不影響任務結果）: {s3_err}")
-                    
                     update_job_status(r, job_id, "finished", progress=100, image_url=file_url, db_client=db_client)
-                    job_logger.info(f"✅ 任務完成，輸出 ({output_type}): {file_url}")
+                    job_logger.info(
+                        f"✅ 任務完成，輸出 ({output_type}): {file_url} "
+                        f"-> {local_output_path.name} ({file_size} bytes)"
+                    )
                 else:
                     update_job_status(r, job_id, "finished", progress=100, db_client=db_client)
                     job_logger.warning("⚠️ 任務完成，但所有輸出檔案都無法複製")
@@ -644,6 +678,12 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
                             job_id=job_id
                         )
                         if new_filename:
+                            try:
+                                validate_local_output_file(new_filename, job_logger)
+                            except Exception as output_err:
+                                job_logger.warning(f"⚠️ 部分輸出驗證失敗: {output_err}")
+                                update_job_status(r, job_id, "failed", error=error, db_client=db_client)
+                                return
                             file_url = f"/outputs/{new_filename}"
                             update_job_status(r, job_id, "failed", error=f"{error} (partial output saved)", image_url=file_url, db_client=db_client)
                             job_logger.info(f"⚠️ 任務超時但已保存部分輸出: {file_url}")

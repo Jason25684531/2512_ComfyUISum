@@ -273,3 +273,166 @@ def test_main_shutdown_path_does_not_raise_unboundlocal(monkeypatch):
         main_module.main()
     except UnboundLocalError as exc:  # pragma: no cover - explicit regression guard
         pytest.fail(f"main() should not raise UnboundLocalError during shutdown: {exc}")
+
+
+def test_process_job_persists_recovered_local_output(monkeypatch, tmp_path):
+    main_module = load_worker_module(monkeypatch, "main.py", "worker_runtime_test_main_outputs")
+    output_dir = tmp_path / "worker-outputs"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(main_module, "COMFYUI_OUTPUT_DIR", output_dir, raising=False)
+    monkeypatch.setattr(main_module, "parse_workflow", lambda **kwargs: {"1": {"inputs": {}}})
+
+    class FakeRedis:
+        def __init__(self):
+            self.hashes = {}
+            self.expirations = {}
+
+        def hset(self, key, mapping):
+            self.hashes[key] = dict(mapping)
+
+        def expire(self, key, ttl):
+            self.expirations[key] = ttl
+
+        def hget(self, key, field):
+            return self.hashes.get(key, {}).get(field)
+
+    class FakeDbClient:
+        def __init__(self):
+            self.calls = []
+
+        def update_job_status(self, job_id, status, output_path=None):
+            self.calls.append(
+                {
+                    "job_id": job_id,
+                    "status": status,
+                    "output_path": output_path,
+                }
+            )
+            return True
+
+    class FakeClient:
+        def check_connection(self):
+            return True
+
+        def queue_prompt(self, workflow):
+            return "prompt-123"
+
+        def wait_for_completion(self, prompt_id, timeout=None, on_progress=None):
+            if on_progress:
+                on_progress(50)
+            return {
+                "success": True,
+                "videos": [],
+                "gifs": [],
+                "images": [
+                    {"filename": "gpu.png", "subfolder": "", "type": "output"},
+                ],
+            }
+
+        def copy_output_file(self, filename, subfolder="", file_type="output", job_id=None):
+            dest = output_dir / f"{job_id}.png"
+            dest.write_bytes(b"png-bytes")
+            return dest.name
+
+    redis_client = FakeRedis()
+    db_client = FakeDbClient()
+    job_id = "job-local"
+
+    main_module.process_job(
+        redis_client,
+        FakeClient(),
+        {
+            "job_id": job_id,
+            "workflow": "text_to_image",
+            "prompt": "test prompt",
+        },
+        db_client=db_client,
+    )
+
+    status_key = f"job:status:{job_id}"
+    assert redis_client.hashes[status_key]["status"] == "finished"
+    assert redis_client.hashes[status_key]["image_url"] == f"/outputs/{job_id}.png"
+    assert db_client.calls[-1] == {
+        "job_id": job_id,
+        "status": "finished",
+        "output_path": f"{job_id}.png",
+    }
+
+
+def test_process_job_fails_when_local_output_file_is_missing(monkeypatch, tmp_path):
+    main_module = load_worker_module(monkeypatch, "main.py", "worker_runtime_test_main_missing_output")
+    output_dir = tmp_path / "worker-outputs"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(main_module, "COMFYUI_OUTPUT_DIR", output_dir, raising=False)
+    monkeypatch.setattr(main_module, "parse_workflow", lambda **kwargs: {"1": {"inputs": {}}})
+
+    class FakeRedis:
+        def __init__(self):
+            self.hashes = {}
+
+        def hset(self, key, mapping):
+            self.hashes[key] = dict(mapping)
+
+        def expire(self, key, ttl):
+            return None
+
+        def hget(self, key, field):
+            return self.hashes.get(key, {}).get(field)
+
+    class FakeDbClient:
+        def __init__(self):
+            self.calls = []
+
+        def update_job_status(self, job_id, status, output_path=None):
+            self.calls.append(
+                {
+                    "job_id": job_id,
+                    "status": status,
+                    "output_path": output_path,
+                }
+            )
+            return True
+
+    class FakeClient:
+        def check_connection(self):
+            return True
+
+        def queue_prompt(self, workflow):
+            return "prompt-123"
+
+        def wait_for_completion(self, prompt_id, timeout=None, on_progress=None):
+            return {
+                "success": True,
+                "videos": [],
+                "gifs": [],
+                "images": [
+                    {"filename": "gpu.png", "subfolder": "", "type": "output"},
+                ],
+            }
+
+        def copy_output_file(self, filename, subfolder="", file_type="output", job_id=None):
+            return f"{job_id}.png"
+
+    redis_client = FakeRedis()
+    db_client = FakeDbClient()
+    job_id = "job-missing"
+
+    main_module.process_job(
+        redis_client,
+        FakeClient(),
+        {
+            "job_id": job_id,
+            "workflow": "text_to_image",
+            "prompt": "test prompt",
+        },
+        db_client=db_client,
+    )
+
+    status_key = f"job:status:{job_id}"
+    assert redis_client.hashes[status_key]["status"] == "failed"
+    assert "image_url" not in redis_client.hashes[status_key]
+    assert db_client.calls[-1] == {
+        "job_id": job_id,
+        "status": "failed",
+        "output_path": None,
+    }
