@@ -41,7 +41,7 @@
   },
   "433:37": {
     "inputs": {
-      "unet_name": "Qwen_Image_Edit/qwen_image_edit_2511_bf16.safetensors",
+      "unet_name": "Qwen/qwen_image_edit_2511_bf16.safetensors",
       "weight_dtype": "default"
     },
     "class_type": "UNETLoader",
