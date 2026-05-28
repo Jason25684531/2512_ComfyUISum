@@ -13,6 +13,11 @@ cd ..
 
 set "ENV_FILE=.env.local"
 
+:: Windows local runtime profile.
+:: This is required by the runtime-specific ComfyUI model override layer.
+:: It only affects Windows local backend/worker startup from this launcher.
+set "COMFYUI_RUNTIME_PROFILE=windows"
+
 :: 檢查本地 env contract
 if not exist "%ENV_FILE%" (
     echo [WARNING] %ENV_FILE% file not found^^!
@@ -33,6 +38,10 @@ for /f "usebackq tokens=1,* delims==" %%a in ("%ENV_FILE%") do (
         )
     )
 )
+
+:: Force Windows runtime profile after loading .env.local.
+:: This prevents .env.local from accidentally overriding local Windows testing.
+set "COMFYUI_RUNTIME_PROFILE=windows"
 
 set "MISSING_ENV=0"
 call :require_env REDIS_PASSWORD
@@ -145,15 +154,16 @@ if not exist "venv\Scripts\python.exe" goto venv_error
 echo [OK] Virtual environment found
 
 echo [5/5] Starting Backend and Worker locally...
+echo [INFO] COMFYUI_RUNTIME_PROFILE=%COMFYUI_RUNTIME_PROFILE%
 
 :: 啟動 Backend
-start "ComfyUI Studio Backend" cmd /k "cd /d %cd% && set STUDIO_ENV_FILE=%ENV_FILE% && cd backend\src && echo Starting Backend... && ..\..\venv\Scripts\python.exe app.py"
+start "ComfyUI Studio Backend" cmd /k "cd /d %cd% && set STUDIO_ENV_FILE=%ENV_FILE% && set COMFYUI_RUNTIME_PROFILE=windows && echo COMFYUI_RUNTIME_PROFILE=%%COMFYUI_RUNTIME_PROFILE%% && cd backend\src && echo Starting Backend... && ..\..\venv\Scripts\python.exe app.py"
 
 echo Waiting 8 seconds for Backend to initialize...
 call :sleep_seconds 8
 
 :: 啟動 Worker
-start "ComfyUI Studio Worker" cmd /k "cd /d %cd% && set STUDIO_ENV_FILE=%ENV_FILE% && cd worker\src && echo Starting Worker... && ..\..\venv\Scripts\python.exe main.py"
+start "ComfyUI Studio Worker" cmd /k "cd /d %cd% && set STUDIO_ENV_FILE=%ENV_FILE% && set COMFYUI_RUNTIME_PROFILE=windows && echo COMFYUI_RUNTIME_PROFILE=%%COMFYUI_RUNTIME_PROFILE%% && cd worker\src && echo Starting Worker... && ..\..\venv\Scripts\python.exe main.py"
 
 echo.
 echo ============================================
@@ -215,6 +225,7 @@ echo MySQL:    localhost:%MYSQL_PORT% (default: 3307)
 echo Redis:    localhost:%REDIS_PORT% (default: 6379)
 echo Backend:  http://localhost:%BACKEND_PORT% (if started)
 echo ComfyUI:  http://localhost:%COMFYUI_PORT% (external)
+echo Runtime:  COMFYUI_RUNTIME_PROFILE=%COMFYUI_RUNTIME_PROFILE%
 echo ----------------------------------------
 echo.
 echo [SUCCESS] Services are running!

@@ -19,6 +19,11 @@ from shared.utils import JSONFormatter, JobLogAdapter
 
 MULTI_BLEND_DEFAULT_PROMPT = "圖1的女生拖著圖2的行李箱，站在圖3的地鐵站入口，逼真的光影"
 PROMPT_SENTINEL = "__PROMPT_OVERRIDE_TEST__"
+WINDOWS_TEXT_TO_IMAGE_MODELS = {
+    ("33:18", "clip_name"): "z-image\\qwen_3_4b.safetensors",
+    ("33:16", "unet_name"): "z-image\\z-image-turbo-fp8-e4m3fn.safetensors",
+    ("33:17", "vae_name"): "z-image\\ae.safetensors",
+}
 
 
 def teardown_module():
@@ -105,6 +110,102 @@ def _prompt_value_for_node(workflow, node_id):
                 return widgets_values[key]
 
     pytest.fail(f"node {node_id} does not expose a prompt value")
+
+
+def _input_value_for_node(workflow, node_id, input_key):
+    node = workflow.get(node_id)
+    assert node is not None, f"missing workflow node {node_id}"
+
+    inputs = node.get("inputs")
+    assert isinstance(inputs, dict), f"node {node_id} does not expose dict inputs"
+    assert input_key in inputs, f"node {node_id} missing input {input_key}"
+    return inputs[input_key]
+
+
+def test_parse_workflow_text_to_image_applies_windows_model_overrides(monkeypatch):
+    monkeypatch.setenv("COMFYUI_RUNTIME_PROFILE", "windows")
+    json_parser = load_worker_module(
+        monkeypatch,
+        "json_parser.py",
+        "worker_runtime_test_json_parser_windows_model_overrides",
+    )
+
+    workflow = json_parser.parse_workflow(
+        "text_to_image",
+        prompt="test prompt",
+        seed=123,
+    )
+
+    for (node_id, input_key), expected_value in WINDOWS_TEXT_TO_IMAGE_MODELS.items():
+        assert _input_value_for_node(workflow, node_id, input_key) == expected_value
+
+
+def test_parse_workflow_text_to_image_linux_profile_does_not_apply_windows_overrides(monkeypatch):
+    monkeypatch.setenv("COMFYUI_RUNTIME_PROFILE", "linux")
+    json_parser = load_worker_module(
+        monkeypatch,
+        "json_parser.py",
+        "worker_runtime_test_json_parser_linux_model_overrides",
+    )
+    source_workflow = json_parser.load_workflow("text_to_image")
+
+    workflow = json_parser.parse_workflow(
+        "text_to_image",
+        prompt="test prompt",
+        seed=123,
+    )
+
+    for node_id, input_key in WINDOWS_TEXT_TO_IMAGE_MODELS:
+        assert _input_value_for_node(workflow, node_id, input_key) == _input_value_for_node(
+            source_workflow,
+            node_id,
+            input_key,
+        )
+
+
+def test_parse_workflow_text_to_image_unknown_profile_is_noop_for_model_overrides(monkeypatch):
+    monkeypatch.setenv("COMFYUI_RUNTIME_PROFILE", "unknown-profile")
+    json_parser = load_worker_module(
+        monkeypatch,
+        "json_parser.py",
+        "worker_runtime_test_json_parser_unknown_model_overrides",
+    )
+    source_workflow = json_parser.load_workflow("text_to_image")
+
+    workflow = json_parser.parse_workflow(
+        "text_to_image",
+        prompt="test prompt",
+        seed=123,
+    )
+
+    for node_id, input_key in WINDOWS_TEXT_TO_IMAGE_MODELS:
+        assert _input_value_for_node(workflow, node_id, input_key) == _input_value_for_node(
+            source_workflow,
+            node_id,
+            input_key,
+        )
+
+
+def test_parse_workflow_text_to_image_model_overrides_do_not_modify_workflow_json(monkeypatch):
+    monkeypatch.setenv("COMFYUI_RUNTIME_PROFILE", "windows")
+    json_parser = load_worker_module(
+        monkeypatch,
+        "json_parser.py",
+        "worker_runtime_test_json_parser_model_override_immutability",
+    )
+    workflow_path = json_parser.get_workflow_path("text_to_image")
+    fallback_path = json_parser.API_WORKFLOW_FALLBACK_DIR / workflow_path.name
+    before_workflow = workflow_path.read_bytes()
+    before_fallback = fallback_path.read_bytes()
+
+    json_parser.parse_workflow(
+        "text_to_image",
+        prompt="test prompt",
+        seed=123,
+    )
+
+    assert workflow_path.read_bytes() == before_workflow
+    assert fallback_path.read_bytes() == before_fallback
 
 
 def test_parse_workflow_multi_image_blend_uses_configured_prompt_map(monkeypatch):

@@ -7,6 +7,25 @@
       "prompt_text_node_id": "33:6",
       "seed_node_id": "33:3",
       "output_node_id": "34"
+    },
+    "model_overrides": {
+      "windows": [
+        {
+          "node_id": "33:18",
+          "input_key": "clip_name",
+          "value": "z-image\\qwen_3_4b.safetensors"
+        },
+        {
+          "node_id": "33:16",
+          "input_key": "unet_name",
+          "value": "z-image\\z-image-turbo-fp8-e4m3fn.safetensors"
+        },
+        {
+          "node_id": "33:17",
+          "input_key": "vae_name",
+          "value": "z-image\\ae.safetensors"
+        }
+      ]
     }
   },
   "virtual_human": {

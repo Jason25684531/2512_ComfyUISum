@@ -261,6 +261,35 @@ def set_configured_prompt_value(workflow: dict, node_id: str, input_key: str, pr
     return False
 
 
+def apply_model_overrides(workflow: dict, overrides: list[dict], profile: str) -> int:
+    applied_count = 0
+
+    for target in overrides:
+        node_id = str(target.get("node_id", "")).strip()
+        input_key = str(target.get("input_key", "")).strip()
+        value = target.get("value")
+
+        if not node_id or not input_key or not isinstance(value, str):
+            print(f"[Parser] ?蹎? Skipping invalid model override target for profile {profile!r}")
+            continue
+
+        if set_node_input_value(
+            workflow,
+            node_id,
+            input_key,
+            value,
+            f"Runtime model override ({profile})",
+        ):
+            applied_count += 1
+        else:
+            print(f"[Parser] ?蹎? Runtime model override target missing: {node_id}.{input_key}")
+
+    if applied_count:
+        print(f"[Parser] Applied {applied_count} runtime model override(s) for profile {profile!r}")
+
+    return applied_count
+
+
 def get_workflow_path(workflow_name: str) -> Path:
     """
     取得 workflow JSON 檔案路徑
@@ -498,6 +527,7 @@ def parse_workflow(
     registry = WorkflowRegistry()
     workflow_entry = registry.get(workflow_name)
     config_path = registry.config_path
+    runtime_profile, runtime_model_overrides = registry.get_model_overrides(workflow_name)
     
     if image_files is None:
         image_files = {}
@@ -742,8 +772,15 @@ def parse_workflow(
     # 注入 Model (UNETLoader / CheckpointLoaderSimple)
     # ==========================================
     model_filename = MODEL_MAP.get(model)
+    skip_generic_model_injection = bool(workflow_entry.model_overrides) and not runtime_model_overrides
+
+    if skip_generic_model_injection:
+        print(
+            f"[Parser] Skipping generic model injection for profile {runtime_profile!r}; "
+            "no runtime model override profile matched"
+        )
     
-    if model_filename:
+    if model_filename and not skip_generic_model_injection:
         # 嘗試 UNETLoader
         unet_id, unet_node = find_node_by_class(workflow, "UNETLoader")
         if unet_node:
@@ -755,12 +792,15 @@ def parse_workflow(
         if ckpt_node:
             if set_node_input_value(workflow, ckpt_id, "ckpt_name", model_filename, "Checkpoint 模型注入"):
                 print(f"[Parser] 注入模型 {model_filename} 到 CheckpointLoaderSimple 節點 {ckpt_id}")
-    else:
+    elif not skip_generic_model_injection:
         print(f"[Parser] ⚠️ 未知模型: {model}，使用 workflow 預設值")
     
     # ==========================================
     # 注入圖片 (LoadImage 節點) - Config-Driven 優先
     # ==========================================
+    if runtime_model_overrides:
+        apply_model_overrides(workflow, runtime_model_overrides, runtime_profile)
+
     images_injected = False
     
     # 優先策略: 從 config.json 的 image_map 注入

@@ -1,4 +1,6 @@
 import json
+import os
+import platform
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -21,6 +23,7 @@ class WorkflowEntry:
     prompt_map: dict[str, Any]
     image_map: dict[str, Any]
     audio_map: dict[str, Any]
+    model_overrides: dict[str, Any]
 
 
 class WorkflowRegistry:
@@ -64,7 +67,26 @@ class WorkflowRegistry:
             prompt_map=config.get("prompt_map", {}),
             image_map=config.get("image_map", {}),
             audio_map=audio_map,
+            model_overrides=config.get("model_overrides", {}),
         )
+
+    def resolve_runtime_profile(self) -> str:
+        configured_profile = os.getenv("COMFYUI_RUNTIME_PROFILE", "").strip()
+        if configured_profile:
+            return configured_profile.lower()
+
+        system_name = platform.system().strip().lower()
+        if system_name.startswith("win"):
+            return "windows"
+        return "linux"
+
+    def get_model_overrides(self, workflow_name: str) -> tuple[str, list[dict[str, Any]]]:
+        entry = self.get(workflow_name)
+        profile = self.resolve_runtime_profile()
+        profile_overrides = entry.model_overrides.get(profile, [])
+        if not isinstance(profile_overrides, list):
+            return profile, []
+        return profile, [item for item in profile_overrides if isinstance(item, dict)]
 
     def iter_entries(self):
         for workflow_name in self._config:
