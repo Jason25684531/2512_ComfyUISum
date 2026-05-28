@@ -12,6 +12,8 @@ import sys
 import builtins
 from pathlib import Path
 
+from workflow_registry import WorkflowRegistry, find_workflow_node
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 API_WORKFLOW_FALLBACK_DIR = PROJECT_ROOT / "ComfyUIworkflow_api"
 DEFAULT_UNET_MODEL = os.getenv(
@@ -148,7 +150,7 @@ def _safe_log_value(value) -> str:
 
 
 def get_workflow_node(workflow: dict, node_id: str):
-    node = workflow.get(str(node_id))
+    node = find_workflow_node(workflow, node_id)
     if not isinstance(node, dict):
         print(f"[Parser] ⚠️ Node {node_id} 不是 dict，而是 {type(node).__name__}")
         return None
@@ -216,13 +218,67 @@ def set_node_prompt_value(workflow: dict, node_id: str, prompt_value: str, label
     return False
 
 
+def set_configured_prompt_value(workflow: dict, node_id: str, input_key: str, prompt_value: str, label: str = "") -> bool:
+    node = get_workflow_node(workflow, node_id)
+    if not node:
+        return False
+
+    inputs = node.get("inputs")
+    if isinstance(inputs, dict) and input_key in inputs:
+        old_value = inputs.get(input_key)
+        inputs[input_key] = prompt_value
+        if label:
+            print(
+                f"[Parser] {label}: Node {node_id}.{input_key} = "
+                f"{_safe_log_value(old_value)} -> {_safe_log_value(prompt_value)}"
+            )
+        return True
+
+    widgets_values = node.get("widgets_values")
+    if isinstance(widgets_values, list) and widgets_values:
+        old_value = widgets_values[0]
+        widgets_values[0] = prompt_value
+        if label:
+            print(
+                f"[Parser] {label}: Node {node_id}.widgets_values[0] = "
+                f"{_safe_log_value(old_value)} -> {_safe_log_value(prompt_value)}"
+            )
+        return True
+
+    if isinstance(widgets_values, dict):
+        for widget_key in (input_key, "prompt", "text", "string"):
+            if widget_key in widgets_values:
+                old_value = widgets_values[widget_key]
+                widgets_values[widget_key] = prompt_value
+                if label:
+                    print(
+                        f"[Parser] {label}: Node {node_id}.widgets_values[{widget_key!r}] = "
+                        f"{_safe_log_value(old_value)} -> {_safe_log_value(prompt_value)}"
+                    )
+                return True
+
+    print(f"[Parser] ?? Config prompt target {node_id}.{input_key} cannot be injected")
+    return False
+
+
 def get_workflow_path(workflow_name: str) -> Path:
     """
     取得 workflow JSON 檔案路徑
     優先從 config.json 讀取，若不存在則使用 WORKFLOW_MAP
     """
-    from config import WORKFLOW_DIR, WORKFLOW_CONFIG_PATH
-    import json
+    workflow_dir = WorkflowRegistry().workflow_dir
+
+    try:
+        entry = WorkflowRegistry(workflow_dir=workflow_dir).get(workflow_name)
+        if entry.file and entry.path.exists():
+            print(f"[Parser] 敺?config.json 霈??workflow ?辣: {entry.file}")
+            return entry.path
+    except Exception as e:
+        print(f"[Parser] ?? 霈??config.json 憭望?: {e}")
+        entry = None
+
+    filename = WORKFLOW_MAP.get(workflow_name, f"{workflow_name}.json")
+    return workflow_dir / filename
     
     # 嘗試從 config.json 讀取文件名
     if WORKFLOW_CONFIG_PATH.exists():
@@ -439,8 +495,9 @@ def parse_workflow(
     # ==========================================
     # 1. 初始化變數與引入 Config (優先定義)
     # ==========================================
-    from config import WORKFLOW_CONFIG_PATH
-    config_path = WORKFLOW_CONFIG_PATH  # 確保變數在最開始就被定義
+    registry = WorkflowRegistry()
+    workflow_entry = registry.get(workflow_name)
+    config_path = registry.config_path
     
     if image_files is None:
         image_files = {}
@@ -454,9 +511,10 @@ def parse_workflow(
     # ==========================================
     # 2. 載入 Config.json 配置 (Config-Driven)
     # ==========================================
-    config_data = {}
-    workflow_config = {}
-    image_map_config = {}
+    config_data = registry._config
+    workflow_config = config_data.get(workflow_entry.name, {})
+    image_map_config = workflow_entry.image_map
+    prompt_map_config = workflow_entry.prompt_map
     
     try:
         if config_path.exists():
@@ -464,8 +522,8 @@ def parse_workflow(
                 config_data = json.load(f)
             # 新版 ComfyUI API JSON 重新匯出後，只要更新這裡對應的 image_map / prompt_node_id / text_node_id，
             # Parser 就會優先使用新節點 ID，而不是回退到檔內常數映射。
-            workflow_config = config_data.get(workflow_name, {})
-            image_map_config = workflow_config.get('image_map', {})
+            workflow_config = config_data.get(workflow_entry.name, {})
+            image_map_config = workflow_entry.image_map
             print(f"[Parser] 成功載入 config.json for {workflow_name}")
             if image_map_config:
                 print(f"[Parser] 偵測到 image_map 配置: {image_map_config}")
@@ -511,9 +569,24 @@ def parse_workflow(
     # 注入 Prompt (支援多種節點類型)
     # ==========================================
     prompt_injected = False
+
+    if prompt and prompt_map_config:
+        for prompt_name, target in prompt_map_config.items():
+            node_id = target.get("node_id")
+            input_key = target.get("input_key", "prompt")
+            if node_id and set_configured_prompt_value(
+                workflow,
+                node_id,
+                input_key,
+                prompt,
+                f"Config prompt_map.{prompt_name}",
+            ):
+                print(f"[Parser] Config prompt_map injected prompt into Node {node_id}.{input_key}")
+                prompt_injected = True
+                break
     
     # 1. 嘗試 CLIPTextEncode (標準 SDXL workflow)
-    positive_nodes = find_nodes_by_class(workflow, "CLIPTextEncode")
+    positive_nodes = [] if prompt_injected else find_nodes_by_class(workflow, "CLIPTextEncode")
     for node_id, node in positive_nodes:
         title = node.get("_meta", {}).get("title", "")
         if "Positive" in title or "positive" in title.lower():

@@ -68,6 +68,17 @@
       "prompt_text_node_id": "433:111",
       "seed_node_id": "433:3",
       "output_node_id": "60"
+    },
+    "prompt_map": {
+      "main": {
+        "node_id": "433:111",
+        "input_key": "prompt" 
+      }
+    },
+    "image_map": {
+      "source": "78",
+      "target": "436",
+      "extra": "437"
     }
   },
   "veo3_long_video": {

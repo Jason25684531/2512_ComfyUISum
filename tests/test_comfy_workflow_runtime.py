@@ -1,4 +1,6 @@
 import importlib.util
+import json
+import logging
 import os
 import sys
 from pathlib import Path
@@ -9,9 +11,21 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 WORKER_SRC = PROJECT_ROOT / "worker" / "src"
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
+_PREVIOUS_STUDIO_ENV_FILE = os.environ.get("STUDIO_ENV_FILE")
 os.environ.setdefault("STUDIO_ENV_FILE", ".env.twcc")
-
 from shared.utils import load_env
+from shared.utils import JSONFormatter, JobLogAdapter
+
+
+MULTI_BLEND_DEFAULT_PROMPT = "圖1的女生拖著圖2的行李箱，站在圖3的地鐵站入口，逼真的光影"
+PROMPT_SENTINEL = "__PROMPT_OVERRIDE_TEST__"
+
+
+def teardown_module():
+    if _PREVIOUS_STUDIO_ENV_FILE is None:
+        os.environ.pop("STUDIO_ENV_FILE", None)
+    else:
+        os.environ["STUDIO_ENV_FILE"] = _PREVIOUS_STUDIO_ENV_FILE
 
 
 def load_worker_module(monkeypatch, module_filename: str, module_alias: str):
@@ -72,6 +86,98 @@ def test_json_parser_uses_api_fallback_directory(monkeypatch):
     json_parser = load_worker_module(monkeypatch, "json_parser.py", "worker_runtime_test_json_parser")
 
     assert json_parser.API_WORKFLOW_FALLBACK_DIR.name == "ComfyUIworkflow_api"
+
+
+def _prompt_value_for_node(workflow, node_id):
+    node = workflow.get(node_id)
+    assert node is not None, f"missing workflow node {node_id}"
+
+    inputs = node.get("inputs")
+    if isinstance(inputs, dict) and "prompt" in inputs:
+        return inputs["prompt"]
+
+    widgets_values = node.get("widgets_values")
+    if isinstance(widgets_values, list) and widgets_values:
+        return widgets_values[0]
+    if isinstance(widgets_values, dict):
+        for key in ("prompt", "text", "string"):
+            if key in widgets_values:
+                return widgets_values[key]
+
+    pytest.fail(f"node {node_id} does not expose a prompt value")
+
+
+def test_parse_workflow_multi_image_blend_uses_configured_prompt_map(monkeypatch):
+    json_parser = load_worker_module(
+        monkeypatch,
+        "json_parser.py",
+        "worker_runtime_test_json_parser_prompt_map",
+    )
+
+    workflow = json_parser.parse_workflow(
+        "multi_image_blend",
+        prompt=PROMPT_SENTINEL,
+        seed=123,
+    )
+
+    target_prompt = _prompt_value_for_node(workflow, "433:111")
+    assert target_prompt == PROMPT_SENTINEL
+    assert target_prompt != MULTI_BLEND_DEFAULT_PROMPT
+
+
+def test_workflow_registry_resolves_aliases_and_validates_declared_maps(monkeypatch):
+    workflow_registry = load_worker_module(
+        monkeypatch,
+        "workflow_registry.py",
+        "worker_runtime_test_workflow_registry",
+    )
+
+    registry = workflow_registry.WorkflowRegistry()
+    entry = registry.get("multi_image_blend")
+
+    assert entry.file == "multi_image_blend_qwen_2509_gguf_1222.json"
+    assert entry.prompt_map["main"] == {
+        "node_id": "433:111",
+        "input_key": "prompt",
+    }
+    assert registry.validate_configured_workflows() == []
+
+
+def test_job_log_adapter_and_formatter_include_workflow_and_user_context():
+    logger = logging.getLogger("test-job-context")
+    adapter = JobLogAdapter(
+        logger,
+        {
+            "job_id": "job-123",
+            "workflow": "multi_image_blend",
+            "user_label": "anonymous",
+        },
+    )
+
+    _message, kwargs = adapter.process("processing", {})
+
+    assert kwargs["extra"]["job_id"] == "job-123"
+    assert kwargs["extra"]["workflow"] == "multi_image_blend"
+    assert kwargs["extra"]["user_label"] == "anonymous"
+
+    record = logging.LogRecord(
+        name="worker",
+        level=logging.INFO,
+        pathname=__file__,
+        lineno=1,
+        msg="processing",
+        args=(),
+        exc_info=None,
+    )
+    record.job_id = "job-123"
+    record.workflow = "multi_image_blend"
+    record.user_label = "anonymous"
+
+    payload = json.loads(JSONFormatter().format(record))
+
+    assert payload["job_id"] == "job-123"
+    assert payload["workflow"] == "multi_image_blend"
+    assert payload["user_label"] == "anonymous"
 
 
 def test_normalize_comfy_paths_rewrites_known_windows_model_paths(monkeypatch):
@@ -148,6 +254,82 @@ def test_queue_prompt_normalizes_payload_before_submit(monkeypatch):
     assert captured["payload"]["prompt"]["504:404"]["inputs"]["vae_name"] == (
         "Qwen_Image_Edit/split_files/vae/qwen_image_vae.safetensors"
     )
+
+
+def test_queue_prompt_uses_submit_timeout(monkeypatch):
+    comfy_client = load_worker_module(monkeypatch, "comfy_client.py", "worker_runtime_test_comfy_client_submit_timeout")
+    captured = {}
+
+    class FakeResponse:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return {"prompt_id": "prompt-123"}
+
+    def fake_post(url, json=None, timeout=None, **kwargs):
+        captured["timeout"] = timeout
+        return FakeResponse()
+
+    monkeypatch.setattr(comfy_client, "COMFY_SUBMIT_TIMEOUT_SECONDS", 12, raising=False)
+    monkeypatch.setattr(comfy_client.requests, "post", fake_post)
+
+    prompt_id = comfy_client.ComfyClient().queue_prompt({"1": {"inputs": {}}})
+
+    assert prompt_id == "prompt-123"
+    assert captured["timeout"] == 12
+
+
+def test_history_api_uses_history_timeout(monkeypatch):
+    comfy_client = load_worker_module(monkeypatch, "comfy_client.py", "worker_runtime_test_comfy_client_history_timeout")
+    captured = {}
+
+    class FakeResponse:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return {"prompt-123": {"outputs": {}}}
+
+    def fake_get(url, timeout=None, **kwargs):
+        captured["timeout"] = timeout
+        return FakeResponse()
+
+    monkeypatch.setattr(comfy_client, "COMFY_HISTORY_TIMEOUT_SECONDS", 7, raising=False)
+    monkeypatch.setattr(comfy_client.requests, "get", fake_get)
+
+    result = comfy_client.ComfyClient().get_outputs_from_history("prompt-123")
+
+    assert result == {"images": [], "videos": [], "gifs": []}
+    assert captured["timeout"] == 7
+
+
+def test_copy_output_file_retries_until_local_output_appears(monkeypatch, tmp_path):
+    comfy_client = load_worker_module(monkeypatch, "comfy_client.py", "worker_runtime_test_comfy_client_copy_retry")
+    comfy_output_dir = tmp_path / "comfy-output"
+    storage_output_dir = tmp_path / "storage-outputs"
+    comfy_output_dir.mkdir()
+    storage_output_dir.mkdir()
+    source_file = comfy_output_dir / "late.png"
+
+    monkeypatch.setattr(comfy_client, "COMFY_OUTPUT_DIR", comfy_output_dir)
+    monkeypatch.setattr(comfy_client, "STORAGE_OUTPUT_DIR", storage_output_dir)
+    monkeypatch.setattr(comfy_client, "OUTPUT_COPY_RETRY_COUNT", 2, raising=False)
+    monkeypatch.setattr(comfy_client, "OUTPUT_COPY_RETRY_DELAY_SECONDS", 0, raising=False)
+    monkeypatch.setattr(comfy_client, "OUTPUT_COPY_WAIT_SECONDS", 0, raising=False)
+
+    def fake_sleep(seconds):
+        if not source_file.exists():
+            source_file.write_bytes(b"late-output")
+
+    client = comfy_client.ComfyClient()
+    monkeypatch.setattr(comfy_client.time, "sleep", fake_sleep)
+    monkeypatch.setattr(client, "download_output_via_view", lambda *args, **kwargs: None)
+
+    result = client.copy_output_file("late.png", job_id="job-late")
+
+    assert result == "job-late.png"
+    assert (storage_output_dir / "job-late.png").read_bytes() == b"late-output"
 
 
 def test_copy_output_file_downloads_missing_gpu_output_via_view(monkeypatch, tmp_path):

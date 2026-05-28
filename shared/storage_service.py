@@ -26,6 +26,9 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+# Current runtime target is local filesystem output serving. S3Storage remains
+# as legacy code, but _create_storage() always returns LocalStorage.
+
 
 class LocalStorage:
     """
@@ -220,6 +223,9 @@ def _create_storage():
     - 's3': 使用 S3 相容物件儲存
     """
     backend = os.getenv('STORAGE_BACKEND', 'local').lower()
+    if backend != 'local':
+        logger.warning("Only local filesystem storage is supported for this deployment; using local storage.")
+    return LocalStorage()
 
     if backend == 's3':
         try:

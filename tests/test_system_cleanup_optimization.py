@@ -52,7 +52,7 @@ def test_detect_environment_rejects_ambiguous_contracts(tmp_path):
     (tmp_path / ".env.twcc").write_text("STUDIO_ENV=twcc\n", encoding="utf-8")
 
     with pytest.raises(maintenance_module.MaintenanceError, match="Ambiguous environment selection"):
-        maintenance_module.detect_environment(tmp_path)
+        maintenance_module.detect_environment(tmp_path, environ={})
 
 
 def test_collect_local_cleanup_targets_skips_canonical_assets(tmp_path):

@@ -1,10 +1,12 @@
 import os
+import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 from flask_login import UserMixin
+from werkzeug.exceptions import HTTPException
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -24,7 +26,9 @@ os.environ.setdefault("DB_PORT", "1")
 os.environ.setdefault("DB_PASSWORD", "test-password")
 
 import app as backend_app
+from redis import RedisError
 from shared import database as shared_database
+from shared import storage_service as shared_storage_service
 from shared.security import get_flask_debug_mode
 
 
@@ -219,6 +223,37 @@ def test_serve_static_rejects_traversal():
     assert response.get_json()["error"] == "Forbidden"
 
 
+def test_serve_output_uses_local_filesystem_even_when_s3_env_is_set(monkeypatch, tmp_path):
+    class FakeRemoteStorage:
+        def file_exists(self, remote_key):
+            return True
+
+        def get_presigned_url(self, remote_key, expires=3600):
+            return "https://example.invalid/presigned"
+
+    output_file = tmp_path / "safe.png"
+    output_file.write_bytes(b"local-output")
+    monkeypatch.setenv("STORAGE_BACKEND", "s3")
+    monkeypatch.setenv("STORAGE_OUTPUT_DIR", str(tmp_path))
+    monkeypatch.setattr(shared_storage_service, "storage", FakeRemoteStorage())
+
+    with backend_app.app.test_request_context("/outputs/safe.png"):
+        response = backend_app.serve_output("safe.png")
+
+    assert response.status_code == 200
+    assert response.location is None
+
+
+def test_serve_output_rejects_path_traversal(monkeypatch, tmp_path):
+    monkeypatch.setenv("STORAGE_OUTPUT_DIR", str(tmp_path))
+
+    with backend_app.app.test_request_context("/outputs/../../secret.txt"):
+        with pytest.raises(HTTPException) as exc:
+            backend_app.serve_output("../../secret.txt")
+
+    assert exc.value.code in {400, 403, 404}
+
+
 def test_serve_index_hides_exception_details(monkeypatch):
     def raise_runtime_error(*args, **kwargs):
         raise RuntimeError("<script>alert('boom')</script>")
@@ -230,6 +265,112 @@ def test_serve_index_hides_exception_details(monkeypatch):
 
     assert status_code == 500
     assert response.get_json()["error"] == "Internal server error"
+
+
+def test_generate_job_data_includes_anonymous_trace_context(monkeypatch):
+    class FakeRedis:
+        def __init__(self):
+            self.enqueued = []
+            self.hashes = {}
+
+        def rpush(self, queue_name, payload):
+            self.enqueued.append((queue_name, json.loads(payload)))
+
+        def hset(self, key, mapping):
+            self.hashes[key] = dict(mapping)
+
+        def expire(self, key, ttl):
+            return None
+
+        def llen(self, key):
+            return 0
+
+    class FakeSession:
+        def __init__(self):
+            self.added = []
+            self.flushed = False
+            self.committed = False
+            self.rolled_back = False
+
+        def add(self, value):
+            self.added.append(value)
+
+        def flush(self):
+            self.flushed = True
+
+        def commit(self):
+            self.committed = True
+
+        def rollback(self):
+            self.rolled_back = True
+
+        def close(self):
+            return None
+
+    fake_redis = FakeRedis()
+    fake_session = FakeSession()
+    monkeypatch.setattr(backend_app, "redis_client", fake_redis)
+    monkeypatch.setattr(backend_app, "get_db_session", lambda: fake_session)
+    monkeypatch.setattr(backend_app, "db_client", FakeDbClient([]))
+
+    client = backend_app.app.test_client()
+    response = client.post(
+        "/api/generate",
+        json={"workflow": "multi_image_blend", "prompt": "blend prompt"},
+    )
+
+    assert response.status_code == 200
+    assert fake_session.committed is True
+    job_data = fake_redis.enqueued[0][1]
+    assert job_data["job_id"]
+    assert job_data["workflow"] == "multi_image_blend"
+    assert job_data["user_label"]
+    assert "user_id" not in job_data or job_data["user_id"] in (None, "")
+
+
+def test_generate_rolls_back_and_sanitizes_response_when_redis_enqueue_fails(monkeypatch):
+    class FailingRedis:
+        def rpush(self, queue_name, payload):
+            raise RedisError("redis exploded <secret>")
+
+        def llen(self, key):
+            return 0
+
+    class FakeSession:
+        def __init__(self):
+            self.rolled_back = False
+
+        def add(self, value):
+            return None
+
+        def flush(self):
+            return None
+
+        def commit(self):
+            pytest.fail("commit should not run after Redis enqueue failure")
+
+        def rollback(self):
+            self.rolled_back = True
+
+        def close(self):
+            return None
+
+    fake_session = FakeSession()
+    monkeypatch.setattr(backend_app, "redis_client", FailingRedis())
+    monkeypatch.setattr(backend_app, "get_db_session", lambda: fake_session)
+    monkeypatch.setattr(backend_app, "db_client", FakeDbClient([]))
+
+    client = backend_app.app.test_client()
+    response = client.post(
+        "/api/generate",
+        json={"workflow": "multi_image_blend", "prompt": "blend prompt"},
+    )
+
+    assert response.status_code == 500
+    assert fake_session.rolled_back is True
+    payload = response.get_json()
+    assert "redis exploded" not in json.dumps(payload)
+    assert "<secret>" not in json.dumps(payload)
 
 
 def test_get_db_engine_requires_password(monkeypatch):

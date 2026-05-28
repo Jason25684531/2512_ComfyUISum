@@ -19,6 +19,12 @@
 - `ComfyUIworkflow_api/` keeps API-ready fallback workflows that can be submitted directly to ComfyUI `/prompt`.
 - When the worker detects a UI-exported workflow in `ComfyUIworkflow/`, it automatically loads the matching API fallback file from `ComfyUIworkflow_api/`.
 
+## Current Target Architecture
+
+The supported generation target for this repository is a single Flask Backend, one Worker, one local ComfyUI instance, Redis, MySQL, and the local filesystem. Backend `/api/generate` writes a job to MySQL, enqueues Redis job data, the Worker submits to the local ComfyUI API/WebSocket, and generated files are copied into `storage/outputs`.
+
+`storage/outputs` is the canonical output store. S3, COS, MinIO, object storage, presigned URLs, distributed rendering, and multi-render-node scheduling are out of scope for the current single-render-machine workflow. Older TWCC/S3 notes are historical migration material unless a future OpenSpec change reintroduces them.
+
 ---
 
 ## 📋 目錄

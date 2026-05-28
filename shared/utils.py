@@ -113,8 +113,9 @@ class JSONFormatter(logging.Formatter):
         }
         
         # 注入 job_id (如果存在)
-        if hasattr(record, 'job_id'):
-            log_data["job_id"] = record.job_id
+        for field in ("job_id", "workflow", "user_id", "user_label"):
+            if hasattr(record, field):
+                log_data[field] = getattr(record, field)
         
         # 注入異常資訊 (如果存在)
         if record.exc_info:
@@ -135,12 +136,16 @@ class JobLogAdapter(logging.LoggerAdapter):
     def process(self, msg, kwargs):
         # 修改 Console 輸出訊息（前綴 job_id）
         job_id = self.extra.get('job_id', 'N/A')
-        modified_msg = f"[Job: {job_id}] {msg}"
+        workflow = self.extra.get('workflow', 'unknown')
+        user_context = self.extra.get('user_id') or self.extra.get('user_label') or 'anonymous'
+        modified_msg = f"[Job: {job_id}] [Workflow: {workflow}] [User: {user_context}] {msg}"
         
         # 將 job_id 注入到 extra，供 JSON 格式化器使用
         if 'extra' not in kwargs:
             kwargs['extra'] = {}
-        kwargs['extra']['job_id'] = job_id
+        for field in ("job_id", "workflow", "user_id", "user_label"):
+            if field in self.extra and self.extra[field] is not None:
+                kwargs['extra'][field] = self.extra[field]
         
         return modified_msg, kwargs
 

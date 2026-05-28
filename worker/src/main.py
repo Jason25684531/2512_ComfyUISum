@@ -63,12 +63,18 @@ from config import (
     REDIS_HOST, REDIS_PORT, REDIS_PASSWORD,
     COMFYUI_INPUT_DIR, COMFYUI_OUTPUT_DIR, JOB_QUEUE, TEMP_FILE_MAX_AGE_HOURS,
     JOB_STATUS_EXPIRE_SECONDS, STORAGE_INPUT_DIR, print_config,
-    WORKER_TIMEOUT, DEFAULT_UNET_MODEL, DEFAULT_CLIP_MODEL,
+    WORKER_TIMEOUT, COMFY_WS_WAIT_TIMEOUT_SECONDS, COMFY_SUBMIT_TIMEOUT_SECONDS,
+    COMFY_HISTORY_TIMEOUT_SECONDS, OUTPUT_COPY_RETRY_COUNT,
+    OUTPUT_COPY_RETRY_DELAY_SECONDS, OUTPUT_COPY_WAIT_SECONDS,
+    DEFAULT_UNET_MODEL, DEFAULT_CLIP_MODEL,
     DEFAULT_VAE_MODEL, WARMUP_MODE,
 )
 from shared.config_base import (
     DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
 )
+
+# Keep existing call sites compatible while using the operation-specific render wait timeout.
+WORKER_TIMEOUT = COMFY_WS_WAIT_TIMEOUT_SECONDS
 
 
 def save_base64_image(base64_data: str, job_id: str, field_name: str) -> str:
@@ -421,12 +427,23 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
     }
     """
     job_id = job_data.get("job_id", "unknown")
+    workflow_name = job_data.get("workflow", "text_to_image")
+    user_id = job_data.get("user_id")
+    user_label = job_data.get("user_label") or ("anonymous" if not user_id else f"user:{user_id}")
     
     # Phase 8C: 使用 JobLogAdapter 自動注入 job_id
     from shared.utils import JobLogAdapter
     import logging
     base_logger = logging.getLogger("worker")
-    job_logger = JobLogAdapter(base_logger, {'job_id': job_id})
+    job_logger = JobLogAdapter(
+        base_logger,
+        {
+            'job_id': job_id,
+            'workflow': workflow_name,
+            'user_id': user_id,
+            'user_label': user_label,
+        },
+    )
     
     job_logger.info("="*50)
     job_logger.info(f"🚀 開始處理任務")
@@ -437,7 +454,6 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
         update_job_status(r, job_id, "processing", progress=10, db_client=db_client)
         
         # 2. 提取參數
-        workflow_name = job_data.get("workflow", "text_to_image")
         prompt = job_data.get("prompt", "")
         prompts = job_data.get("prompts", [])  # Veo3 Long Video: 多段 prompts
         seed = job_data.get("seed", -1)
@@ -454,6 +470,15 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
         job_logger.info(f"Model: {model}")
         job_logger.info(f"Batch Size: {batch_size}")
         job_logger.info(f"Images: {list(images.keys()) if images else 'None'}")
+        job_logger.info(
+            "Timeout config: submit=%ss, ws_wait=%ss, history=%ss, copy_retries=%s, copy_delay=%ss, copy_wait=%ss",
+            COMFY_SUBMIT_TIMEOUT_SECONDS,
+            COMFY_WS_WAIT_TIMEOUT_SECONDS,
+            COMFY_HISTORY_TIMEOUT_SECONDS,
+            OUTPUT_COPY_RETRY_COUNT,
+            OUTPUT_COPY_RETRY_DELAY_SECONDS,
+            OUTPUT_COPY_WAIT_SECONDS,
+        )
         
         # 3. 處理上傳的圖片 (base64 -> 檔案)
         # 3. 處理上傳的圖片 (base64 -> 檔案)
@@ -468,6 +493,7 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
                         # 原本的邏輯：存到 CPU 機台本地
                         filename = save_base64_image(base64_data, job_id, field_name)
                         image_files[field_name] = filename
+                        job_logger.info("image save complete: field=%s filename=%s", field_name, filename)
                         
                         # 🌟【新增這兩行】：把存在 CPU 的檔案，透過網路推送到 GPU
                         filepath = Path(COMFYUI_INPUT_DIR) / filename
@@ -484,6 +510,7 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
             job_logger.info(f"🎵 Audio file specified: {audio_file}")
             try:
                 comfyui_audio_file = copy_audio_to_comfyui(audio_file, job_id)
+                job_logger.info("audio save complete: filename=%s", comfyui_audio_file)
             except Exception as e:
                 job_logger.warning(f"⚠️ 複製音訊檔案失敗: {e}")
                 comfyui_audio_file = ""
@@ -491,6 +518,7 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
         # 4. 解析 workflow (包含圖片與音訊注入)
         update_job_status(r, job_id, "processing", progress=20, db_client=db_client)
         
+        job_logger.info("parse start")
         workflow = parse_workflow(
             workflow_name=workflow_name,
             prompt=prompt,
@@ -502,6 +530,7 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
             audio_file=comfyui_audio_file, # 傳入複製後的音訊檔名 (Phase 7)
             prompts=prompts               # Veo3 Long Video: 傳入多段 prompts
         )
+        job_logger.info("parse end")
         
         job_logger.info("Workflow 解析完成")
         
@@ -512,6 +541,7 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
         # 6. 提交任務到 ComfyUI
         update_job_status(r, job_id, "processing", progress=30, db_client=db_client)
         
+        job_logger.info("ComfyUI submit start")
         prompt_id = client.queue_prompt(workflow)
         if not prompt_id:
             raise Exception("任務提交失敗")
@@ -531,6 +561,7 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
             # 將進度從 30% 開始映射到 30-95%
             mapped_progress = 30 + int(progress * 0.65)
             update_job_status(r, job_id, "processing", progress=mapped_progress, db_client=db_client)
+            job_logger.info("progress heartbeat: progress=%s mapped_progress=%s", progress, mapped_progress)
 
         # 8. 等待 ComfyUI 執行完成
         result = client.wait_for_completion(
@@ -609,6 +640,12 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
                 
                 # 嘗試複製選中的檔案（傳遞 file_type）
                 file_type = selected_file.get("type", "output")
+                job_logger.info(
+                    "output copy start: filename=%s subfolder=%s type=%s",
+                    selected_file.get("filename"),
+                    selected_file.get("subfolder", ""),
+                    file_type,
+                )
                 new_filename = client.copy_output_file(
                     filename=selected_file.get("filename"),
                     subfolder=selected_file.get("subfolder", ""),
@@ -634,6 +671,7 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
                             break
                 
                 if new_filename:
+                    job_logger.info("output copy complete: filename=%s", new_filename)
                     try:
                         local_output_path, file_size = validate_local_output_file(new_filename, job_logger)
                     except Exception as output_err:

@@ -20,7 +20,10 @@ from urllib.parse import urlparse
 from comfy_paths import normalize_comfy_paths
 from config import (
     COMFY_HOST, COMFY_PORT, COMFY_HTTP_URL, COMFY_WS_URL,
-    COMFYUI_OUTPUT_DIR, STORAGE_OUTPUT_DIR, COMFY_HTTP_TIMEOUT
+    COMFYUI_OUTPUT_DIR, STORAGE_OUTPUT_DIR, COMFY_HTTP_TIMEOUT,
+    COMFY_SUBMIT_TIMEOUT_SECONDS, COMFY_WS_WAIT_TIMEOUT_SECONDS,
+    COMFY_HISTORY_TIMEOUT_SECONDS, OUTPUT_COPY_RETRY_COUNT,
+    OUTPUT_COPY_RETRY_DELAY_SECONDS, OUTPUT_COPY_WAIT_SECONDS,
 )
 from shared.security import get_public_error_message
 
@@ -131,7 +134,7 @@ class ComfyClient:
             response = requests.post(
                 f"{self.http_url}/prompt",
                 json=payload,
-                timeout=COMFY_HTTP_TIMEOUT
+                timeout=COMFY_SUBMIT_TIMEOUT_SECONDS
             )
             
             if response.status_code == 200:
@@ -172,10 +175,10 @@ class ComfyClient:
                 "error": str or None
             }
         """
-        # Phase 9: 使用配置的 WORKER_TIMEOUT
-        from config import WORKER_TIMEOUT, COMFY_POLLING_INTERVAL
+        # Phase 9/10: use operation-specific render wait timeout.
+        from config import COMFY_POLLING_INTERVAL
         if timeout is None:
-            timeout = WORKER_TIMEOUT
+            timeout = COMFY_WS_WAIT_TIMEOUT_SECONDS
         
         ws_url = f"{self.ws_url}?clientId={self.client_id}"
         result = {
@@ -202,7 +205,16 @@ class ComfyClient:
                 # 檢查超時
                 elapsed = time.time() - start_time
                 if elapsed > timeout:
-                    result["error"] = f"執行超時（已等待 {int(elapsed)}s）"
+                    result["error"] = f"render timeout after {int(elapsed)}s (limit {timeout}s)"
+                    result["timeout"] = True
+                    result["elapsed_seconds"] = int(elapsed)
+                    result["timeout_limit_seconds"] = timeout
+                    history_outputs = self.get_outputs_from_history(prompt_id)
+                    result["images"] = history_outputs.get("images", [])
+                    result["videos"] = history_outputs.get("videos", [])
+                    result["gifs"] = history_outputs.get("gifs", [])
+                    if result["images"] or result["videos"] or result["gifs"]:
+                        result["partial_outputs_recovered"] = True
                     print(f"[ComfyClient] ❌ 任務超時: {prompt_id} ({int(elapsed)}s)")
                     break
 
@@ -355,7 +367,7 @@ class ComfyClient:
         try:
             response = requests.get(
                 f"{self.http_url}/history/{prompt_id}",
-                timeout=COMFY_HTTP_TIMEOUT
+                timeout=COMFY_HISTORY_TIMEOUT_SECONDS
             )
             
             if response.status_code != 200:
@@ -471,6 +483,21 @@ class ComfyClient:
             source_path = base_dir / subfolder / filename
         else:
             source_path = base_dir / filename
+
+        if not source_path.exists() and OUTPUT_COPY_WAIT_SECONDS > 0:
+            print(f"[ComfyClient] Waiting {OUTPUT_COPY_WAIT_SECONDS}s for output file to appear")
+            time.sleep(OUTPUT_COPY_WAIT_SECONDS)
+
+        retry_count = max(0, int(OUTPUT_COPY_RETRY_COUNT))
+        retry_delay = max(0.0, float(OUTPUT_COPY_RETRY_DELAY_SECONDS))
+        for attempt in range(retry_count):
+            if source_path.exists():
+                break
+            print(
+                f"[ComfyClient] Output not available yet; retry {attempt + 1}/{retry_count} "
+                f"after {retry_delay}s"
+            )
+            time.sleep(retry_delay)
         
         print(f"[ComfyClient] 檢查檔案路徑: {source_path}")
         

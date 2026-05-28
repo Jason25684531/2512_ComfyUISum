@@ -825,6 +825,10 @@ def generate():
                 return jsonify({'error': 'Invalid base64 audio data'}), 400
         # 2. 生成唯一的 job_id
         job_id = str(uuid.uuid4())
+        user_id_for_job = current_user.id if current_user.is_authenticated else None
+        user_label_for_job = f"user:{user_id_for_job}" if user_id_for_job else getattr(g, 'user_id', 'anonymous')
+        if not user_label_for_job:
+            user_label_for_job = 'anonymous'
         
         # 3. 构造任务数据 (包含所有前端傳來的參數)
         job_data = {
@@ -833,6 +837,8 @@ def generate():
             'prompts': prompts,  # Veo3 Long Video: 新增 prompts 列表
             'seed': data.get('seed', -1),  # -1 表示随机
             'workflow': data.get('workflow', 'text_to_image'),
+            'user_id': user_id_for_job,
+            'user_label': user_label_for_job,
             'model': data.get('model', 'turbo_fp8'),
             'aspect_ratio': data.get('aspect_ratio', '1:1'),
             'batch_size': data.get('batch_size', 1),
@@ -907,10 +913,6 @@ def generate():
         
         try:
             # Member System: 獲取當前用戶 ID（如已登入）
-            user_id_for_job = None
-            if current_user.is_authenticated:
-                user_id_for_job = current_user.id
-            
             # 6. 建立 Job 物件並加入 Session
             from shared.database import Job
             new_job = Job(
@@ -930,10 +932,18 @@ def generate():
             
             # 7. Flush：強制寫入資料庫但不提交事務
             session.flush()
+            trace_extra = {
+                'job_id': job_id,
+                'workflow': workflow,
+                'user_id': user_id_for_job,
+                'user_label': user_label_for_job,
+            }
+            logger.info("job db record flushed", extra=trace_extra)
             logger.info(f"✓ Job {job_id} 已寫入資料庫 (未提交)")
             
             # 8. 推送到 Redis 佇列
             redis_client.rpush(REDIS_QUEUE_NAME, json.dumps(job_data))
+            logger.info("job enqueued to redis", extra=trace_extra)
             logger.info(f"✓ Job {job_id} 已推送至 Redis")
             
             # 9. 初始化 Redis 狀態 Hash
@@ -1507,6 +1517,7 @@ def serve_output(filename):
     """
     GET /outputs/<filename>
     Serve generated images/videos from storage/outputs directory
+    Current target is local filesystem output serving only.
     支援 .png, .jpg, .mp4 等格式
     防止路徑穿越攻擊
     
@@ -1524,7 +1535,7 @@ def serve_output(filename):
     
     # ===== S3 模式：嘗試產生 pre-signed URL 做 302 redirect =====
     storage_backend = os.getenv('STORAGE_BACKEND', 'local').lower()
-    if storage_backend == 's3':
+    if False and storage_backend == 's3':
         try:
             from shared.storage_service import storage
             remote_key = f"outputs/{safe_filename}"
