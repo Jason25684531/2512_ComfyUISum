@@ -18,6 +18,7 @@ from shared.utils import JSONFormatter, JobLogAdapter
 
 
 MULTI_BLEND_DEFAULT_PROMPT = "圖1的女生拖著圖2的行李箱，站在圖3的地鐵站入口，逼真的光影"
+MULTI_BLEND_DEFAULT_PROMPT_PREFIX = "圖1的女生拖著圖2的行李箱"
 PROMPT_SENTINEL = "__PROMPT_OVERRIDE_TEST__"
 WINDOWS_TEXT_TO_IMAGE_MODELS = {
     ("33:18", "clip_name"): "z-image\\qwen_3_4b.safetensors",
@@ -226,6 +227,73 @@ def test_parse_workflow_multi_image_blend_uses_configured_prompt_map(monkeypatch
     assert target_prompt != MULTI_BLEND_DEFAULT_PROMPT
 
 
+def test_parse_workflow_multi_image_blend_overrides_api_fallback_prompt_payload(monkeypatch):
+    json_parser = load_worker_module(
+        monkeypatch,
+        "json_parser.py",
+        "worker_runtime_test_json_parser_api_prompt_map",
+    )
+
+    workflow = json_parser.parse_workflow(
+        "multi_image_blend",
+        prompt=PROMPT_SENTINEL,
+        seed=123,
+    )
+
+    assert workflow["433:111"]["inputs"]["prompt"] == PROMPT_SENTINEL
+    assert workflow["433:110"]["inputs"]["prompt"] == ""
+    assert MULTI_BLEND_DEFAULT_PROMPT_PREFIX not in workflow["433:111"]["inputs"]["prompt"]
+
+
+def test_parse_workflow_multi_image_blend_keeps_configured_image_map(monkeypatch):
+    json_parser = load_worker_module(
+        monkeypatch,
+        "json_parser.py",
+        "worker_runtime_test_json_parser_multi_blend_image_map",
+    )
+
+    workflow = json_parser.parse_workflow(
+        "multi_image_blend",
+        prompt=PROMPT_SENTINEL,
+        seed=123,
+        image_files={
+            "source": "source-test.png",
+            "target": "target-test.png",
+            "extra": "extra-test.png",
+        },
+    )
+
+    assert workflow["78"]["inputs"]["image"] == "source-test.png"
+    assert workflow["436"]["inputs"]["image"] == "target-test.png"
+    assert workflow["437"]["inputs"]["image"] == "extra-test.png"
+
+
+def test_set_configured_prompt_value_supports_ui_widgets_values(monkeypatch):
+    json_parser = load_worker_module(
+        monkeypatch,
+        "json_parser.py",
+        "worker_runtime_test_json_parser_ui_prompt_widget",
+    )
+    workflow = {
+        "nodes": [
+            {
+                "id": "433:111",
+                "type": "TextEncodeQwenImageEditPlus",
+                "inputs": [],
+                "widgets_values": [MULTI_BLEND_DEFAULT_PROMPT],
+            }
+        ]
+    }
+
+    assert json_parser.set_configured_prompt_value(
+        workflow,
+        "433:111",
+        "prompt",
+        PROMPT_SENTINEL,
+    )
+    assert workflow["nodes"][0]["widgets_values"][0] == PROMPT_SENTINEL
+
+
 def test_workflow_registry_resolves_aliases_and_validates_declared_maps(monkeypatch):
     workflow_registry = load_worker_module(
         monkeypatch,
@@ -235,13 +303,34 @@ def test_workflow_registry_resolves_aliases_and_validates_declared_maps(monkeypa
 
     registry = workflow_registry.WorkflowRegistry()
     entry = registry.get("multi_image_blend")
+    legacy_entry = registry.get("multi_blend")
 
+    assert entry.name == "multi_image_blend"
+    assert legacy_entry.name == "multi_image_blend"
     assert entry.file == "multi_image_blend_qwen_2509_gguf_1222.json"
     assert entry.prompt_map["main"] == {
         "node_id": "433:111",
         "input_key": "prompt",
     }
     assert registry.validate_configured_workflows() == []
+
+
+def test_parse_workflow_multi_image_blend_logs_prompt_map_api_injection(monkeypatch, capsys):
+    json_parser = load_worker_module(
+        monkeypatch,
+        "json_parser.py",
+        "worker_runtime_test_json_parser_prompt_map_log",
+    )
+
+    json_parser.parse_workflow(
+        "multi_image_blend",
+        prompt=PROMPT_SENTINEL,
+        seed=123,
+    )
+
+    captured = capsys.readouterr().out
+    assert "prompt_map API 注入: Node 433:111.prompt" in captured
+    assert "Qwen Prompt 注入: Node 433:110.prompt" not in captured
 
 
 def test_job_log_adapter_and_formatter_include_workflow_and_user_context():

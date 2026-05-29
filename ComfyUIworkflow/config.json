@@ -76,7 +76,7 @@
       "output_node_id": "119"
     }
   },
-  "multi_blend": {
+  "multi_image_blend": {
     "file": "multi_image_blend_qwen_2509_gguf_1222.json",
     "description": "Qwen 多圖場景融合",
     "category": "image",

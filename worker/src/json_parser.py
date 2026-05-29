@@ -229,7 +229,7 @@ def set_configured_prompt_value(workflow: dict, node_id: str, input_key: str, pr
         inputs[input_key] = prompt_value
         if label:
             print(
-                f"[Parser] {label}: Node {node_id}.{input_key} = "
+                f"[Parser] prompt_map API 注入: Node {node_id}.{input_key} = "
                 f"{_safe_log_value(old_value)} -> {_safe_log_value(prompt_value)}"
             )
         return True

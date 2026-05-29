@@ -9,7 +9,7 @@ from config import WORKFLOW_CONFIG_PATH, WORKFLOW_DIR
 
 
 LEGACY_ALIASES = {
-    "multi_image_blend": "multi_blend",
+    "multi_blend": "multi_image_blend",
     "single_image_edit": "image_edit",
 }
 
