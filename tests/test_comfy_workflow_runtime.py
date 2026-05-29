@@ -20,6 +20,7 @@ from shared.utils import JSONFormatter, JobLogAdapter
 MULTI_BLEND_DEFAULT_PROMPT = "圖1的女生拖著圖2的行李箱，站在圖3的地鐵站入口，逼真的光影"
 MULTI_BLEND_DEFAULT_PROMPT_PREFIX = "圖1的女生拖著圖2的行李箱"
 PROMPT_SENTINEL = "__PROMPT_OVERRIDE_TEST__"
+MULTI_BLEND_USER_PROMPT = "__PROMPT_REPLACE_TEST__ 圖一的人拿著圖二圖三的物件"
 WINDOWS_TEXT_TO_IMAGE_MODELS = {
     ("33:18", "clip_name"): "z-image\\qwen_3_4b.safetensors",
     ("33:16", "unet_name"): "z-image\\z-image-turbo-fp8-e4m3fn.safetensors",
@@ -331,6 +332,60 @@ def test_parse_workflow_multi_image_blend_logs_prompt_map_api_injection(monkeypa
     captured = capsys.readouterr().out
     assert "prompt_map API 注入: Node 433:111.prompt" in captured
     assert "Qwen Prompt 注入: Node 433:110.prompt" not in captured
+
+
+def test_parse_workflow_multi_blend_alias_injects_positive_prompt_and_images(monkeypatch, capsys):
+    json_parser = load_worker_module(
+        monkeypatch,
+        "json_parser.py",
+        "worker_runtime_test_json_parser_multi_blend_alias_prompt_map",
+    )
+
+    workflow = json_parser.parse_workflow(
+        "multi_blend",
+        prompt=MULTI_BLEND_USER_PROMPT,
+        seed=123,
+        image_files={
+            "source": "source-test.png",
+            "target": "target-test.png",
+            "extra": "extra-test.png",
+        },
+    )
+
+    assert workflow["433:111"]["inputs"]["prompt"] == MULTI_BLEND_USER_PROMPT
+    assert workflow["433:110"]["inputs"]["prompt"] == ""
+    assert workflow["78"]["inputs"]["image"] == "source-test.png"
+    assert workflow["436"]["inputs"]["image"] == "target-test.png"
+    assert workflow["437"]["inputs"]["image"] == "extra-test.png"
+
+    captured = capsys.readouterr().out
+    assert "[Parser] prompt_map API 注入: Node 433:111.prompt" in captured
+    assert "[Parser] Qwen Prompt 注入: Node 433:110.prompt" not in captured
+
+
+def test_parse_workflow_accepts_workflow_type_keyword_for_multi_image_blend(monkeypatch):
+    json_parser = load_worker_module(
+        monkeypatch,
+        "json_parser.py",
+        "worker_runtime_test_json_parser_workflow_type_keyword",
+    )
+
+    workflow = json_parser.parse_workflow(
+        workflow_type="multi_image_blend",
+        prompt=MULTI_BLEND_USER_PROMPT,
+        seed=123,
+        image_files={
+            "source": "source-test.png",
+            "target": "target-test.png",
+            "extra": "extra-test.png",
+        },
+    )
+
+    assert workflow["433:111"]["inputs"]["prompt"] == MULTI_BLEND_USER_PROMPT
+    assert workflow["433:110"]["inputs"]["prompt"] == ""
+    assert workflow["78"]["inputs"]["image"] == "source-test.png"
+    assert workflow["436"]["inputs"]["image"] == "target-test.png"
+    assert workflow["437"]["inputs"]["image"] == "extra-test.png"
 
 
 def test_job_log_adapter_and_formatter_include_workflow_and_user_context():

@@ -219,8 +219,12 @@ def set_node_prompt_value(workflow: dict, node_id: str, prompt_value: str, label
 
 
 def set_configured_prompt_value(workflow: dict, node_id: str, input_key: str, prompt_value: str, label: str = "") -> bool:
-    node = get_workflow_node(workflow, node_id)
-    if not node:
+    node = find_workflow_node(workflow, node_id)
+    if node is None:
+        print(f"[Parser] Warning: prompt_map target node {node_id} not found")
+        return False
+    if not isinstance(node, dict):
+        print(f"[Parser] Warning: prompt_map target node {node_id} is not a dict")
         return False
 
     inputs = node.get("inputs")
@@ -257,7 +261,38 @@ def set_configured_prompt_value(workflow: dict, node_id: str, input_key: str, pr
                     )
                 return True
 
-    print(f"[Parser] ?? Config prompt target {node_id}.{input_key} cannot be injected")
+    print(f"[Parser] Warning: prompt_map target {node_id}.{input_key} cannot be injected")
+    return False
+
+
+def apply_prompt_map_if_configured(workflow: dict, workflow_config, prompt: str) -> bool:
+    if not prompt:
+        return False
+
+    prompt_map_config = getattr(workflow_config, "prompt_map", None)
+    if prompt_map_config is None and isinstance(workflow_config, dict):
+        prompt_map_config = workflow_config.get("prompt_map", {})
+    if not prompt_map_config:
+        return False
+
+    for prompt_name, target in prompt_map_config.items():
+        if not isinstance(target, dict):
+            print(f"[Parser] Warning: prompt_map.{prompt_name} is not a target object")
+            continue
+        node_id = target.get("node_id")
+        input_key = target.get("input_key", "prompt")
+        if not node_id:
+            print(f"[Parser] Warning: prompt_map.{prompt_name} missing node_id")
+            continue
+        if set_configured_prompt_value(
+            workflow,
+            str(node_id),
+            input_key,
+            prompt,
+            f"prompt_map.{prompt_name}",
+        ):
+            return True
+
     return False
 
 
@@ -506,7 +541,7 @@ def trim_veo3_workflow(workflow: dict, image_files: dict) -> dict:
 
 
 def parse_workflow(
-    workflow_name: str,
+    workflow_name: str = None,
     prompt: str = "",
     prompts: list = None,  # Veo3 Long Video: 多段 prompts
     seed: int = -1,
@@ -521,6 +556,13 @@ def parse_workflow(
     解析並注入參數到 workflow
     優先從 config.json 讀取映射規則 (Config-Driven)
     """
+    if workflow_name is None:
+        workflow_name = kwargs.pop("workflow_type", None)
+    else:
+        kwargs.pop("workflow_type", None)
+    if not workflow_name:
+        raise TypeError("parse_workflow() missing required workflow_name or workflow_type")
+
     # ==========================================
     # 1. 初始化變數與引入 Config (優先定義)
     # ==========================================
@@ -544,7 +586,6 @@ def parse_workflow(
     config_data = registry._config
     workflow_config = config_data.get(workflow_entry.name, {})
     image_map_config = workflow_entry.image_map
-    prompt_map_config = workflow_entry.prompt_map
     
     try:
         if config_path.exists():
@@ -598,22 +639,7 @@ def parse_workflow(
     # ==========================================
     # 注入 Prompt (支援多種節點類型)
     # ==========================================
-    prompt_injected = False
-
-    if prompt and prompt_map_config:
-        for prompt_name, target in prompt_map_config.items():
-            node_id = target.get("node_id")
-            input_key = target.get("input_key", "prompt")
-            if node_id and set_configured_prompt_value(
-                workflow,
-                node_id,
-                input_key,
-                prompt,
-                f"Config prompt_map.{prompt_name}",
-            ):
-                print(f"[Parser] Config prompt_map injected prompt into Node {node_id}.{input_key}")
-                prompt_injected = True
-                break
+    prompt_injected = apply_prompt_map_if_configured(workflow, workflow_entry, prompt)
     
     # 1. 嘗試 CLIPTextEncode (標準 SDXL workflow)
     positive_nodes = [] if prompt_injected else find_nodes_by_class(workflow, "CLIPTextEncode")

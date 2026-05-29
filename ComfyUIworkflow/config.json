@@ -91,7 +91,7 @@
     "prompt_map": {
       "main": {
         "node_id": "433:111",
-        "input_key": "prompt" 
+        "input_key": "prompt"
       }
     },
     "image_map": {
