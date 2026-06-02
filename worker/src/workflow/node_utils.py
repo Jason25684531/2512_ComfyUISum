@@ -57,15 +57,7 @@ def set_node_input_value(workflow: dict, node_id: str, input_key: str, value, la
     return True
 
 
-def set_node_prompt_value(workflow: dict, node_id: str, prompt_value: str, label: str = "") -> bool:
-    for input_key in ("text", "prompt", "string"):
-        if set_node_input_value(workflow, node_id, input_key, prompt_value, label):
-            return True
-
-    node = get_workflow_node(workflow, node_id)
-    if not node:
-        return False
-
+def _set_widget_prompt_value(node: dict, node_id: str, prompt_value: str, label: str, widget_keys: tuple[str, ...]) -> bool:
     widgets_values = node.get("widgets_values")
     if isinstance(widgets_values, list) and widgets_values:
         old_value = widgets_values[0]
@@ -78,16 +70,31 @@ def set_node_prompt_value(workflow: dict, node_id: str, prompt_value: str, label
         return True
 
     if isinstance(widgets_values, dict):
-        for input_key in ("text", "prompt", "string"):
-            if input_key in widgets_values:
-                old_value = widgets_values[input_key]
-                widgets_values[input_key] = prompt_value
+        for widget_key in widget_keys:
+            if widget_key in widgets_values:
+                old_value = widgets_values[widget_key]
+                widgets_values[widget_key] = prompt_value
                 if label:
                     print(
-                        f"[Parser] {label}: Node {node_id}.widgets_values[{input_key!r}] = "
+                        f"[Parser] {label}: Node {node_id}.widgets_values[{widget_key!r}] = "
                         f"{safe_log_value(old_value)} -> {safe_log_value(prompt_value)}"
                     )
                 return True
+
+    return False
+
+
+def set_node_prompt_value(workflow: dict, node_id: str, prompt_value: str, label: str = "") -> bool:
+    for input_key in ("text", "prompt", "string"):
+        if set_node_input_value(workflow, node_id, input_key, prompt_value, label):
+            return True
+
+    node = get_workflow_node(workflow, node_id)
+    if not node:
+        return False
+
+    if _set_widget_prompt_value(node, node_id, prompt_value, label, ("text", "prompt", "string")):
+        return True
 
     print(f"[Parser] Warning: Node {node_id} cannot accept prompt/text/string injection")
     return False
@@ -113,28 +120,8 @@ def set_configured_prompt_value(workflow: dict, node_id: str, input_key: str, pr
             )
         return True
 
-    widgets_values = node.get("widgets_values")
-    if isinstance(widgets_values, list) and widgets_values:
-        old_value = widgets_values[0]
-        widgets_values[0] = prompt_value
-        if label:
-            print(
-                f"[Parser] {label}: Node {node_id}.widgets_values[0] = "
-                f"{safe_log_value(old_value)} -> {safe_log_value(prompt_value)}"
-            )
+    if _set_widget_prompt_value(node, node_id, prompt_value, label, (input_key, "prompt", "text", "string")):
         return True
-
-    if isinstance(widgets_values, dict):
-        for widget_key in (input_key, "prompt", "text", "string"):
-            if widget_key in widgets_values:
-                old_value = widgets_values[widget_key]
-                widgets_values[widget_key] = prompt_value
-                if label:
-                    print(
-                        f"[Parser] {label}: Node {node_id}.widgets_values[{widget_key!r}] = "
-                        f"{safe_log_value(old_value)} -> {safe_log_value(prompt_value)}"
-                    )
-                return True
 
     print(f"[Parser] Warning: prompt_map target {node_id}.{input_key} cannot be injected")
     return False
