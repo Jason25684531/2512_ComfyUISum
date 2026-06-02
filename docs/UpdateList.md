@@ -162,7 +162,7 @@ redis:
 
 **清理動作**：
 - 🗂️ 建立 `frontend/backups/` 目錄
-- 📦 移動備份文件至 backups (dashboard_Backup.html, test-flow.html)
+- 📦 移動備份文件至 backups (dashboard_Backup.html, test-flow.html)；2026-06-02 repo cleanup 已歸檔至 `docs/legacy/frontend/`
 
 ##### 33.4 性能預期提升 📈
 
@@ -325,17 +325,17 @@ http://localhost:8089
 
 | 報告類型 | 文件路徑 |
 |---------|---------|
-| 冒煙測試 | `tests/smoke_test_report.html` |
-| 負載測試 | `tests/load_test_report.html` |
-| 壓力測試 | `tests/stress_test_report.html` |
+| 冒煙測試 | `docs/reports/smoke_test_report.html` |
+| 負載測試 | `docs/reports/load_test_report.html` |
+| 壓力測試 | `docs/reports/stress_test_report.html` |
 
 **查看方式**：
 ```bash
 # Windows
-start tests\stress_test_report.html
+start docs\reports\stress_test_report.html
 
 # Linux/Mac
-open tests/stress_test_report.html
+open docs/reports/stress_test_report.html
 ```
 
 #### 相關文件
@@ -380,7 +380,7 @@ open tests/stress_test_report.html
 
 | 檔案路徑 | 類型 | 狀態 | 說明 |
 |---------|------|------|------|
-| `frontend/dashboard_Backup.html` | 備份 | ⚠️ 建議移除 | 3024 行，已整合至 `dashboard.html` |
+| `docs/legacy/frontend/dashboard_Backup.html` | 備份 | 已歸檔 | 3024 行，已整合至 `dashboard.html` |
 | `frontend/dashboard_v2.html` | 舊版 | ⚠️ 建議移除 | 1534 行，已整合至 `dashboard.html` |
 
 ##### 32.3 Docker Compose 檔案分析
@@ -431,7 +431,7 @@ ComfyUISum/
 │   ├── image-utils.js         # 圖片處理工具模組
 │   ├── config.js              # API 配置
 │   ├── style.css              # 樣式
-│   ├── dashboard_Backup.html  # ⚠️ 可移除 (已整合)
+│   ├── dashboard_Backup.html  # 已歸檔至 docs/legacy/frontend/
 │   └── dashboard_v2.html      # ⚠️ 可移除 (已整合)
 │
 ├── ComfyUIworkflow/           # Workflow 模板 (10 個)
@@ -486,7 +486,7 @@ ComfyUISum/
 1. **移除冗餘檔案**：
    ```bash
    # 移除已整合的備份檔案
-   del frontend\dashboard_Backup.html
+   move frontend\dashboard_Backup.html docs\legacy\frontend\
    del frontend\dashboard_v2.html
    ```
 
@@ -845,14 +845,14 @@ window.toolStates = {
 **26.3.1 移除冗餘檔案**
 根據 Phase 9 的更新記錄，以下檔案已被整合，建議移除：
 - `frontend/dashboard_v2.html` - 已整合至 `dashboard.html`
-- `frontend/dashboard_Backup.html` - 舊版備份，不再使用
+- `docs/legacy/frontend/dashboard_Backup.html` - 舊版備份，不再使用
 
 **保留檔案**：
 - `frontend/dashboard.html` - 主要 Dashboard (整合後版本)
 - `frontend/login.html` - 登入頁面
 - `frontend/profile.html` - 個人頁面
 - `frontend/index.html` - 首頁
-- `frontend/test-flow.html` - 測試頁面
+- `docs/legacy/frontend/test-flow.html` - 測試頁面，已歸檔
 
 ##### 26.4 架構分析結果
 
@@ -918,7 +918,7 @@ window.toolStates = {
 
 **建議移除檔案**（尚未執行）：
 - `frontend/dashboard_v2.html` - 已整合至 dashboard.html
-- `frontend/dashboard_Backup.html` - 舊版備份
+- `docs/legacy/frontend/dashboard_Backup.html` - 舊版備份
 
 #### 技術債務追蹤
 

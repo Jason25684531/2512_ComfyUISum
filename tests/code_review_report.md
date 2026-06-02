@@ -102,14 +102,15 @@ backend/src/
 | 文件 | 大小 | 狀態 | 建議 |
 |------|------|------|------|
 | `dashboard.html` | 156 KB | ✅ 使用中 | 保留 |
-| `dashboard_Backup.html` | 3024 行 | ⚠️ 備份 | 可移除至 `backups/` |
-| `dashboard_v2.html` | 1534 行 | ⚠️ 舊版 | 可移除至 `backups/` |
+| `dashboard_Backup.html` | 3024 行 | 已歸檔 | 已移至 `docs/legacy/frontend/` |
+| `dashboard_v2.html` | 1534 行 | ⚠️ 舊版 | 可移除至 `docs/legacy/frontend/` |
 
-**建議操作**：
+**狀態**：
 ```bash
-mkdir frontend/backups
-mv frontend/dashboard_Backup.html frontend/backups/
-mv frontend/dashboard_v2.html frontend/backups/
+# Phase 2 repo cleanup 已完成：
+# docs/legacy/frontend/dashboard_Backup.html
+#
+# dashboard_v2.html 若重新出現，仍建議歸檔至 docs/legacy/frontend/。
 ```
 
 **理由**：
@@ -144,7 +145,7 @@ mv frontend/dashboard_v2.html frontend/backups/
 - [x] Redis maxmemory 限制
 
 ### 建議執行 (非必要)
-- [ ] 移動 Frontend 備份文件至 `backups/` 目錄
+- [x] 移動 Frontend 備份文件至 `docs/legacy/frontend/` 目錄（dashboard_Backup.html）
 - [ ] 考慮拆分 `backend/src/app.py` (當代碼超過 2000 行時)
 
 ### 無需執行
