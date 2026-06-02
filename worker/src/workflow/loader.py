@@ -3,9 +3,12 @@
 import json
 from pathlib import Path
 
-from workflow_registry import WorkflowRegistry
-
-from workflow.legacy_maps import WORKFLOW_MAP
+try:
+    from ..workflow_registry import WorkflowRegistry
+    from .legacy_maps import WORKFLOW_MAP
+except ImportError:
+    from workflow_registry import WorkflowRegistry
+    from workflow.legacy_maps import WORKFLOW_MAP
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]

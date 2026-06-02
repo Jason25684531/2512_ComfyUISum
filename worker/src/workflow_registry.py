@@ -1,17 +1,36 @@
 import json
 import os
 import platform
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-
-from config import WORKFLOW_CONFIG_PATH, WORKFLOW_DIR
 
 
 LEGACY_ALIASES = {
     "multi_blend": "multi_image_blend",
     "single_image_edit": "image_edit",
 }
+
+_CONFIG_MODULE = sys.modules.get("config")
+_CACHED_DEFAULT_PATHS = None
+if _CONFIG_MODULE is not None and hasattr(_CONFIG_MODULE, "WORKFLOW_CONFIG_PATH") and hasattr(_CONFIG_MODULE, "WORKFLOW_DIR"):
+    _CACHED_DEFAULT_PATHS = (
+        Path(_CONFIG_MODULE.WORKFLOW_CONFIG_PATH),
+        Path(_CONFIG_MODULE.WORKFLOW_DIR),
+    )
+
+
+def _default_workflow_paths() -> tuple[Path, Path]:
+    if _CACHED_DEFAULT_PATHS is not None:
+        return _CACHED_DEFAULT_PATHS
+
+    try:
+        from .config import WORKFLOW_CONFIG_PATH, WORKFLOW_DIR
+    except ImportError:
+        from config import WORKFLOW_CONFIG_PATH, WORKFLOW_DIR
+
+    return Path(WORKFLOW_CONFIG_PATH), Path(WORKFLOW_DIR)
 
 
 @dataclass(frozen=True)
@@ -27,9 +46,10 @@ class WorkflowEntry:
 
 
 class WorkflowRegistry:
-    def __init__(self, config_path: Path = WORKFLOW_CONFIG_PATH, workflow_dir: Path = WORKFLOW_DIR):
-        self.config_path = Path(config_path)
-        self.workflow_dir = Path(workflow_dir)
+    def __init__(self, config_path: Path = None, workflow_dir: Path = None):
+        default_config_path, default_workflow_dir = _default_workflow_paths()
+        self.config_path = Path(config_path) if config_path is not None else default_config_path
+        self.workflow_dir = Path(workflow_dir) if workflow_dir is not None else default_workflow_dir
         self._config = self._load_config()
 
     def _load_config(self) -> dict[str, Any]:

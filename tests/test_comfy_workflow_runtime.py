@@ -2,6 +2,7 @@ import importlib.util
 import json
 import logging
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -93,6 +94,60 @@ def test_json_parser_uses_api_fallback_directory(monkeypatch):
     json_parser = load_worker_module(monkeypatch, "json_parser.py", "worker_runtime_test_json_parser")
 
     assert json_parser.API_WORKFLOW_FALLBACK_DIR.name == "ComfyUIworkflow_api"
+
+
+def test_worker_facade_imports_from_repo_root_without_worker_src_path():
+    env = os.environ.copy()
+    env.pop("STUDIO_ENV", None)
+    env.pop("STUDIO_ENV_FILE", None)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "from worker.src.json_parser import parse_workflow, load_workflow, get_workflow_path; "
+                "from worker.src.workflow import load_workflow as workflow_load_workflow; "
+                "print('worker facade import ok')"
+            ),
+        ],
+        cwd=PROJECT_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "worker facade import ok" in result.stdout
+
+
+def test_worker_facade_imports_from_worker_src_path():
+    env = os.environ.copy()
+    env.pop("STUDIO_ENV", None)
+    env.pop("STUDIO_ENV_FILE", None)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import sys; "
+                "sys.path.insert(0, 'worker/src'); "
+                "from json_parser import parse_workflow, load_workflow, get_workflow_path; "
+                "from workflow import load_workflow as workflow_load_workflow; "
+                "print('worker direct import ok')"
+            ),
+        ],
+        cwd=PROJECT_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "worker direct import ok" in result.stdout
 
 
 def _prompt_value_for_node(workflow, node_id):

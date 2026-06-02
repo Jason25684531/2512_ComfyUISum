@@ -1,7 +1,11 @@
 """Veo3 workflow trimming helpers."""
 
-from workflow.node_utils import safe_print as print
-from workflow.node_utils import set_node_input_value
+try:
+    from .node_utils import safe_print as print
+    from .node_utils import set_node_input_value
+except ImportError:
+    from workflow.node_utils import safe_print as print
+    from workflow.node_utils import set_node_input_value
 
 
 def trim_veo3_workflow(workflow: dict, image_files: dict) -> dict:

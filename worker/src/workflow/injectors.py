@@ -5,20 +5,36 @@ import random
 from pathlib import Path
 from typing import Any, Callable
 
-from workflow.legacy_maps import (
-    ASPECT_RATIO_MAP,
-    AUDIO_NODE_MAP,
-    DEFAULT_RESOLUTION,
-    IMAGE_NODE_MAP,
-    MODEL_MAP,
-)
-from workflow.node_utils import (
-    safe_log_value,
-    safe_print as print,
-    set_configured_prompt_value,
-    set_node_input_value,
-    set_node_prompt_value,
-)
+try:
+    from .legacy_maps import (
+        ASPECT_RATIO_MAP,
+        AUDIO_NODE_MAP,
+        DEFAULT_RESOLUTION,
+        IMAGE_NODE_MAP,
+        MODEL_MAP,
+    )
+    from .node_utils import (
+        safe_log_value,
+        safe_print as print,
+        set_configured_prompt_value,
+        set_node_input_value,
+        set_node_prompt_value,
+    )
+except ImportError:
+    from workflow.legacy_maps import (
+        ASPECT_RATIO_MAP,
+        AUDIO_NODE_MAP,
+        DEFAULT_RESOLUTION,
+        IMAGE_NODE_MAP,
+        MODEL_MAP,
+    )
+    from workflow.node_utils import (
+        safe_log_value,
+        safe_print as print,
+        set_configured_prompt_value,
+        set_node_input_value,
+        set_node_prompt_value,
+    )
 
 
 def find_node_by_class(workflow: dict, class_type: str) -> tuple:

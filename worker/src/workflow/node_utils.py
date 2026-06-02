@@ -3,7 +3,10 @@
 import builtins
 import sys
 
-from workflow_registry import find_workflow_node
+try:
+    from ..workflow_registry import find_workflow_node
+except ImportError:
+    from workflow_registry import find_workflow_node
 
 
 def safe_print(*args, **kwargs):
