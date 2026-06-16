@@ -91,3 +91,14 @@ def client(app):
     from fastapi.testclient import TestClient
 
     return TestClient(app)
+
+@pytest.fixture
+def client_with_broken_queue(settings):
+    from app.main import create_app
+    from workflow_registry.registry import WorkflowRegistry
+    from fastapi.testclient import TestClient
+
+    registry = WorkflowRegistry.from_directory(WORKFLOW_REGISTRY_ROOT / "manifests")
+    broken_queue = FakeQueueClient(available=False)
+    broken_app = create_app(settings=settings, queue_client=broken_queue, workflow_registry=registry)
+    return TestClient(broken_app)

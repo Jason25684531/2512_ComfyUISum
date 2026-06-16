@@ -4,7 +4,8 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.config import Settings, get_settings
@@ -76,6 +77,29 @@ def create_app(
     app.include_router(assets_router, prefix=api_router_prefix)
     app.include_router(workflows_router, prefix=api_router_prefix)
     app.include_router(jobs_router, prefix=api_router_prefix)
+    
+    from app.routes.outputs import router as outputs_router
+    app.include_router(outputs_router, prefix=api_router_prefix)
+
+    from app.routes.legacy_bridge import router as legacy_bridge_router
+    app.include_router(legacy_bridge_router, prefix="/api")
+
+    from app.config import REPO_ROOT
+    frontend_dir = REPO_ROOT / "frontend"
+
+    @app.get("/", include_in_schema=False)
+    async def serve_index():
+        return FileResponse(frontend_dir / "index.html")
+
+    @app.get("/dashboard", include_in_schema=False)
+    async def serve_dashboard():
+        return FileResponse(frontend_dir / "dashboard.html")
+
+    @app.get("/dashboard.html", include_in_schema=False)
+    async def serve_dashboard_legacy():
+        return FileResponse(frontend_dir / "dashboard.html")
+
+    app.mount("/frontend", StaticFiles(directory=frontend_dir), name="frontend")
 
     @app.exception_handler(InvalidStoragePathError)
     async def handle_invalid_storage_path(_: Request, __: InvalidStoragePathError) -> JSONResponse:
@@ -83,9 +107,10 @@ def create_app(
 
     @app.exception_handler(StarletteHTTPException)
     async def handle_http_exception(_: Request, exc: StarletteHTTPException) -> JSONResponse:
-        if exc.status_code == 404:
-            return JSONResponse(status_code=404, content={"detail": "Route was not found."})
-        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+        # Don't mask custom 404 details with a generic "Route was not found."
+        # If the detail is the default "Not Found", then we can override it.
+        detail = "Route was not found." if exc.status_code == 404 and exc.detail == "Not Found" else exc.detail
+        return JSONResponse(status_code=exc.status_code, content={"detail": detail})
 
     return app
 

@@ -101,3 +101,20 @@ If `ENGINE_MODE=comfyui`, the health endpoint reports `comfyui_ok`.
 - WSL2 Studio Core persists only `STORAGE_ROOT`-relative paths such as `assets/...` and `outputs/...`.
 - Windows local ComfyUI paths must never be written into DB rows, Redis payloads, or output metadata.
 - `http://` is allowed for env examples, localhost smoke tests, and mocks. Business logic must stay env-driven.
+
+## 8. Windows browser frontend smoke
+
+To verify that the legacy frontend can bridge into the v2 FastAPI runtime:
+
+1. Start Redis, FastAPI, and Worker v2 from WSL2.
+2. Open `http://localhost:8000/` in a Windows browser and confirm the frontend loads.
+3. Confirm `http://localhost:8000/dashboard` and `http://localhost:8000/dashboard.html` both load the dashboard page.
+4. Submit a text-to-image prompt from the frontend.
+5. In DevTools Network, confirm `POST /api/generate` returns HTTP 201.
+6. Confirm polling requests to `GET /api/status/<job_id>` transition through `queued`, `processing`, then `finished`.
+7. Confirm the status payload includes an `output_url` like `/api/v1/outputs/<job_id>/result.png`.
+8. Confirm the generated mock file exists from WSL2:
+
+```bash
+find storage/outputs -maxdepth 3 -type f
+```
