@@ -1,0 +1,15 @@
+{
+  "task_type": "multi_image_blend",
+  "display_name": "Multi Image Blend",
+  "description": "Blend multiple images into a single composition.",
+  "version": "0.1.0",
+  "required_inputs": [
+    {"name": "images", "type": "image[]"}
+  ],
+  "optional_inputs": [],
+  "default_params": {
+    "blend_mode": "average"
+  },
+  "output_type": "image",
+  "mock_output_filename": "blend.png"
+}

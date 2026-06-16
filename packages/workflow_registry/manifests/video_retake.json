@@ -1,0 +1,15 @@
+{
+  "task_type": "video_retake",
+  "display_name": "Video Retake",
+  "description": "Retake a section of an existing video.",
+  "version": "0.1.0",
+  "required_inputs": [
+    {"name": "source_video", "type": "video"}
+  ],
+  "optional_inputs": [],
+  "default_params": {
+    "segment": "full"
+  },
+  "output_type": "video",
+  "mock_output_filename": "retake.mp4"
+}

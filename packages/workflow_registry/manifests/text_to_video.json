@@ -1,0 +1,13 @@
+{
+  "task_type": "text_to_video",
+  "display_name": "Text to Video",
+  "description": "Generate a short video from text.",
+  "version": "0.1.0",
+  "required_inputs": [],
+  "optional_inputs": [],
+  "default_params": {
+    "duration_seconds": 4
+  },
+  "output_type": "video",
+  "mock_output_filename": "result.mp4"
+}

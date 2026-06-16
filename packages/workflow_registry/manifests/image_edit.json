@@ -1,0 +1,15 @@
+{
+  "task_type": "image_edit",
+  "display_name": "Image Edit",
+  "description": "Edit one uploaded image with a prompt.",
+  "version": "0.1.0",
+  "required_inputs": [
+    {"name": "source_image", "type": "image"}
+  ],
+  "optional_inputs": [],
+  "default_params": {
+    "strength": 0.6
+  },
+  "output_type": "image",
+  "mock_output_filename": "edited.png"
+}

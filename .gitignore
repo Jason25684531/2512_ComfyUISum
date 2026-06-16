@@ -1,6 +1,15 @@
 # 忽略檔案
 venv/
-storage/
+storage/*
+!storage/assets/
+!storage/outputs/
+!storage/temp/
+storage/assets/*
+storage/outputs/*
+storage/temp/*
+!storage/assets/.gitkeep
+!storage/outputs/.gitkeep
+!storage/temp/.gitkeep
 .env
 .env.local
 .env.dev-s3

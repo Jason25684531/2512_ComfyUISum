@@ -1,0 +1,15 @@
+{
+  "task_type": "video_upscale",
+  "display_name": "Video Upscale",
+  "description": "Upscale one uploaded video.",
+  "version": "0.1.0",
+  "required_inputs": [
+    {"name": "source_video", "type": "video"}
+  ],
+  "optional_inputs": [],
+  "default_params": {
+    "scale": 2
+  },
+  "output_type": "video",
+  "mock_output_filename": "upscaled.mp4"
+}
