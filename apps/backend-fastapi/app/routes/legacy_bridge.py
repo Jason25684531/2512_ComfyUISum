@@ -6,6 +6,9 @@ from pydantic import BaseModel, Field
 
 from app.models.job import JobPayload, JobStatus
 from app.services.redis_client import QueueUnavailableError
+from shared.v2.errors import JOB_NOT_FOUND, REDIS_UNAVAILABLE
+from shared.v2.output_paths import parse_output_path_to_url
+from shared.v2.status import map_v2_status_to_legacy
 
 
 router = APIRouter()
@@ -23,16 +26,14 @@ class LegacyGenerateRequest(BaseModel):
 
 @router.post("/generate", status_code=status.HTTP_201_CREATED, include_in_schema=False)
 def legacy_generate(payload: LegacyGenerateRequest, request: Request) -> dict:
-    # 1. 強制 task_type = "text_to_image"
     task_type = "text_to_image"
-    
-    # 2. 驗證 workflow registry 有此 task_type
+
     registry = request.app.state.workflow_registry
     if registry.get(task_type) is None:
         raise HTTPException(status_code=422, detail="Unsupported workflow task type.")
 
-    # 3. 組裝 JobPayload
     from app.routes.jobs import _now
+
     now = _now()
     params = {
         "prompt": payload.prompt,
@@ -41,7 +42,7 @@ def legacy_generate(payload: LegacyGenerateRequest, request: Request) -> dict:
         "aspect_ratio": payload.aspect_ratio,
         "batch_size": payload.batch_size,
     }
-    
+
     job = JobPayload(
         task_type=task_type,
         params=params,
@@ -63,12 +64,9 @@ def legacy_generate(payload: LegacyGenerateRequest, request: Request) -> dict:
             str(job.job_id),
             status=JobStatus.FAILED.value,
             updated_at=failure_time.isoformat(),
-            error_message="Job queue is temporarily unavailable.",
+            error_message=REDIS_UNAVAILABLE,
         )
-        raise HTTPException(
-            status_code=503,
-            detail="Job queue is temporarily unavailable.",
-        ) from None
+        raise HTTPException(status_code=503, detail=REDIS_UNAVAILABLE) from None
 
     queued_time = _now()
     store.update_job(
@@ -76,12 +74,12 @@ def legacy_generate(payload: LegacyGenerateRequest, request: Request) -> dict:
         status=JobStatus.QUEUED.value,
         updated_at=queued_time.isoformat(),
     )
-    
+
     return {
         "job_id": str(job.job_id),
         "status": JobStatus.QUEUED.value.lower(),
         "task_type": job.task_type,
-        "message": "Job queued."
+        "message": "Job queued.",
     }
 
 
@@ -89,36 +87,20 @@ def legacy_generate(payload: LegacyGenerateRequest, request: Request) -> dict:
 def legacy_status(job_id: str, request: Request) -> dict:
     store = request.app.state.job_store
     record = store.get_job(job_id)
-    
+
     if record is None:
-        raise HTTPException(status_code=404, detail="Job not found.")
+        raise HTTPException(status_code=404, detail=JOB_NOT_FOUND)
 
     v2_status = JobStatus(record["status"])
-    
-    # Status mapping
-    status_mapping = {
-        JobStatus.CREATED: "queued",
-        JobStatus.QUEUED: "queued",
-        JobStatus.RUNNING: "processing",
-        JobStatus.SUCCEEDED: "finished",
-        JobStatus.FAILED: "failed",
-        JobStatus.CANCELLED: "cancelled",
-    }
-    
-    legacy_status_str = status_mapping.get(v2_status, "failed")
-    
     result = {
         "job_id": job_id,
-        "status": legacy_status_str,
+        "status": map_v2_status_to_legacy(v2_status.value),
     }
-    
+
     if v2_status == JobStatus.SUCCEEDED and record.get("output_path"):
-        # 從 output_path 解析 filename，組裝相對 URL
-        output_path = record["output_path"]
-        filename = output_path.split("/")[-1]
-        result["output_url"] = f"/api/v1/outputs/{job_id}/{filename}"
-        
+        result["output_url"] = parse_output_path_to_url(record["output_path"])
+
     if v2_status == JobStatus.FAILED:
         result["error_message"] = "Job failed. Please retry."
-        
+
     return result

@@ -8,6 +8,8 @@ import redis
 
 from app.models.job import JobPayload, JobStatus
 from shared.v2 import JobStore
+from shared.v2.constants import V2_CANCEL_KEY_PREFIX
+from shared.v2.errors import ENGINE_EXECUTION_FAILED, WORKFLOW_NOT_FOUND
 from worker.config import WorkerSettings, get_worker_settings
 from worker.engines.comfyui_engine import ComfyUIEngine
 from worker.engines.mock_engine import MockEngine
@@ -61,7 +63,7 @@ class WorkerRunner:
             return
 
         if self.workflow_registry.get(job.task_type) is None:
-            self._update_job(job, status=JobStatus.FAILED, error_message="Workflow manifest was not found.")
+            self._update_job(job, status=JobStatus.FAILED, error_message=WORKFLOW_NOT_FOUND)
             return
 
         self._update_job(job, status=JobStatus.RUNNING)
@@ -75,7 +77,7 @@ class WorkerRunner:
             self._update_job(job, status=JobStatus.FAILED, error_message="Engine execution is not available yet.")
             return
         except Exception:
-            self._update_job(job, status=JobStatus.FAILED, error_message="Job execution failed.")
+            self._update_job(job, status=JobStatus.FAILED, error_message=ENGINE_EXECUTION_FAILED)
             return
 
         if self._cancel_requested(job.job_id):
@@ -87,7 +89,7 @@ class WorkerRunner:
             self._update_job(job, status=JobStatus.SUCCEEDED, output_path=result.output_path)
             self._clear_cancel(job.job_id)
             return
-        self._update_job(job, status=JobStatus.FAILED, error_message=result.error_message or "Job execution failed.")
+        self._update_job(job, status=JobStatus.FAILED, error_message=result.error_message or ENGINE_EXECUTION_FAILED)
         self._clear_cancel(job.job_id)
 
     def run_forever(self) -> None:
@@ -115,14 +117,14 @@ class WorkerRunner:
 
     def _cancel_requested(self, job_id) -> bool:
         try:
-            return bool(self.redis_client.exists(f"studio:v2:cancel:{job_id}"))
+            return bool(self.redis_client.exists(f"{V2_CANCEL_KEY_PREFIX}{job_id}"))
         except Exception:
             record = self.job_store.get_job(str(job_id))
             return bool(record and record.get("cancel_requested"))
 
     def _clear_cancel(self, job_id) -> None:
         try:
-            self.redis_client.delete(f"studio:v2:cancel:{job_id}")
+            self.redis_client.delete(f"{V2_CANCEL_KEY_PREFIX}{job_id}")
         except Exception:
             return None
 

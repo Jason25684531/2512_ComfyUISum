@@ -4,7 +4,9 @@ import base64
 from pathlib import Path
 
 from app.models.job import JobPayload
-from shared.v2.path_utils import ensure_storage_layout, resolve_storage_path, validate_relative_storage_path
+from shared.v2.errors import WORKFLOW_NOT_FOUND
+from shared.v2.output_paths import build_output_relative_path
+from shared.v2.path_utils import ensure_storage_layout, resolve_storage_path
 from worker.engines.base import EngineAdapter, EngineResult
 
 
@@ -33,11 +35,13 @@ class MockEngine(EngineAdapter):
     def execute(self, job_payload: JobPayload) -> EngineResult:
         manifest = self.workflow_registry.get(job_payload.task_type)
         if manifest is None:
-            return EngineResult(success=False, error_message="Workflow manifest was not found.")
+            return EngineResult(success=False, error_message=WORKFLOW_NOT_FOUND)
 
         bytes_to_write = self._payload_for_output_type(manifest.output_type)
-        relative_path = validate_relative_storage_path(
-            f"{self.settings.output_root}/job_{job_payload.job_id}/{manifest.mock_output_filename}"
+        relative_path = build_output_relative_path(
+            str(job_payload.job_id),
+            manifest.mock_output_filename,
+            output_root=self.settings.output_root,
         )
         destination = resolve_storage_path(self.settings.storage_root, relative_path)
         Path(destination).parent.mkdir(parents=True, exist_ok=True)

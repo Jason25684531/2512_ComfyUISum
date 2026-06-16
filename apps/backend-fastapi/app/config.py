@@ -8,17 +8,12 @@ from typing import Literal
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from shared.v2.constants import V2_JOB_QUEUE_KEY
 from shared.v2.path_utils import validate_linux_first_path, validate_relative_storage_path
+from shared.v2.runtime_config import resolve_repo_relative_path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-
-
-def _resolve_repo_relative_path(raw_value: str) -> str:
-    candidate = Path(raw_value)
-    if candidate.is_absolute():
-        return candidate.resolve().as_posix()
-    return (REPO_ROOT / candidate).resolve().as_posix()
 
 
 class Settings(BaseSettings):
@@ -39,13 +34,13 @@ class Settings(BaseSettings):
     output_root: str = Field(alias="OUTPUT_ROOT")
     allow_external_api: bool = Field(alias="ALLOW_EXTERNAL_API")
     default_tier: str = Field(alias="DEFAULT_TIER")
-    queue_key: str = "studio:v2:jobs"
+    queue_key: str = V2_JOB_QUEUE_KEY
 
     @field_validator("storage_root")
     @classmethod
     def validate_storage_root(cls, value: str) -> str:
         validate_linux_first_path(value, key="STORAGE_ROOT")
-        return _resolve_repo_relative_path(value)
+        return resolve_repo_relative_path(value, repo_root=REPO_ROOT)
 
     @field_validator("database_url")
     @classmethod
@@ -57,7 +52,7 @@ class Settings(BaseSettings):
         database_path = value[len(prefix) :]
         if database_path == ":memory:":
             return value
-        return f"{prefix}{_resolve_repo_relative_path(database_path)}"
+        return f"{prefix}{resolve_repo_relative_path(database_path, repo_root=REPO_ROOT)}"
 
     @field_validator("asset_root", "output_root")
     @classmethod

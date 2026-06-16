@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 import redis
+from shared.v2.constants import V2_CANCEL_KEY_PREFIX
 
 
 class QueueUnavailableError(RuntimeError):
@@ -40,7 +41,7 @@ class RedisQueueClient:
 
     def request_cancel(self, job_id: str) -> None:
         try:
-            self._client_or_connect().set(f"studio:v2:cancel:{job_id}", "1", ex=3600)
+            self._client_or_connect().set(f"{V2_CANCEL_KEY_PREFIX}{job_id}", "1", ex=3600)
         except Exception as exc:
             raise QueueUnavailableError("queue unavailable") from exc
 

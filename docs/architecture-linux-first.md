@@ -74,3 +74,35 @@ This document describes the first-round Studio Core v2 skeleton introduced by th
 - `POST /api/v1/jobs/{job_id}/cancel`
 - `python -m pytest tests/v2 -q`
 - `uvicorn app.main:app --host 0.0.0.0 --port 8000`
+
+## Current Runtime Split
+
+- Legacy runtime:
+  - `backend/` keeps the Flask API and legacy operational path.
+  - `worker/` keeps the legacy worker and warmup-oriented production path.
+- V2 runtime:
+  - `apps/backend-fastapi/` owns the Linux-first FastAPI runtime and frontend bridge target.
+  - `apps/worker-v2/` owns the Linux-first queue consumer and mock-safe execution flow.
+- Frontend bridge:
+  - `frontend/` still talks to legacy-compatible `/api/generate` and `/api/status` routes.
+  - `app/routes/legacy_bridge.py` translates those calls into the v2 job contract.
+- ComfyUI boundary:
+  - Real ComfyUI stays an external HTTP dependency.
+  - Studio Core must not depend on local Windows filesystem paths.
+
+## Cleanup Policy
+
+- Inventory first, cleanup second.
+- Shared helper extraction is allowed for v2-owned code and compatibility bridge code already pinned to v2 behavior.
+- Legacy runtime files stay preserved until real ComfyUI-backed v2 end-to-end validation is proven.
+- Persisted output paths remain `STORAGE_ROOT`-relative, and client-visible output URLs remain server-generated.
+- Queue keys, cancel prefixes, status mapping, and output-path builders should come from `shared/v2/` rather than local duplication.
+
+## Safe Cleanup Sequence
+
+1. Build or refresh the inventory and runtime reference scan.
+2. Extract shared helpers only where ownership is clearly v2 or bridge-to-v2.
+3. Replace duplicated v2-only logic with shared contracts.
+4. Run `tests/v2`, OpenSpec validation, and Linux-first smoke checks.
+5. Review archive candidates path-by-path.
+6. Consider deletion only in a later, evidence-backed cleanup change.

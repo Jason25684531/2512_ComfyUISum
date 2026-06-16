@@ -118,3 +118,20 @@ To verify that the legacy frontend can bridge into the v2 FastAPI runtime:
 ```bash
 find storage/outputs -maxdepth 3 -type f
 ```
+
+## 9. Cleanup Policy While Running Linux-First
+
+- Treat the runtime as split across legacy and v2 until real ComfyUI v2 execution is validated.
+- Prefer `shared/v2/` helpers for queue keys, cancel flags, status mapping, and output path construction inside v2 code.
+- Do not delete legacy runtime files, workflow folders, compose variants, or env variants during routine cleanup without inventory evidence.
+- Keep browser-visible responses free of absolute filesystem paths.
+
+## 10. Safe Cleanup Sequence
+
+1. Refresh `docs/architecture-cleanup-inventory.md`.
+2. Run `bash scripts/dev/linux/scan-runtime-references.sh`.
+3. Review `reports/runtime-reference-scan.txt` for overlap areas and unknown ownership.
+4. Apply only v2-owned helper consolidation.
+5. Run `openspec validate map-and-consolidate-duplicate-runtime-paths --strict`.
+6. Run `PYTHONPATH=. python -m pytest tests/v2 -q`.
+7. Re-run the browser/frontend smoke flow before considering later archive work.

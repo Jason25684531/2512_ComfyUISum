@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Request, status
 
 from app.models.job import JobCreateRequest, JobPayload, JobStatus
 from app.services.redis_client import QueueUnavailableError
+from shared.v2.errors import REDIS_UNAVAILABLE
 
 
 router = APIRouter()
@@ -61,11 +62,11 @@ def create_job(payload: JobCreateRequest, request: Request) -> dict:
             str(job.job_id),
             status=JobStatus.FAILED.value,
             updated_at=failure_time.isoformat(),
-            error_message="Job queue is temporarily unavailable.",
+            error_message=REDIS_UNAVAILABLE,
         )
         raise HTTPException(
             status_code=503,
-            detail="Job queue is temporarily unavailable.",
+            detail=REDIS_UNAVAILABLE,
         ) from None
 
     queued_time = _now()
@@ -108,7 +109,7 @@ def cancel_job(job_id: str, request: Request) -> dict:
     try:
         request.app.state.queue_client.request_cancel(job_id)
     except QueueUnavailableError:
-        raise HTTPException(status_code=503, detail="Job queue is temporarily unavailable.") from None
+        raise HTTPException(status_code=503, detail=REDIS_UNAVAILABLE) from None
 
     if current_status == JobStatus.RUNNING:
         store.update_job(job_id, updated_at=update_time, cancel_requested=True)
