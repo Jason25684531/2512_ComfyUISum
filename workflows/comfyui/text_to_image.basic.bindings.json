@@ -1,0 +1,40 @@
+{
+  "task_type": "text_to_image",
+  "workflow_file": "workflows/comfyui/text_to_image.basic.json",
+  "prompt_binding": {
+    "node_id": "3",
+    "input_key": "text"
+  },
+  "negative_prompt_binding": {
+    "node_id": "4",
+    "input_key": "text"
+  },
+  "width_binding": {
+    "node_id": "5",
+    "input_key": "width"
+  },
+  "height_binding": {
+    "node_id": "5",
+    "input_key": "height"
+  },
+  "batch_size_binding": {
+    "node_id": "5",
+    "input_key": "batch_size"
+  },
+  "seed_binding": {
+    "node_id": "6",
+    "input_key": "seed"
+  },
+  "steps_binding": {
+    "node_id": "6",
+    "input_key": "steps"
+  },
+  "model_binding": {
+    "node_id": "1",
+    "input_key": "unet_name"
+  },
+  "output": {
+    "type": "image",
+    "preferred_filename": "result.png"
+  }
+}

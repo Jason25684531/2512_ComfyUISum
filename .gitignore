@@ -30,9 +30,9 @@ logs/*.log.*
 *.backup
 
 # # Ngrok 自動生成配置 (包含臨時 URL)
-# frontend/config.js
+# frontend/config.jsf
 
-ComfyUI/
+/ComfyUI/
 node_modules/
 .agent/
 .github/
