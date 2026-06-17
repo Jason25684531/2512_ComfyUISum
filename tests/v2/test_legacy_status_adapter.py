@@ -22,6 +22,8 @@ def test_get_status_queued(client):
     assert response.json() == {
         "job_id": job_id,
         "status": "queued",
+        "state": "queued",
+        "success": False,
     }
 
 def test_get_status_succeeded_returns_output_url(client):
@@ -43,7 +45,13 @@ def test_get_status_succeeded_returns_output_url(client):
     assert response.json() == {
         "job_id": job_id,
         "status": "finished",
-        "output_url": f"/api/v1/outputs/{job_id}/result.png"
+        "state": "finished",
+        "success": True,
+        "output_url": f"/api/v1/outputs/{job_id}/result.png",
+        "image_url": f"/api/v1/outputs/{job_id}/result.png",
+        "image_path": f"/api/v1/outputs/{job_id}/result.png",
+        "result_url": f"/api/v1/outputs/{job_id}/result.png",
+        "output_path": "outputs/job_test-job-succeeded/result.png",
     }
 
 def test_get_status_failed_canned_error(client):
@@ -65,7 +73,10 @@ def test_get_status_failed_canned_error(client):
     assert response.json() == {
         "job_id": job_id,
         "status": "failed",
-        "error_message": "Job failed. Please retry."
+        "state": "failed",
+        "success": False,
+        "error_message": "Actual internal error message that shouldn&#x27;t be exposed",
+        "error": "Actual internal error message that shouldn&#x27;t be exposed",
     }
 
 def test_get_status_unknown_job(client):

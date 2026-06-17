@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from shared.v2.constants import V2_JOB_QUEUE_KEY
@@ -35,7 +35,10 @@ class Settings(BaseSettings):
     allow_external_api: bool = Field(alias="ALLOW_EXTERNAL_API")
     default_tier: str = Field(alias="DEFAULT_TIER")
     comfy_submit_timeout_seconds: float = Field(default=300.0, alias="COMFY_SUBMIT_TIMEOUT_SECONDS")
-    comfy_history_timeout_seconds: float = Field(default=300.0, alias="COMFY_HISTORY_TIMEOUT_SECONDS")
+    comfy_history_timeout_seconds: float = Field(
+        default=300.0,
+        validation_alias=AliasChoices("COMFYUI_HISTORY_TIMEOUT_SECONDS", "COMFY_HISTORY_TIMEOUT_SECONDS"),
+    )
     comfy_polling_interval_seconds: float = Field(default=1.0, alias="COMFY_POLLING_INTERVAL")
     comfy_http_timeout_seconds: float = Field(default=30.0, alias="COMFY_HTTP_TIMEOUT")
     queue_key: str = V2_JOB_QUEUE_KEY

@@ -13,6 +13,60 @@
 
     window.API_BASE = resolveApiBase();
     var API_BASE = window.API_BASE;
+
+    function resolveOutputUrl(outputPath) {
+        if (!outputPath) {
+            return '';
+        }
+        const rawPath = String(outputPath).trim();
+        if (!rawPath) {
+            return '';
+        }
+        if (rawPath.startsWith('http')) {
+            return rawPath;
+        }
+        if (rawPath.startsWith('/api/') || rawPath.startsWith('/outputs/')) {
+            return `${API_BASE}${rawPath}`;
+        }
+        if (rawPath.startsWith('api/')) {
+            return `${API_BASE}/${rawPath}`;
+        }
+
+        const normalizedPath = rawPath.replace(/\\/g, '/');
+        const parts = normalizedPath.split('/').filter(Boolean);
+        const outputsIndex = parts.indexOf('outputs');
+        const jobDir = outputsIndex >= 0 ? parts[outputsIndex + 1] : '';
+        const filename = parts.length > 0 ? parts[parts.length - 1] : '';
+
+        if (jobDir && jobDir.startsWith('job_') && filename) {
+            return `${API_BASE}/api/v1/outputs/${jobDir.slice(4)}/${filename}`;
+        }
+
+        return `${API_BASE}/outputs/${filename}`;
+    }
+
+    function pickJobOutputPath(data) {
+        return data.image_path ||
+            data.image_url ||
+            data.result_url ||
+            data.output_url ||
+            data.output?.url ||
+            data.result?.url ||
+            data.output_path ||
+            data.result;
+    }
+
+    function normalizeJobStatus(data) {
+        return String(data?.status || data?.state || '').toLowerCase();
+    }
+
+    function isFinishedJobStatus(status) {
+        return ['finished', 'completed', 'success', 'succeeded'].includes(status);
+    }
+
+    function isRunningJobStatus(status) {
+        return ['running', 'processing'].includes(status);
+    }
     </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -2093,18 +2147,18 @@
                     if (!response.ok) throw new Error('Status check failed');
 
                     const data = await response.json();
+                    const status = normalizeJobStatus(data);
 
-                    if (data.status === 'processing') {
+                    if (isRunningJobStatus(status)) {
                         showAvatarStatus(`🔄 Processing... ${data.progress || 0}%`, 'info');
-                    } else if (data.status === 'queued') {
+                    } else if (status === 'queued') {
                         showAvatarStatus('⏳ Waiting in queue...', 'info');
-                    } else if (data.status === 'finished') {
+                    } else if (isFinishedJobStatus(status)) {
                         clearInterval(avatarPollingInterval);
 
-                        const outputPath = data.image_url || data.output_path;
+                        const outputPath = pickJobOutputPath(data);
                         if (outputPath) {
-                            const filename = outputPath.split('/').pop().split('\\').pop();
-                            const videoUrl = `${API_BASE}/outputs/${filename}`;
+                            const videoUrl = resolveOutputUrl(outputPath);
 
                             // 顯示視頻結果
                             const resultDiv = document.getElementById('avatar-result');
@@ -2121,7 +2175,7 @@
                         btn.innerHTML = originalHTML;
                         lucide.createIcons();
 
-                    } else if (data.status === 'failed') {
+                    } else if (status === 'failed') {
                         clearInterval(avatarPollingInterval);
                         showAvatarStatus(`❌ Failed: ${data.error || 'Unknown error'}`, 'error');
                         btn.disabled = false;
@@ -2432,19 +2486,19 @@
                     if (!response.ok) throw new Error('Status check failed');
 
                     const data = await response.json();
+                    const status = normalizeJobStatus(data);
 
-                    if (data.status === 'processing') {
+                    if (isRunningJobStatus(status)) {
                         showStatus(`🔄 Processing... ${data.progress || 0}%`, 'info');
-                    } else if (data.status === 'queued') {
+                    } else if (status === 'queued') {
                         showStatus('⏳ Waiting in queue...', 'info');
-                    } else if (data.status === 'finished') {
+                    } else if (isFinishedJobStatus(status)) {
                         clearInterval(toolPollingIntervals[toolName]);
                         delete toolPollingIntervals[toolName];
 
-                        const outputPath = data.image_url || data.output_path;
+                        const outputPath = pickJobOutputPath(data);
                         if (outputPath) {
-                            const filename = outputPath.split('/').pop().split('\\').pop();
-                            const imageUrl = `${API_BASE}/outputs/${filename}`;
+                            const imageUrl = resolveOutputUrl(outputPath);
 
                             // 如果當前工具就是生成的工具，直接顯示結果
                             if (currentTool === toolName) {
@@ -2489,7 +2543,7 @@
                             restoreButton(btn, originalHTML);
                         }
 
-                    } else if (data.status === 'failed') {
+                    } else if (status === 'failed') {
                         clearInterval(toolPollingIntervals[toolName]);
                         delete toolPollingIntervals[toolName];
 
@@ -2584,19 +2638,34 @@
                 // 清空現有選項
                 modelSelect.innerHTML = '';
 
-                // 優先使用 UNET 模型
-                const unetModels = data.unet_models || [];
-                const checkpointModels = data.models || [];
+                // 優先使用 v2 text_to_image compatibility model list
+                const textToImageModels = data.by_task_type?.text_to_image || [];
+                const unetModels = textToImageModels.length > 0 ? textToImageModels : (data.unet_models || []);
+                const checkpointModels = textToImageModels.length > 0 ? [] : (data.models || []);
+                const createModelOption = (model) => {
+                    const option = document.createElement('option');
+
+                    if (model && typeof model === 'object') {
+                        const value = model.value ?? model.id ?? '';
+                        option.value = value;
+                        option.textContent = model.name || value || 'Default ComfyUI workflow model';
+                        return option;
+                    }
+
+                    const value = String(model ?? '');
+                    option.value = value;
+                    option.textContent = value
+                        ? value.split('/').pop().replace('.safetensors', '').replace('.ckpt', '')
+                        : 'Default ComfyUI workflow model';
+                    return option;
+                };
 
                 // 添加 UNET 模型
                 if (unetModels.length > 0) {
                     const unetGroup = document.createElement('optgroup');
-                    unetGroup.label = 'UNET Models';
+                    unetGroup.label = textToImageModels.length > 0 ? 'Text to Image Models' : 'UNET Models';
                     unetModels.forEach(model => {
-                        const option = document.createElement('option');
-                        option.value = model;
-                        option.textContent = model.split('/').pop().replace('.safetensors', '');
-                        unetGroup.appendChild(option);
+                        unetGroup.appendChild(createModelOption(model));
                     });
                     modelSelect.appendChild(unetGroup);
                 }
@@ -2606,10 +2675,7 @@
                     const ckptGroup = document.createElement('optgroup');
                     ckptGroup.label = 'Checkpoint Models';
                     checkpointModels.forEach(model => {
-                        const option = document.createElement('option');
-                        option.value = model;
-                        option.textContent = model.replace('.safetensors', '').replace('.ckpt', '');
-                        ckptGroup.appendChild(option);
+                        ckptGroup.appendChild(createModelOption(model));
                     });
                     modelSelect.appendChild(ckptGroup);
                 }

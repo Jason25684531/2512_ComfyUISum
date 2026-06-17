@@ -22,7 +22,7 @@ def _resolve_output_file_path(request: Request, job_id: str, filename: str):
     return resolved_path
 
 
-@router.get("/outputs/{job_id}/{filename}", include_in_schema=False)
+@router.api_route("/outputs/{job_id}/{filename}", methods=["GET", "HEAD"], include_in_schema=False)
 def serve_output_file(job_id: str, filename: str, request: Request):
     try:
         resolved_path = _resolve_output_file_path(request, job_id, filename)

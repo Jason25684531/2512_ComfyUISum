@@ -1,19 +1,27 @@
 # [LEGACY-BRIDGE] This module bridges legacy frontend to v2 API. Remove when frontend migrates.
 from __future__ import annotations
 
-import httpx
+from html import escape
+
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
 from app.models.job import JobPayload, JobStatus
 from app.services.redis_client import QueueUnavailableError
 from shared.v2.errors import JOB_NOT_FOUND, REDIS_UNAVAILABLE
+from shared.v2.model_safety import sanitize_text_to_image_model, text_to_image_model_options
 from shared.v2.output_paths import parse_output_path_to_url
-from shared.v2.status import map_v2_status_to_legacy
 
 
 router = APIRouter()
-FALLBACK_UNET_MODELS = ["z-image/z-image-turbo-fp8-e4m3fn.safetensors"]
+LEGACY_STATUS_BY_V2_STATUS = {
+    JobStatus.CREATED: "queued",
+    JobStatus.QUEUED: "queued",
+    JobStatus.RUNNING: "running",
+    JobStatus.SUCCEEDED: "finished",
+    JobStatus.FAILED: "failed",
+    JobStatus.CANCELLED: "cancelled",
+}
 
 
 class LegacyGenerateRequest(BaseModel):
@@ -40,45 +48,13 @@ def _aspect_ratio_to_dimensions(aspect_ratio: str) -> tuple[int, int] | None:
     }.get((aspect_ratio or "").strip())
 
 
-def _normalize_model_name(value: str) -> str:
-    return value.replace("\\", "/")
+def _legacy_bridge_status(v2_status: JobStatus) -> str:
+    return LEGACY_STATUS_BY_V2_STATUS.get(v2_status, "failed")
 
 
-def _extract_model_choices(payload: dict, node_name: str, field_name: str) -> list[str]:
-    node = payload.get(node_name) or {}
-    required = (node.get("input") or {}).get("required") or {}
-    field = required.get(field_name)
-    if not isinstance(field, list) or not field:
-        return []
-    raw_choices = field[0]
-    if not isinstance(raw_choices, list):
-        return []
-    choices = {
-        _normalize_model_name(str(item).strip())
-        for item in raw_choices
-        if str(item).strip()
-    }
-    return sorted(choices)
-
-
-def _load_model_catalog(request: Request) -> tuple[list[str], list[str]]:
-    settings = request.app.state.settings
-    if settings.engine_mode != "comfyui":
-        return FALLBACK_UNET_MODELS, []
-
-    try:
-        response = httpx.get(
-            f"{settings.comfyui_base_url.rstrip('/')}/object_info",
-            timeout=min(settings.comfy_http_timeout_seconds, 5.0),
-        )
-        response.raise_for_status()
-        payload = response.json()
-    except Exception:
-        return FALLBACK_UNET_MODELS, []
-
-    unet_models = _extract_model_choices(payload, "UNETLoader", "unet_name") or FALLBACK_UNET_MODELS
-    checkpoint_models = _extract_model_choices(payload, "CheckpointLoaderSimple", "ckpt_name")
-    return unet_models, checkpoint_models
+def _public_error_message(record: dict) -> str:
+    raw_message = record.get("error_message") or "Job failed. Please retry."
+    return escape(str(raw_message), quote=True)
 
 
 @router.get("/me", include_in_schema=False)
@@ -101,11 +77,14 @@ def legacy_me(request: Request) -> dict:
 def legacy_models(request: Request) -> dict:
     registry = request.app.state.workflow_registry
     text_to_image_ready = registry.get("text_to_image") is not None
-    unet_models, checkpoint_models = _load_model_catalog(request)
     settings = request.app.state.settings
+    model_options = text_to_image_model_options()
     return {
-        "models": checkpoint_models,
-        "unet_models": unet_models,
+        "success": True,
+        "models": model_options,
+        "by_task_type": {"text_to_image": text_to_image_model_options()},
+        "unet_models": [model_options[0]["value"]],
+        "checkpoint_models": [],
         "items": [
             {
                 "id": "text_to_image",
@@ -134,7 +113,7 @@ def legacy_generate(payload: LegacyGenerateRequest, request: Request) -> dict:
         "prompt": payload.prompt,
         "negative_prompt": payload.negative_prompt,
         "seed": payload.seed,
-        "model": payload.model,
+        "model": sanitize_text_to_image_model(payload.model),
         "aspect_ratio": payload.aspect_ratio,
         "batch_size": payload.batch_size,
     }
@@ -192,15 +171,25 @@ def legacy_status(job_id: str, request: Request) -> dict:
         raise HTTPException(status_code=404, detail=JOB_NOT_FOUND)
 
     v2_status = JobStatus(record["status"])
+    legacy_status = _legacy_bridge_status(v2_status)
     result = {
         "job_id": job_id,
-        "status": map_v2_status_to_legacy(v2_status.value),
+        "status": legacy_status,
+        "state": legacy_status,
+        "success": v2_status == JobStatus.SUCCEEDED,
     }
 
     if v2_status == JobStatus.SUCCEEDED and record.get("output_path"):
-        result["output_url"] = parse_output_path_to_url(record["output_path"])
+        output_url = parse_output_path_to_url(record["output_path"])
+        result["output_url"] = output_url
+        result["image_url"] = output_url
+        result["image_path"] = output_url
+        result["result_url"] = output_url
+        result["output_path"] = record["output_path"]
 
     if v2_status == JobStatus.FAILED:
-        result["error_message"] = "Job failed. Please retry."
+        error_message = _public_error_message(record)
+        result["error_message"] = error_message
+        result["error"] = error_message
 
     return result

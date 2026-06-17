@@ -54,12 +54,12 @@ Optional timeout tuning:
 
 ```env
 COMFY_SUBMIT_TIMEOUT_SECONDS=300
-COMFY_HISTORY_TIMEOUT_SECONDS=300
+COMFYUI_HISTORY_TIMEOUT_SECONDS=300
 COMFY_POLLING_INTERVAL=1
 COMFY_HTTP_TIMEOUT=30
 ```
 
-`WORKER_TIMEOUT` remains the legacy fallback if a deployment still depends on that pattern elsewhere, but the v2 adapter now uses operation-specific timeout fields directly.
+`COMFY_HISTORY_TIMEOUT_SECONDS` and `WORKER_TIMEOUT` remain backward-compatible fallbacks if a deployment still depends on those patterns elsewhere, but new v2 adapter setups should use operation-specific timeout fields directly.
 
 ## Smoke Tests
 
@@ -95,8 +95,9 @@ find storage/outputs -maxdepth 3 -type f
 Expected success signal:
 
 - status becomes `finished`
-- response contains `output_url`
+- response contains `output_url`, `image_url`, `image_path`, and `result_url`
 - output file exists under `storage/outputs/job_<job_id>/result.png`
+- `curl -I http://127.0.0.1:8000/api/v1/outputs/<job_id>/result.png` returns HTTP 200
 
 ## Safety Notes
 

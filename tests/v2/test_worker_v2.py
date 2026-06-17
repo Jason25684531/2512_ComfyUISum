@@ -81,6 +81,35 @@ def test_worker_masks_engine_failure(settings, monkeypatch) -> None:
     assert record["error_message"] == "Job execution failed."
 
 
+def test_worker_persists_sanitized_engine_result_failure(settings, monkeypatch) -> None:
+    from app.models.job import JobPayload, JobStatus
+    from worker.engines.base import EngineResult
+
+    fake_redis = FakeRedisClient()
+    runner = _build_runner(settings, fake_redis)
+    job = JobPayload(task_type="text_to_image", params={"prompt": "timeout"})
+    runner.job_store.create_job(job.model_dump(mode="json"))
+    runner.job_store.update_job(
+        str(job.job_id),
+        status=JobStatus.QUEUED.value,
+        updated_at=job.updated_at.isoformat(),
+    )
+
+    monkeypatch.setattr(
+        runner.engine,
+        "execute",
+        lambda _job: EngineResult(success=False, error_message="ComfyUI history polling timed out."),
+    )
+
+    runner.process_payload(job.model_dump_json())
+
+    record = runner.job_store.get_job(str(job.job_id))
+    assert record is not None
+    assert record["status"] == JobStatus.FAILED.value
+    assert record["error_message"] == "ComfyUI history polling timed out."
+    assert record["output_path"] is None
+
+
 def test_worker_cancels_after_engine_execution(settings, monkeypatch) -> None:
     from app.models.job import JobPayload, JobStatus
     from worker.engines.base import EngineResult

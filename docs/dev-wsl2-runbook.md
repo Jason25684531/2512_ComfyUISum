@@ -128,23 +128,86 @@ Expected outcome:
 - Windows local ComfyUI paths must never be written into DB rows, Redis payloads, or output metadata.
 - `http://` is allowed for env examples, localhost smoke tests, and mocks. Business logic must stay env-driven.
 
-## 8. Windows browser frontend smoke
+## 8. Browser generation smoke test
 
 To verify that the legacy frontend can bridge into the v2 FastAPI runtime:
 
-1. Start Redis, FastAPI, and Worker v2 from WSL2.
-2. Open `http://localhost:8000/` in a Windows browser and confirm the frontend loads.
-3. Confirm `http://localhost:8000/dashboard` and `http://localhost:8000/dashboard.html` both load the dashboard page.
-4. Confirm the browser can fetch `/config.js`, `/tailwind.generated.css`, `/vendor/lucide.min.js`, `/api/me`, and `/api/models` without 404s.
-5. Submit a text-to-image prompt from the frontend.
-6. In DevTools Network, confirm `POST /api/generate` returns HTTP 201.
-7. Confirm polling requests to `GET /api/status/<job_id>` transition through `queued`, `processing`, then `finished`.
-8. Confirm the status payload includes an `output_url` like `/api/v1/outputs/<job_id>/result.png`.
-9. Confirm the generated file exists from WSL2:
+1. Start Windows ComfyUI when running real mode:
+
+```bat
+python main.py --listen 0.0.0.0 --port 8188
+```
+
+2. Start Redis:
+
+```bash
+docker run -d --rm --name studio-v2-redis -p 6379:6379 redis:7-alpine
+```
+
+3. Start FastAPI:
+
+```bash
+bash scripts/dev/linux/start-backend.sh
+```
+
+4. Start worker-v2:
+
+```bash
+set -a
+source .env.local-wsl
+set +a
+export PYTHONPATH="$PWD:$PWD/apps/worker-v2:$PWD/packages/workflow_registry:$PWD/apps/backend-fastapi"
+export PYTHONUNBUFFERED=1
+python -u -m worker.main
+```
+
+5. Open `http://localhost:8000/dashboard` in a Windows browser and confirm the dashboard loads.
+6. Confirm the browser can fetch `/config.js`, `/tailwind.generated.css`, `/vendor/lucide.min.js`, `/api/me`, and `/api/models` without 404s.
+7. Confirm `/api/models` exposes only the safe default text-to-image option. It must not include Wan, InfiniTetalk, talking, video, image-to-video, or avatar-talking models for text-to-image.
+8. Submit a text-to-image prompt such as `apple` from the dashboard.
+9. In DevTools Network, confirm:
+
+```text
+POST /api/generate 201
+GET /api/status/<job_id> 200
+GET /api/v1/outputs/<job_id>/result.png 200
+```
+
+10. Confirm polling requests to `GET /api/status/<job_id>` transition through `queued`, `running`, then `finished`.
+11. Confirm the final status payload includes all legacy-compatible image fields:
+
+```json
+{
+  "status": "finished",
+  "state": "finished",
+  "success": true,
+  "output_url": "/api/v1/outputs/<job_id>/result.png",
+  "image_url": "/api/v1/outputs/<job_id>/result.png",
+  "image_path": "/api/v1/outputs/<job_id>/result.png",
+  "result_url": "/api/v1/outputs/<job_id>/result.png",
+  "output_path": "outputs/job_<job_id>/result.png"
+}
+```
+
+12. Confirm the generated file exists from WSL2:
 
 ```bash
 find storage/outputs -maxdepth 3 -type f
 ```
+
+13. Verify the compatibility status and output `HEAD` path from CLI:
+
+```bash
+curl http://127.0.0.1:8000/api/status/<job_id>
+curl -I http://127.0.0.1:8000/api/v1/outputs/<job_id>/result.png
+```
+
+Expected:
+
+- `curl -I` returns HTTP 200 for an existing output and HTTP 404 for a missing output, not HTTP 405.
+- The dashboard displays the generated image.
+- The UI does not show `Finished but no image path returned`.
+- ComfyUI validation failure, history timeout, missing image output, or view download failure marks the job `FAILED` with a sanitized `error_message` instead of leaving it `RUNNING`.
 
 ## 9. Cleanup Policy While Running Linux-First
 

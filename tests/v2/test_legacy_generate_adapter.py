@@ -26,7 +26,7 @@ def test_post_generate_client_tag(client):
     record = store.get_job(job_id)
     assert record["client_tag"] == "legacy_frontend"
 
-def test_post_generate_ignores_workflow_and_passes_prompt_seed_model(client):
+def test_post_generate_ignores_workflow_and_sanitizes_model(client):
     response = client.post(
         "/api/generate",
         json={
@@ -44,7 +44,7 @@ def test_post_generate_ignores_workflow_and_passes_prompt_seed_model(client):
     assert record["task_type"] == "text_to_image"
     assert record["params"]["prompt"] == "a beautiful sunset"
     assert record["params"]["seed"] == 12345
-    assert record["params"]["model"] == "turbo_fp8"
+    assert record["params"]["model"] == ""
     assert record["params"]["aspect_ratio"] == "16:9"
     assert record["params"]["batch_size"] == 2
 

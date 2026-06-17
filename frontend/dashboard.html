@@ -2247,12 +2247,54 @@
             if (!outputPath) {
                 return '';
             }
-            if (outputPath.startsWith('http')) {
-                return outputPath;
+            const rawPath = String(outputPath).trim();
+            if (!rawPath) {
+                return '';
+            }
+            if (rawPath.startsWith('http')) {
+                return rawPath;
+            }
+            if (rawPath.startsWith('/api/') || rawPath.startsWith('/outputs/')) {
+                return `${API_BASE}${rawPath}`;
+            }
+            if (rawPath.startsWith('api/')) {
+                return `${API_BASE}/${rawPath}`;
             }
 
-            const filename = outputPath.split('/').pop().split('\\').pop();
+            const normalizedPath = rawPath.replace(/\\/g, '/');
+            const parts = normalizedPath.split('/').filter(Boolean);
+            const outputsIndex = parts.indexOf('outputs');
+            const jobDir = outputsIndex >= 0 ? parts[outputsIndex + 1] : '';
+            const filename = parts.length > 0 ? parts[parts.length - 1] : '';
+
+            if (jobDir && jobDir.startsWith('job_') && filename) {
+                return `${API_BASE}/api/v1/outputs/${jobDir.slice(4)}/${filename}`;
+            }
+
             return `${API_BASE}/outputs/${filename}`;
+        }
+
+        function pickJobOutputPath(data) {
+            return data.image_path ||
+                data.image_url ||
+                data.result_url ||
+                data.output_url ||
+                data.output?.url ||
+                data.result?.url ||
+                data.output_path ||
+                data.result;
+        }
+
+        function normalizeJobStatus(data) {
+            return String(data?.status || data?.state || '').toLowerCase();
+        }
+
+        function isFinishedJobStatus(status) {
+            return ['finished', 'completed', 'success', 'succeeded'].includes(status);
+        }
+
+        function isRunningJobStatus(status) {
+            return ['running', 'processing'].includes(status);
         }
 
         function restoreAsyncButton(btn, originalHTML) {
@@ -2406,14 +2448,15 @@
                         throw new Error(getRequestErrorMessage(response.status, '登入狀態已失效，請重新登入後再試', '影片狀態查詢失敗，請稍後再試'));
                     }
                     const data = await response.json();
+                    const status = normalizeJobStatus(data);
 
-                    if (data.status === 'finished') {
+                    if (isFinishedJobStatus(status)) {
                         clearInterval(interval);
                         statusEl.textContent = '生成完成！';
                         statusEl.className = 'text-sm text-center mt-3 min-h-[40px] flex items-center justify-center text-green-400';
 
                         // 🔧 修復：後端返回 image_url，需要處理完整路徑
-                        const outputPath = data.image_url || data.output_path || data.result;
+                        const outputPath = pickJobOutputPath(data);
                         if (outputPath) {
                             const fullVideoUrl = resolveOutputUrl(outputPath);
                             showMotionResult(fullVideoUrl);
@@ -2423,14 +2466,14 @@
                         }
 
                         restoreAsyncButton(btn, originalHTML);
-                    } else if (data.status === 'failed') {
+                    } else if (status === 'failed') {
                         clearInterval(interval);
                         statusEl.textContent = '影片生成失敗，請稍後再試';
                         statusEl.className = 'text-sm text-center mt-3 min-h-[40px] flex items-center justify-center text-red-400';
                         restoreAsyncButton(btn, originalHTML);
-                    } else if (data.status === 'processing') {
+                    } else if (isRunningJobStatus(status)) {
                         statusEl.textContent = `處理中... (${data.progress || 0}%)`;
-                    } else if (data.status === 'queued') {
+                    } else if (status === 'queued') {
                         statusEl.textContent = '排隊中...';
                     }
                 } catch (error) {
@@ -2632,14 +2675,15 @@
                         throw new Error(getRequestErrorMessage(response.status, '登入狀態已失效，請重新登入後再試', '虛擬人狀態查詢失敗，請稍後再試'));
                     }
                     const data = await response.json();
+                    const status = normalizeJobStatus(data);
 
-                    if (data.status === 'finished') {
+                    if (isFinishedJobStatus(status)) {
                         clearInterval(interval);
                         statusEl.textContent = '生成完成！';
                         statusEl.className = 'mt-4 p-4 rounded-xl text-center min-h-[60px] flex items-center justify-center bg-green-500/10 text-green-400';
 
                         // 🔧 修復：後端返回 image_url，需要處理完整路徑
-                        const outputPath = data.image_url || data.output_path || data.result;
+                        const outputPath = pickJobOutputPath(data);
                         if (outputPath) {
                             const fullVideoUrl = resolveOutputUrl(outputPath);
                             showAvatarResult(fullVideoUrl);
@@ -2649,14 +2693,14 @@
                         }
 
                         restoreAsyncButton(btn, originalHTML);
-                    } else if (data.status === 'failed') {
+                    } else if (status === 'failed') {
                         clearInterval(interval);
                         statusEl.textContent = '虛擬人影片生成失敗，請稍後再試';
                         statusEl.className = 'mt-4 p-4 rounded-xl text-center min-h-[60px] flex items-center justify-center bg-red-500/10 text-red-400';
                         restoreAsyncButton(btn, originalHTML);
-                    } else if (data.status === 'processing') {
+                    } else if (isRunningJobStatus(status)) {
                         statusEl.textContent = `處理中... (${data.progress || 0}%)`;
-                    } else if (data.status === 'queued') {
+                    } else if (status === 'queued') {
                         statusEl.textContent = '排隊中...';
                     }
                 } catch (error) {
@@ -2913,19 +2957,19 @@
                     if (!response.ok) throw new Error('Status check failed');
 
                     const data = await response.json();
+                    const status = normalizeJobStatus(data);
 
-                    if (data.status === 'processing') {
+                    if (isRunningJobStatus(status)) {
                         showStatus(`🔄 Processing... ${data.progress || 0}%`, 'info');
-                    } else if (data.status === 'queued') {
+                    } else if (status === 'queued') {
                         showStatus('⏳ Waiting in queue...', 'info');
-                    } else if (data.status === 'finished') {
+                    } else if (isFinishedJobStatus(status)) {
                         clearInterval(toolPollingIntervals[toolName]);
                         delete toolPollingIntervals[toolName];
 
-                        const outputPath = data.image_url || data.output_path;
+                        const outputPath = pickJobOutputPath(data);
                         if (outputPath) {
-                            const filename = outputPath.split('/').pop().split('\\').pop();
-                            const imageUrl = `${API_BASE}/outputs/${filename}`;
+                            const imageUrl = resolveOutputUrl(outputPath);
 
                             if (currentTool === toolName) {
                                 showResult(imageUrl);
@@ -2958,7 +3002,7 @@
 
                         window.toolStates[toolName].isGenerating = false;
 
-                    } else if (data.status === 'failed') {
+                    } else if (status === 'failed') {
                         clearInterval(toolPollingIntervals[toolName]);
                         delete toolPollingIntervals[toolName];
 
@@ -3081,17 +3125,33 @@
 
                 modelSelect.innerHTML = '';
 
-                const unetModels = data.unet_models || [];
-                const checkpointModels = data.models || [];
+                const textToImageModels = data.by_task_type?.text_to_image || [];
+                const unetModels = textToImageModels.length > 0 ? textToImageModels : (data.unet_models || []);
+                const checkpointModels = textToImageModels.length > 0 ? [] : (data.models || []);
+
+                const createModelOption = (model) => {
+                    const option = document.createElement('option');
+
+                    if (model && typeof model === 'object') {
+                        const value = model.value ?? model.id ?? '';
+                        option.value = value;
+                        option.textContent = model.name || value || 'Default ComfyUI workflow model';
+                        return option;
+                    }
+
+                    const value = String(model ?? '');
+                    option.value = value;
+                    option.textContent = value
+                        ? value.split('/').pop().replace('.safetensors', '')
+                        : 'Default ComfyUI workflow model';
+                    return option;
+                };
 
                 if (unetModels.length > 0) {
                     const unetGroup = document.createElement('optgroup');
-                    unetGroup.label = 'UNET Models';
+                    unetGroup.label = textToImageModels.length > 0 ? 'Text to Image Models' : 'UNET Models';
                     unetModels.forEach(model => {
-                        const option = document.createElement('option');
-                        option.value = model;
-                        option.textContent = model.split('/').pop().replace('.safetensors', '');
-                        unetGroup.appendChild(option);
+                        unetGroup.appendChild(createModelOption(model));
                     });
                     modelSelect.appendChild(unetGroup);
                 }
@@ -3100,10 +3160,7 @@
                     const ckptGroup = document.createElement('optgroup');
                     ckptGroup.label = 'Checkpoint Models';
                     checkpointModels.forEach(model => {
-                        const option = document.createElement('option');
-                        option.value = model;
-                        option.textContent = model.split('/').pop().replace('.safetensors', '');
-                        ckptGroup.appendChild(option);
+                        ckptGroup.appendChild(createModelOption(model));
                     });
                     modelSelect.appendChild(ckptGroup);
                 }

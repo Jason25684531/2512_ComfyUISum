@@ -6,6 +6,9 @@ from pathlib import Path
 import httpx
 
 
+PNG_BYTES = b"\x89PNG\r\n\x1a\n" + b"\x00" * 8
+
+
 def _response(method: str, url: str, *, status_code: int = 200, json_data=None, content: bytes = b"") -> httpx.Response:
     kwargs = {"request": httpx.Request(method, url)}
     if json_data is not None:
@@ -63,7 +66,7 @@ def test_comfyui_execute_writes_relative_output_and_injects_bindings(settings, m
             )
         if url.endswith("/view"):
             assert params == {"filename": "result_real.png", "subfolder": "studio_v2", "type": "output"}
-            return _response("GET", url, content=b"real-image-bytes")
+            return _response("GET", url, content=PNG_BYTES)
         raise AssertionError(f"unexpected GET {url}")
 
     monkeypatch.setattr("httpx.post", fake_post)
@@ -89,7 +92,7 @@ def test_comfyui_execute_writes_relative_output_and_injects_bindings(settings, m
     assert result.output_path == f"outputs/job_{job.job_id}/result.png"
     assert "\\" not in result.output_path
     written = Path(settings.storage_root) / result.output_path
-    assert written.read_bytes() == b"real-image-bytes"
+    assert written.read_bytes() == PNG_BYTES
 
     prompt = captured_prompt["payload"]
     assert prompt["3"]["inputs"]["text"] == "a calm lake at sunrise"
@@ -143,7 +146,6 @@ def test_comfyui_execute_returns_binding_error_for_invalid_binding(settings, tmp
 
 def test_comfyui_execute_returns_timeout_when_history_never_finishes(settings, monkeypatch):
     from app.models.job import JobPayload
-    from shared.v2.errors import COMFYUI_TIMEOUT
 
     engine = _build_engine(settings)
     timeline = iter([0.0, 0.0, 2.0])
@@ -156,12 +158,23 @@ def test_comfyui_execute_returns_timeout_when_history_never_finishes(settings, m
     result = engine.execute(JobPayload(task_type="text_to_image", params={"prompt": "timeout"}))
 
     assert result.success is False
-    assert result.error_message == COMFYUI_TIMEOUT
+    assert result.error_message == "ComfyUI history polling timed out."
+
+
+def test_comfyui_execute_fails_when_submit_has_no_prompt_id(settings, monkeypatch):
+    from app.models.job import JobPayload
+
+    engine = _build_engine(settings)
+    monkeypatch.setattr("httpx.post", lambda url, **kwargs: _response("POST", url, json_data={"ok": True}))
+
+    result = engine.execute(JobPayload(task_type="text_to_image", params={"prompt": "missing prompt id"}))
+
+    assert result.success is False
+    assert result.error_message == "ComfyUI model validation failed. The selected model is not compatible with text_to_image."
 
 
 def test_comfyui_execute_returns_output_missing_when_history_has_no_images(settings, monkeypatch):
     from app.models.job import JobPayload
-    from shared.v2.errors import COMFYUI_OUTPUT_MISSING
 
     engine = _build_engine(settings)
     monkeypatch.setattr("httpx.post", lambda url, **kwargs: _response("POST", url, json_data={"prompt_id": "prompt-1"}))
@@ -177,7 +190,44 @@ def test_comfyui_execute_returns_output_missing_when_history_has_no_images(setti
     result = engine.execute(JobPayload(task_type="text_to_image", params={"prompt": "missing image"}))
 
     assert result.success is False
-    assert result.error_message == COMFYUI_OUTPUT_MISSING
+    assert result.error_message == "ComfyUI completed but no image output was found."
+
+
+def test_comfyui_execute_fails_when_view_returns_non_image_payload(settings, monkeypatch):
+    from app.models.job import JobPayload
+
+    engine = _build_engine(settings)
+    monkeypatch.setattr("httpx.post", lambda url, **kwargs: _response("POST", url, json_data={"prompt_id": "prompt-1"}))
+
+    def fake_get(url: str, **kwargs):
+        if url.endswith("/history/prompt-1"):
+            return _response(
+                "GET",
+                url,
+                json_data={
+                    "prompt-1": {
+                        "outputs": {
+                            "9": {
+                                "images": [
+                                    {
+                                        "filename": "result.txt",
+                                        "subfolder": "",
+                                        "type": "output",
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                },
+            )
+        return _response("GET", url, content=b"not an image")
+
+    monkeypatch.setattr("httpx.get", fake_get)
+
+    result = engine.execute(JobPayload(task_type="text_to_image", params={"prompt": "bad download"}))
+
+    assert result.success is False
+    assert result.error_message == "ComfyUI output download failed."
 
 
 def test_comfyui_execute_normalizes_negative_seed_for_comfyui(settings, monkeypatch):
@@ -208,7 +258,7 @@ def test_comfyui_execute_normalizes_negative_seed_for_comfyui(settings, monkeypa
             },
         )
         if url.endswith("/history/prompt-1")
-        else _response("GET", url, content=b"img"),
+        else _response("GET", url, content=PNG_BYTES),
     )
     monkeypatch.setattr("httpx.post", fake_post)
 

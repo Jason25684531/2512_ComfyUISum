@@ -10,6 +10,8 @@ import httpx
 
 from app.models.job import JobPayload
 from shared.v2.errors import (
+    COMFYUI_MODEL_VALIDATION_FAILED,
+    COMFYUI_OUTPUT_DOWNLOAD_FAILED,
     COMFYUI_OUTPUT_MISSING,
     COMFYUI_TIMEOUT,
     COMFYUI_UNAVAILABLE,
@@ -20,6 +22,12 @@ from shared.v2.errors import (
 from shared.v2.output_paths import build_output_relative_path
 from shared.v2.path_utils import ensure_storage_layout, resolve_storage_path
 from worker.engines.base import EngineAdapter, EngineResult
+
+
+class ComfyUIEngineError(RuntimeError):
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.message = message
 
 
 class ComfyUIEngine(EngineAdapter):
@@ -42,8 +50,6 @@ class ComfyUIEngine(EngineAdapter):
             workflow, bindings = self._load_workflow_contract(job_payload.task_type)
             prompt_payload = self._apply_bindings(workflow, bindings, job_payload.params)
             prompt_id = self._submit_prompt(prompt_payload)
-            if not prompt_id:
-                return EngineResult(success=False, error_message=COMFYUI_UNAVAILABLE)
 
             output_metadata = self._wait_for_output(prompt_id)
             if output_metadata is None:
@@ -53,7 +59,7 @@ class ComfyUIEngine(EngineAdapter):
 
             image_bytes = self._download_output(output_metadata)
             if image_bytes is None:
-                return EngineResult(success=False, error_message=COMFYUI_OUTPUT_MISSING)
+                return EngineResult(success=False, error_message=COMFYUI_OUTPUT_DOWNLOAD_FAILED)
 
             preferred_filename = (
                 (bindings.get("output") or {}).get("preferred_filename")
@@ -72,6 +78,8 @@ class ComfyUIEngine(EngineAdapter):
             return EngineResult(success=False, error_message=WORKFLOW_NOT_FOUND)
         except ValueError:
             return EngineResult(success=False, error_message=WORKFLOW_BINDING_INVALID)
+        except ComfyUIEngineError as exc:
+            return EngineResult(success=False, error_message=exc.message)
         except httpx.HTTPError:
             return EngineResult(success=False, error_message=COMFYUI_UNAVAILABLE)
         except Exception:
@@ -176,10 +184,22 @@ class ComfyUIEngine(EngineAdapter):
             json={"prompt": prompt_payload},
             timeout=self.settings.comfy_submit_timeout_seconds,
         )
-        response.raise_for_status()
-        payload = response.json()
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            if self._looks_like_model_validation_error(exc.response.text):
+                raise ComfyUIEngineError(COMFYUI_MODEL_VALIDATION_FAILED) from exc
+            raise
+
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise ComfyUIEngineError(COMFYUI_MODEL_VALIDATION_FAILED) from exc
+
         prompt_id = payload.get("prompt_id")
-        return str(prompt_id) if prompt_id else None
+        if not prompt_id:
+            raise ComfyUIEngineError(COMFYUI_MODEL_VALIDATION_FAILED)
+        return str(prompt_id)
 
     def _wait_for_output(self, prompt_id: str) -> dict | str | None:
         deadline = time.monotonic() + self.settings.comfy_history_timeout_seconds
@@ -238,14 +258,44 @@ class ComfyUIEngine(EngineAdapter):
         return isinstance(outputs, dict) and bool(outputs)
 
     def _download_output(self, output_metadata: dict) -> bytes | None:
-        response = httpx.get(
-            f"{self.settings.comfyui_base_url.rstrip('/')}/view",
-            params={
-                "filename": output_metadata["filename"],
-                "subfolder": output_metadata.get("subfolder", ""),
-                "type": output_metadata.get("type", "output"),
-            },
-            timeout=self.settings.comfy_http_timeout_seconds,
+        try:
+            response = httpx.get(
+                f"{self.settings.comfyui_base_url.rstrip('/')}/view",
+                params={
+                    "filename": output_metadata["filename"],
+                    "subfolder": output_metadata.get("subfolder", ""),
+                    "type": output_metadata.get("type", "output"),
+                },
+                timeout=self.settings.comfy_http_timeout_seconds,
+            )
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise ComfyUIEngineError(COMFYUI_OUTPUT_DOWNLOAD_FAILED) from exc
+
+        content = response.content or b""
+        if not self._is_supported_image_bytes(content):
+            return None
+        return content
+
+    @staticmethod
+    def _looks_like_model_validation_error(text: str) -> bool:
+        normalized = (text or "").lower()
+        return any(
+            marker in normalized
+            for marker in (
+                "could not detect model type",
+                "validation",
+                "invalid prompt",
+                "not compatible",
+            )
         )
-        response.raise_for_status()
-        return response.content or None
+
+    @staticmethod
+    def _is_supported_image_bytes(content: bytes) -> bool:
+        if content.startswith(b"\x89PNG\r\n\x1a\n"):
+            return True
+        if content.startswith(b"\xff\xd8\xff"):
+            return True
+        if content.startswith((b"GIF87a", b"GIF89a")):
+            return True
+        return len(content) >= 12 and content[:4] == b"RIFF" and content[8:12] == b"WEBP"
