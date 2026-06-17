@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -20,13 +21,72 @@ from workflow_registry.registry import WorkflowRegistry
 
 
 LOGGER = logging.getLogger(__name__)
+FRONTEND_PAGE_ALIASES = {
+    "/": "index.html",
+    "/index.html": "index.html",
+    "/dashboard": "dashboard.html",
+    "/dashboard.html": "dashboard.html",
+    "/login": "login.html",
+    "/login.html": "login.html",
+    "/profile": "profile.html",
+    "/profile.html": "profile.html",
+}
+FRONTEND_FILE_ALIASES = {
+    "/config.js": "config.js",
+    "/motion-workspace.js": "motion-workspace.js",
+    "/image-utils.js": "image-utils.js",
+    "/build-icons.js": "build-icons.js",
+    "/tailwind.generated.css": "tailwind.generated.css",
+    "/style.css": "style.css",
+}
+FRONTEND_MOUNTS = {
+    "/frontend": ".",
+    "/image": "image",
+    "/vendor": "vendor",
+    "/front": "front",
+}
 
 
 def _default_registry() -> WorkflowRegistry:
-    from pathlib import Path
-
     manifests_dir = Path(__file__).resolve().parents[3] / "packages" / "workflow_registry" / "manifests"
     return WorkflowRegistry.from_directory(manifests_dir)
+
+
+def _build_frontend_handler(frontend_dir: Path, relative_path: str):
+    async def serve_frontend_file():
+        target = frontend_dir / relative_path
+        if not target.is_file():
+            raise HTTPException(status_code=404, detail="Frontend asset not found.")
+        return FileResponse(target)
+
+    return serve_frontend_file
+
+
+def _register_frontend_routes(app: FastAPI, frontend_dir: Path) -> None:
+    for route_path, relative_path in FRONTEND_PAGE_ALIASES.items():
+        route_name = route_path.strip("/").replace("/", "-") or "root"
+        app.add_api_route(
+            route_path,
+            _build_frontend_handler(frontend_dir, relative_path),
+            methods=["GET"],
+            include_in_schema=False,
+            name=f"frontend-page-{route_name}",
+        )
+
+    for route_path, relative_path in FRONTEND_FILE_ALIASES.items():
+        route_name = route_path.strip("/").replace("/", "-") or relative_path.replace("/", "-")
+        app.add_api_route(
+            route_path,
+            _build_frontend_handler(frontend_dir, relative_path),
+            methods=["GET"],
+            include_in_schema=False,
+            name=f"frontend-asset-{route_name}",
+        )
+
+    for mount_path, relative_path in FRONTEND_MOUNTS.items():
+        directory = frontend_dir / relative_path
+        if directory.is_dir():
+            app.mount(mount_path, StaticFiles(directory=directory), name=mount_path.strip("/") or "frontend")
 
 
 def create_app(
@@ -87,19 +147,7 @@ def create_app(
     from app.config import REPO_ROOT
     frontend_dir = REPO_ROOT / "frontend"
 
-    @app.get("/", include_in_schema=False)
-    async def serve_index():
-        return FileResponse(frontend_dir / "index.html")
-
-    @app.get("/dashboard", include_in_schema=False)
-    async def serve_dashboard():
-        return FileResponse(frontend_dir / "dashboard.html")
-
-    @app.get("/dashboard.html", include_in_schema=False)
-    async def serve_dashboard_legacy():
-        return FileResponse(frontend_dir / "dashboard.html")
-
-    app.mount("/frontend", StaticFiles(directory=frontend_dir), name="frontend")
+    _register_frontend_routes(app, frontend_dir)
 
     @app.exception_handler(InvalidStoragePathError)
     async def handle_invalid_storage_path(_: Request, __: InvalidStoragePathError) -> JSONResponse:

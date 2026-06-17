@@ -1,5 +1,7 @@
 from .constants import DEFAULT_OUTPUT_FILENAME_BY_TYPE, V2_CANCEL_KEY_PREFIX, V2_JOB_QUEUE_KEY
 from .errors import (
+    COMFYUI_OUTPUT_MISSING,
+    COMFYUI_TIMEOUT,
     COMFYUI_UNAVAILABLE,
     ENGINE_EXECUTION_FAILED,
     INTERNAL_ERROR,
@@ -8,6 +10,8 @@ from .errors import (
     JOB_NOT_FOUND,
     OUTPUT_NOT_FOUND,
     REDIS_UNAVAILABLE,
+    UNKNOWN_ENGINE_MODE,
+    WORKFLOW_BINDING_INVALID,
     WORKFLOW_NOT_FOUND,
 )
 from .job_store import AssetStore, JobStore
@@ -29,6 +33,8 @@ from .status import LEGACY_STATUS_BY_V2_STATUS, map_v2_status_to_legacy
 
 __all__ = [
     "COMFYUI_UNAVAILABLE",
+    "COMFYUI_OUTPUT_MISSING",
+    "COMFYUI_TIMEOUT",
     "DEFAULT_OUTPUT_FILENAME_BY_TYPE",
     "ENGINE_EXECUTION_FAILED",
     "InvalidStoragePathError",
@@ -41,8 +47,10 @@ __all__ = [
     "LEGACY_STATUS_BY_V2_STATUS",
     "OUTPUT_NOT_FOUND",
     "REDIS_UNAVAILABLE",
+    "UNKNOWN_ENGINE_MODE",
     "V2_CANCEL_KEY_PREFIX",
     "V2_JOB_QUEUE_KEY",
+    "WORKFLOW_BINDING_INVALID",
     "WORKFLOW_NOT_FOUND",
     "build_job_output_dir",
     "build_output_relative_path",

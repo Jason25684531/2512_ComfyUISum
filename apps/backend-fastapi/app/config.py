@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     output_root: str = Field(alias="OUTPUT_ROOT")
     allow_external_api: bool = Field(alias="ALLOW_EXTERNAL_API")
     default_tier: str = Field(alias="DEFAULT_TIER")
+    comfy_submit_timeout_seconds: float = Field(default=300.0, alias="COMFY_SUBMIT_TIMEOUT_SECONDS")
+    comfy_history_timeout_seconds: float = Field(default=300.0, alias="COMFY_HISTORY_TIMEOUT_SECONDS")
+    comfy_polling_interval_seconds: float = Field(default=1.0, alias="COMFY_POLLING_INTERVAL")
+    comfy_http_timeout_seconds: float = Field(default=30.0, alias="COMFY_HTTP_TIMEOUT")
     queue_key: str = V2_JOB_QUEUE_KEY
 
     @field_validator("storage_root")

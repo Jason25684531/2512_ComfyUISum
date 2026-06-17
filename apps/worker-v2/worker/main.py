@@ -9,7 +9,7 @@ import redis
 from app.models.job import JobPayload, JobStatus
 from shared.v2 import JobStore
 from shared.v2.constants import V2_CANCEL_KEY_PREFIX
-from shared.v2.errors import ENGINE_EXECUTION_FAILED, WORKFLOW_NOT_FOUND
+from shared.v2.errors import ENGINE_EXECUTION_FAILED, UNKNOWN_ENGINE_MODE, WORKFLOW_NOT_FOUND
 from worker.config import WorkerSettings, get_worker_settings
 from worker.engines.comfyui_engine import ComfyUIEngine
 from worker.engines.mock_engine import MockEngine
@@ -47,7 +47,9 @@ class WorkerRunner:
     def _build_engine(self):
         if self.settings.engine_mode == "comfyui":
             return ComfyUIEngine(settings=self.settings)
-        return MockEngine(settings=self.settings, workflow_registry=self.workflow_registry)
+        if self.settings.engine_mode == "mock":
+            return MockEngine(settings=self.settings, workflow_registry=self.workflow_registry)
+        raise ValueError(UNKNOWN_ENGINE_MODE)
 
     def process_payload(self, raw_payload: str) -> None:
         try:
@@ -73,9 +75,6 @@ class WorkerRunner:
             return
         try:
             result = self.engine.execute(job)
-        except NotImplementedError:
-            self._update_job(job, status=JobStatus.FAILED, error_message="Engine execution is not available yet.")
-            return
         except Exception:
             self._update_job(job, status=JobStatus.FAILED, error_message=ENGINE_EXECUTION_FAILED)
             return

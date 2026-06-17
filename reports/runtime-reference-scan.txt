@@ -98,10 +98,21 @@ docs/Windows_BAT_Compatibility.md:405:start "Worker" python -m venv worker\venv 
 docs/Windows_BAT_Compatibility.md:416:| Backend 啟動 | `python backend/src/app.py` | 執行（Windows） | 執行（Docker） | ✅ 相同原始碼 |
 docs/Windows_BAT_Compatibility.md:417:| Worker 啟動 | `python worker/src/main.py` | 執行（Windows） | 執行（systemd） | ✅ 相同邏輯 |
 docs/Windows_BAT_Compatibility.md:443:### Q2: 我改了 backend/src/app.py，Windows 和 TWCC 都會受影響？
+docs/architecture-cleanup-inventory.md:11:| `apps/backend-fastapi/` | `v2-owned` | Linux-first FastAPI runtime and frontend bridge target. |
+docs/architecture-cleanup-inventory.md:12:| `apps/worker-v2/` | `v2-owned` | Linux-first worker with mock engine and future ComfyUI adapter. |
+docs/architecture-cleanup-inventory.md:28:| Backend runtime split | `backend/` vs `apps/backend-fastapi/` | `legacy-owned` + `v2-owned` | frontend bridge, v2 tests, start scripts | High | keep both, consolidate only shared helpers | no | no |
+docs/architecture-cleanup-inventory.md:29:| Worker runtime split | `worker/` vs `apps/worker-v2/` | `legacy-owned` + `v2-owned` | queue consumers, engine adapters, worker tests | High | keep both, consolidate only shared helpers | no | no |
+docs/architecture-cleanup-inventory.md:31:| Frontend bridge overlap | `frontend/` vs `apps/backend-fastapi/app/routes/legacy_bridge.py` | `keep` + `v2-owned` | `/api/generate`, `/api/status` compatibility | Medium | keep bridge until frontend migration completes | no | no |
+docs/architecture-cleanup-inventory.md:39:| Generated sample artifacts in app-local storage | `apps/backend-fastapi/storage/**`, `apps/worker-v2/storage/**` | `archive-candidate` | no runtime references found by repo scan | Low | treat as generated artifacts, require separate delete review | no | no |
+docs/architecture-cleanup-inventory.md:57:| `apps/backend-fastapi/storage/assets/*.txt` | Looks like upload test artifacts rather than source assets. | This change does not perform destructive cleanup; candidate only. |
+docs/architecture-cleanup-inventory.md:58:| `apps/backend-fastapi/storage/temp/studio_v2.db` | Looks like generated local DB state. | Needs explicit delete review outside this architecture-safe change. |
+docs/architecture-cleanup-inventory.md:59:| `apps/worker-v2/storage/outputs/**` | Looks like mock worker output artifact. | Must stay reviewable until scan and smoke evidence are archived. |
+docs/architecture-cleanup-inventory.md:60:| `apps/worker-v2/storage/temp/studio_v2.db` | Looks like generated worker-local DB state. | Keep as archive-candidate only in this change. |
+docs/architecture-cleanup-inventory.md:72:- Legacy-critical files must remain present: `backend/src/app.py`, `worker/src/main.py`, `frontend/index.html`, and `frontend/dashboard.html`.
 docs/architecture-linux-first.md:14:- `apps/backend-fastapi/`
 docs/architecture-linux-first.md:18:- `apps/worker-v2/`
-docs/architecture-linux-first.md:84:  - `apps/backend-fastapi/` owns the Linux-first FastAPI runtime and frontend bridge target.
-docs/architecture-linux-first.md:85:  - `apps/worker-v2/` owns the Linux-first queue consumer and mock-safe execution flow.
+docs/architecture-linux-first.md:89:  - `apps/backend-fastapi/` owns the Linux-first FastAPI runtime and frontend bridge target.
+docs/architecture-linux-first.md:90:  - `apps/worker-v2/` owns the Linux-first queue consumer and mock-safe execution flow.
 docs/backend_modularization_proposal.md:9:`backend/src/app.py` is currently the Flask application entrypoint and also contains extension setup, request hooks, auth/member endpoints, upload handling, generation transaction orchestration, Redis queue/status handling, history formatting, model discovery, monitoring, health checks, generated output serving, and frontend static serving.
 docs/backend_modularization_proposal.md:13:This proposal treats `backend/src/app.py` as the compatibility anchor during the refactor. Future phases should move behavior outward in small, reversible slices while keeping `app.py` responsible for app creation, extension wiring, shared globals during transition, and blueprint registration.
 docs/backend_modularization_proposal.md:101:| `backend/src/app.py` | App factory or compatibility entrypoint, extension initialization, config loading, blueprint registration, `if __name__ == "__main__"` runner. |
@@ -125,6 +136,8 @@ docs/repo_cleanup_audit.md:126:- Backend route/service responsibilities in `back
 docs/repo_cleanup_audit.md:220:`backend/src/app.py` currently mixes:
 docs/repo_cleanup_audit.md:274:- `get_redis_stats()` and `get_task_stats()` appear low-reference in `backend/src/app.py`; they may be leftovers from richer metrics. Manual review before delete.
 docs/repo_cleanup_audit.md:358:1. Split `backend/src/app.py` by routes/services while preserving all route contracts.
+scripts/dev/linux/scan-runtime-references.sh:27:  printf "Pattern: backend/src/app.py | worker/src/main.py | apps/backend-fastapi | apps/worker-v2\n"
+scripts/dev/linux/scan-runtime-references.sh:28:  run_git_grep "backend/src/app.py|worker/src/main.py|apps/backend-fastapi|apps/worker-v2"
 scripts/dev/linux/start-backend.sh:17:cd "${REPO_ROOT}/apps/backend-fastapi"
 scripts/dev/linux/start-worker.sh:15:export PYTHONPATH="${REPO_ROOT}:${REPO_ROOT}/apps/backend-fastapi:${REPO_ROOT}/packages/workflow_registry:${PYTHONPATH:-}"
 scripts/dev/linux/start-worker.sh:17:cd "${REPO_ROOT}/apps/worker-v2"
@@ -133,6 +146,10 @@ tests/code_review_report.md:162:backend/src/app.py         : 1432 行
 tests/code_review_report.md:163:worker/src/main.py         : 711 行
 tests/performance_optimization.md:127:**或在 backend/src/app.py 初始化時指定：**
 tests/performance_optimization.md:284:2. ✅ 修改 `backend/src/app.py` 初始化參數
+tests/v2/test_cleanup_inventory.py:25:        "apps/backend-fastapi/",
+tests/v2/test_cleanup_inventory.py:26:        "apps/worker-v2/",
+tests/v2/test_cleanup_inventory.py:56:    assert "apps/backend-fastapi" in content
+tests/v2/test_cleanup_inventory.py:57:    assert "apps/worker-v2" in content
 
 ## Workflow folder references
 Pattern: ComfyUIworkflow | ComfyUIworkflow_api
@@ -170,6 +187,10 @@ docs/UpdateList.md:2315:| `ComfyUIworkflow/config.json` | ✏️ 修正 | multi_
 docs/UpdateList.md:3521:3. **`ComfyUIworkflow/config.json`**
 docs/Veo3_LongVideo_Guide.md:21:### 1. 配置更新 (`ComfyUIworkflow/config.json`)
 docs/Veo3_LongVideo_Guide.md:91:| `ComfyUIworkflow/config.json` | 添加 veo3_long_video 配置 |
+docs/architecture-cleanup-inventory.md:16:| `ComfyUIworkflow/` | `legacy-owned` | Legacy and Windows-facing workflow definitions. |
+docs/architecture-cleanup-inventory.md:17:| `ComfyUIworkflow_api/` | `shared-candidate` | API-oriented workflow folder with overlap against legacy workflow JSONs. |
+docs/architecture-cleanup-inventory.md:30:| Workflow folder split | `ComfyUIworkflow/` vs `ComfyUIworkflow_api/` vs `workflows/comfyui/` | `legacy-owned` + `shared-candidate` + `v2-owned` | docs, runtime scan, workflow registry migration work, worker-v2 ComfyUI adapter | High | keep legacy folders, treat `workflows/comfyui/` as the v2-owned HTTP contract surface | no | no |
+docs/architecture-cleanup-inventory.md:66:- The exact long-term split between `ComfyUIworkflow/` and `ComfyUIworkflow_api/` still needs a dedicated review once real v2 ComfyUI execution is ready.
 docs/dead_code_cleanup_report.md:11:- `ComfyUIworkflow/*.json`
 docs/dead_code_cleanup_report.md:12:- `ComfyUIworkflow/linux_fixed/*.json`
 docs/dead_code_cleanup_report.md:13:- `ComfyUIworkflow/config.json` schema
@@ -197,6 +218,9 @@ docs/repo_cleanup_audit.md:429:- `scripts/workflow_fixer.py`, manual BAT test sc
 docs/repo_cleanup_audit.md:434:Scope: second low-risk cleanup batch only. No runtime contracts, API payloads, Redis/DB schema, Docker service names/ports/volumes/env keys, worker fallback maps, Backend/Worker runtime code, Frontend page flow, CSS class contract, or `ComfyUIworkflow/*.json` files were changed.
 docs/repo_cleanup_audit.md:474:- `ComfyUIworkflow/linux_fixed/*.json`, worker legacy fallback maps, Docker/env contract changes: still out of scope.
 docs/worker_parser_modular_facade_refactor.md:14:No `ComfyUIworkflow/*.json` workflow files were modified.
+scripts/dev/linux/scan-runtime-references.sh:16:      'ComfyUIworkflow*' '.env*' 'docker-compose*.yml' 2>/dev/null || true
+scripts/dev/linux/scan-runtime-references.sh:32:  printf "Pattern: ComfyUIworkflow | ComfyUIworkflow_api\n"
+scripts/dev/linux/scan-runtime-references.sh:33:  run_git_grep "ComfyUIworkflow|ComfyUIworkflow_api"
 scripts/maintenance_lib.py:23:    Path("ComfyUIworkflow"),
 scripts/maintenance_lib.py:24:    Path("ComfyUIworkflow_api"),
 scripts/workflow_fixer.py:7:WORKFLOW_SRC = os.path.join(BASE_DIR, "ComfyUIworkflow")
@@ -206,6 +230,9 @@ tests/test_environment_boundary.py:50:        "ComfyUIworkflow/workflow.json": "
 tests/test_system_cleanup_optimization.py:62:    (tmp_path / "ComfyUIworkflow").mkdir(parents=True)
 tests/test_system_cleanup_optimization.py:63:    (tmp_path / "ComfyUIworkflow" / "workflow.json").write_text("{}\n", encoding="utf-8")
 tests/test_system_cleanup_optimization.py:75:    assert not any(target.startswith("ComfyUIworkflow") for target in cleanup_targets)
+tests/v2/test_cleanup_inventory.py:28:        "ComfyUIworkflow/",
+tests/v2/test_cleanup_inventory.py:29:        "ComfyUIworkflow_api/",
+tests/v2/test_cleanup_inventory.py:58:    assert "ComfyUIworkflow" in content
 worker/Dockerfile:16:COPY ComfyUIworkflow/ ComfyUIworkflow/
 worker/Dockerfile:17:COPY ComfyUIworkflow_api/ ComfyUIworkflow_api/
 worker/src/warmup.py:319:        allowed_roots = [WORKFLOW_DIR, PROJECT_ROOT / "ComfyUIworkflow_api"]
@@ -228,11 +255,11 @@ Pattern: storage/outputs | storage/assets | OUTPUT_ROOT | ASSET_ROOT | STORAGE_R
 apps/backend-fastapi/app/config.py:32:    storage_root: str = Field(alias="STORAGE_ROOT")
 apps/backend-fastapi/app/config.py:33:    asset_root: str = Field(alias="ASSET_ROOT")
 apps/backend-fastapi/app/config.py:34:    output_root: str = Field(alias="OUTPUT_ROOT")
-apps/backend-fastapi/app/config.py:42:        validate_linux_first_path(value, key="STORAGE_ROOT")
+apps/backend-fastapi/app/config.py:46:        validate_linux_first_path(value, key="STORAGE_ROOT")
 apps/worker-v2/worker/config.py:30:    storage_root: str = Field(alias="STORAGE_ROOT")
 apps/worker-v2/worker/config.py:31:    asset_root: str = Field(alias="ASSET_ROOT")
 apps/worker-v2/worker/config.py:32:    output_root: str = Field(alias="OUTPUT_ROOT")
-apps/worker-v2/worker/config.py:40:        validate_linux_first_path(value, key="STORAGE_ROOT")
+apps/worker-v2/worker/config.py:44:        validate_linux_first_path(value, key="STORAGE_ROOT")
 backend/src/app.py:1519:    Serve generated images/videos from storage/outputs directory
 backend/src/app.py:1553:    # Get the absolute path to storage/outputs
 docker-compose.base.yml:108:      - ${STORAGE_OUTPUT_DIR:-./storage/outputs}:/app/storage/outputs
@@ -254,17 +281,23 @@ docs/UpdateList.md:2585:- 影片生成成功，檔案存在於 `storage/outputs/
 docs/UpdateList.md:2708:8. 複製到 `storage/outputs/` 並更新狀態
 docs/UpdateList.md:2778:│ 7. Copy to storage/outputs/job_id.mp4                       │
 docs/Veo3_LongVideo_Guide.md:82:Output (storage/outputs/*.mp4)
+docs/architecture-cleanup-inventory.md:57:| `apps/backend-fastapi/storage/assets/*.txt` | Looks like upload test artifacts rather than source assets. | This change does not perform destructive cleanup; candidate only. |
+docs/architecture-cleanup-inventory.md:59:| `apps/worker-v2/storage/outputs/**` | Looks like mock worker output artifact. | Must stay reviewable until scan and smoke evidence are archived. |
 docs/architecture-linux-first.md:10:- Ensure persisted paths stay `STORAGE_ROOT`-relative and never store Windows absolute paths.
 docs/architecture-linux-first.md:43:   - Output paths are validated as `STORAGE_ROOT`-relative.
 docs/architecture-linux-first.md:54:- Persisted paths always use forward slashes and stay relative to `STORAGE_ROOT`.
-docs/architecture-linux-first.md:98:- Persisted output paths remain `STORAGE_ROOT`-relative, and client-visible output URLs remain server-generated.
+docs/architecture-linux-first.md:104:- Persisted output paths remain `STORAGE_ROOT`-relative, and client-visible output URLs remain server-generated.
 docs/backend_modularization_proposal.md:47:| `/outputs/<path:filename>` | GET | `serve_output` | Path param `filename`. | `200` file response; `400` invalid/empty safe filename; `403` path traversal check failure; `404` missing file; disabled S3 branch would use `302` but is currently guarded by `if False and storage_backend == "s3"`. | None. | None. | Uses `secure_filename`; resolves `STORAGE_OUTPUT_DIR` env or `backend/storage/outputs` fallback; sends local file with guessed MIME type. |
 docs/dev-wsl2-runbook.md:35:- `STORAGE_ROOT=./storage`
 docs/dev-wsl2-runbook.md:79:- `storage/outputs/job_<uuid>/result.png`
-docs/dev-wsl2-runbook.md:101:- WSL2 Studio Core persists only `STORAGE_ROOT`-relative paths such as `assets/...` and `outputs/...`.
-docs/dev-wsl2-runbook.md:119:find storage/outputs -maxdepth 3 -type f
+docs/dev-wsl2-runbook.md:115:find storage/outputs -maxdepth 3 -type f
+docs/dev-wsl2-runbook.md:122:- The final file is persisted under `storage/outputs/job_<uuid>/result.png`.
+docs/dev-wsl2-runbook.md:127:- WSL2 Studio Core persists only `STORAGE_ROOT`-relative paths such as `assets/...` and `outputs/...`.
+docs/dev-wsl2-runbook.md:146:find storage/outputs -maxdepth 3 -type f
 docs/workflow-mock-contract.md:35:- Outputs are written to `storage/outputs/job_<job_id>/`.
 docs/workflow-mock-contract.md:59:- Treat `STORAGE_ROOT` as the only filesystem trust boundary.
+scripts/dev/linux/scan-runtime-references.sh:37:  printf "Pattern: storage/outputs | storage/assets | OUTPUT_ROOT | ASSET_ROOT | STORAGE_ROOT\n"
+scripts/dev/linux/scan-runtime-references.sh:38:  run_git_grep "storage/outputs|storage/assets|OUTPUT_ROOT|ASSET_ROOT|STORAGE_ROOT"
 scripts/start_unified_linux.sh:141:mkdir -p storage/inputs storage/outputs storage/models logs redis_data mysql_data
 shared/storage_service.py:45:        本地模式：將檔案複製到 storage/outputs/
 shared/storage_service.py:68:        """本地模式：從 storage/outputs/ 複製到指定路徑"""
@@ -276,6 +309,7 @@ shared/v2/path_utils.py:60:        raise InvalidStoragePathError("Resolved path 
 tests/v2/conftest.py:56:    monkeypatch.setenv("STORAGE_ROOT", "./storage")
 tests/v2/conftest.py:57:    monkeypatch.setenv("ASSET_ROOT", "assets")
 tests/v2/conftest.py:58:    monkeypatch.setenv("OUTPUT_ROOT", "outputs")
+tests/v2/test_cleanup_inventory.py:59:    assert "storage/outputs" in content
 worker/src/comfy_client.py:464:        將 ComfyUI 輸出的檔案（圖片/影片）複製到 storage/outputs
 worker/src/main.py:276:    清理 storage/outputs 中超過 30 天的圖片檔案
 
@@ -296,13 +330,13 @@ Pattern: studio:v2:jobs | studio:v2:cancel: | REDIS_URL | redis
 .env.unified.example:195:# REDIS_DATA_PATH=./redis_data
 .env.unified.example:204:# REDIS_DATA_PATH=/var/lib/studio/redis_data
 apps/backend-fastapi/app/config.py:31:    redis_url: str = Field(alias="REDIS_URL")
-apps/backend-fastapi/app/main.py:17:from app.services.redis_client import RedisQueueClient
-apps/backend-fastapi/app/main.py:40:        redis_url=runtime_settings.redis_url,
+apps/backend-fastapi/app/main.py:18:from app.services.redis_client import RedisQueueClient
+apps/backend-fastapi/app/main.py:100:        redis_url=runtime_settings.redis_url,
 apps/backend-fastapi/app/routes/health.py:15:    redis_ok = queue_client.health_check()
 apps/backend-fastapi/app/routes/health.py:21:    status = "ok" if redis_ok and (comfyui_ok in {None, True}) else "degraded"
 apps/backend-fastapi/app/routes/health.py:27:        "redis_ok": redis_ok,
 apps/backend-fastapi/app/routes/jobs.py:8:from app.services.redis_client import QueueUnavailableError
-apps/backend-fastapi/app/routes/legacy_bridge.py:8:from app.services.redis_client import QueueUnavailableError
+apps/backend-fastapi/app/routes/legacy_bridge.py:9:from app.services.redis_client import QueueUnavailableError
 apps/backend-fastapi/app/services/redis_client.py:5:import redis
 apps/backend-fastapi/app/services/redis_client.py:14:    def __init__(self, *, redis_url: str, queue_key: str) -> None:
 apps/backend-fastapi/app/services/redis_client.py:15:        self.redis_url = redis_url
@@ -316,9 +350,9 @@ apps/worker-v2/worker/main.py:7:import redis
 apps/worker-v2/worker/main.py:29:        redis_client: redis.Redis | None = None,
 apps/worker-v2/worker/main.py:35:        self.redis_client = redis_client or redis.Redis.from_url(
 apps/worker-v2/worker/main.py:36:            settings.redis_url,
-apps/worker-v2/worker/main.py:97:            _, raw_payload = self.redis_client.brpop(self.settings.queue_key)
-apps/worker-v2/worker/main.py:120:            return bool(self.redis_client.exists(f"{V2_CANCEL_KEY_PREFIX}{job_id}"))
-apps/worker-v2/worker/main.py:127:            self.redis_client.delete(f"{V2_CANCEL_KEY_PREFIX}{job_id}")
+apps/worker-v2/worker/main.py:96:            _, raw_payload = self.redis_client.brpop(self.settings.queue_key)
+apps/worker-v2/worker/main.py:119:            return bool(self.redis_client.exists(f"{V2_CANCEL_KEY_PREFIX}{job_id}"))
+apps/worker-v2/worker/main.py:126:            self.redis_client.delete(f"{V2_CANCEL_KEY_PREFIX}{job_id}")
 backend/Readme/API_TESTING.md:23:  "redis": "healthy"
 backend/Readme/API_TESTING.md:154:docker ps | findstr redis
 backend/Readme/README.md:27:docker run -d -p 6379:6379 --name redis redis:latest
@@ -500,6 +534,8 @@ docs/repo_cleanup_audit.md:306:- `docker-compose.dev-s3.yml`: local MinIO/S3 tes
 docs/repo_cleanup_audit.md:450:- Runtime/local state: `mysql_data/`, `redis_data/`, `storage/`, `ComfyUI/`.
 docs/workflow-mock-contract.md:40:- Queue key: `studio:v2:jobs`
 docs/workflow-mock-contract.md:41:- Cancel key: `studio:v2:cancel:{job_id}`
+scripts/dev/linux/scan-runtime-references.sh:42:  printf "Pattern: studio:v2:jobs | studio:v2:cancel: | REDIS_URL | redis\n"
+scripts/dev/linux/scan-runtime-references.sh:43:  run_git_grep "studio:v2:jobs|studio:v2:cancel:|REDIS_URL|redis"
 scripts/dev/linux/smoke-test.sh:24:if command -v redis-cli >/dev/null 2>&1; then
 scripts/dev/linux/smoke-test.sh:25:  echo "[5/5] redis queue length"
 scripts/dev/linux/smoke-test.sh:26:  redis-cli llen studio:v2:jobs || true
@@ -536,6 +572,8 @@ shared/config_base.py:196:    if _should_use_localhost(configured_host, {"redis"
 shared/config_base.py:221:REDIS_HOST, REDIS_PORT = _resolve_redis_endpoint()
 shared/utils.py:231:def get_redis_client(decode_responses: bool = True, max_retries: int = 10,
 shared/utils.py:249:    from redis import Redis
+shared/v2/constants.py:4:V2_JOB_QUEUE_KEY = "studio:v2:jobs"
+shared/v2/constants.py:5:V2_CANCEL_KEY_PREFIX = "studio:v2:cancel:"
 tests/README.md:93:redis-cli LLEN job_queue
 tests/code_review_report.md:40:| `get_redis_client()` | shared/utils.py:180 | Redis 連接 | ✅ 唯一 |
 tests/code_review_report.md:94:- Redis 連接統一使用 `shared.utils.get_redis_client()`
@@ -631,6 +669,8 @@ tests/v2/conftest.py:40:            from app.services.redis_client import QueueU
 tests/v2/conftest.py:55:    monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
 tests/v2/conftest.py:66:        redis_url="redis://localhost:6379/0",
 tests/v2/test_health.py:12:    assert payload["redis_ok"] is True
+tests/v2/test_shared_runtime_contract.py:11:    assert V2_JOB_QUEUE_KEY == "studio:v2:jobs"
+tests/v2/test_shared_runtime_contract.py:12:    assert V2_CANCEL_KEY_PREFIX == "studio:v2:cancel:"
 tests/v2/test_worker_v2.py:20:def _build_runner(settings, fake_redis: FakeRedisClient):
 tests/v2/test_worker_v2.py:32:        redis_client=fake_redis,
 tests/v2/test_worker_v2.py:39:    fake_redis = FakeRedisClient()
@@ -716,12 +756,14 @@ docs/UpdateList.md:3267:- [ ] `/api/status/<job_id>` 正確讀取狀態
 docs/VEO3_TEST_MODE_DEBUG.md:172:4. **抓包检查**：使用浏览器开发者工具查看 `/api/generate` 请求体
 docs/Veo3_LongVideo_Guide.md:48:curl -X POST http://localhost:5000/api/generate \
 docs/Veo3_LongVideo_Guide.md:75:    ↓ POST /api/generate { workflow, prompts[], images{} }
+docs/architecture-cleanup-inventory.md:31:| Frontend bridge overlap | `frontend/` vs `apps/backend-fastapi/app/routes/legacy_bridge.py` | `keep` + `v2-owned` | `/api/generate`, `/api/status` compatibility | Medium | keep bridge until frontend migration completes | no | no |
 docs/architecture-linux-first.md:70:- `POST /api/v1/assets`
 docs/architecture-linux-first.md:71:- `GET /api/v1/assets`
 docs/architecture-linux-first.md:72:- `POST /api/v1/jobs`
 docs/architecture-linux-first.md:73:- `GET /api/v1/jobs`
 docs/architecture-linux-first.md:74:- `POST /api/v1/jobs/{job_id}/cancel`
-docs/architecture-linux-first.md:87:  - `frontend/` still talks to legacy-compatible `/api/generate` and `/api/status` routes.
+docs/architecture-linux-first.md:79:- `GET /api/v1/outputs/{job_id}/{filename}`
+docs/architecture-linux-first.md:92:  - `frontend/` still talks to legacy-compatible `/api/generate` and `/api/status` routes.
 docs/backend_modularization_proposal.md:39:| `/api/generate` | POST, OPTIONS | `generate` | JSON: `prompt`, optional `prompts`, `workflow`, `seed`, `model`, `aspect_ratio`, `batch_size`, `images`, `audio`. `audio` may be base64 data URL. | Normal success `200 {"job_id": uuid, "status": "queued", "message": ...}`; Veo3 test success `200 {"job_id", "status": "completed", "video_url", "message"}`; `400` missing JSON, prompt too long, invalid `prompts`, too many prompts, individual prompt too long, missing text-to-image prompt, invalid base64 audio; `503 {"error": "Redis service unavailable"}`; `500 {"error": OPERATION_FAILED_MESSAGE}` for Redis/DB transaction failures; `500 {"error": INTERNAL_SERVER_ERROR_MESSAGE}` for outer failures. OPTIONS is handled by the global preflight hook. | Requires `redis_client` for normal path. `rpush(REDIS_QUEUE_NAME, json.dumps(job_data))`; `hset("job:status:{job_id}", mapping={...})`; `expire(..., 86400)`. Veo3 test mode writes status hash and expiry. | `get_db_session()`, create `Job`, `add()`, `flush()`, `commit()`, rollback on Redis/DB failure, close in `finally`. | Writes base64 audio to `storage/inputs`; Veo3 test mode copies `VEO3_TEST_VIDEO_PATH` to `STORAGE_OUTPUT_DIR`. |
 docs/backend_modularization_proposal.md:40:| `/api/status/<job_id>` | GET | `status` | Path param `job_id`. | Redis hit `200 {"job_id", "status", "progress", "image_url", "error", "source": "redis"}`; DB hit `200 {"job_id", "status", "progress", "image_url", "error", "source": "database", "created_at"}`; not found `404 {"error": "Job not found", "job_id", "message": ...}`; `500`. | `hgetall("job:status:{job_id}")`. Terminal Redis states trigger DB status update. | `db_client.update_job_status(...)`; fallback `get_db_session()`, query `Job`. | Returns output URLs such as `/outputs/{job_id}_0.png` for finished DB fallback. |
 docs/backend_modularization_proposal.md:57:| File upload handling | `/api/upload` and base64 audio logic inside `/api/generate`. | Upload validation, filename generation, disk write, and API response construction are mixed. |
@@ -739,9 +781,12 @@ docs/dead_code_cleanup_report.md:148:| Backend `/api/generate`, `/api/health`, `
 docs/dev-wsl2-runbook.md:48:- `GET http://127.0.0.1:8000/api/v1/assets`
 docs/dev-wsl2-runbook.md:66:curl -X POST http://127.0.0.1:8000/api/v1/assets -F "file=@/tmp/sample.txt"
 docs/dev-wsl2-runbook.md:72:curl -X POST http://127.0.0.1:8000/api/v1/jobs \
-docs/dev-wsl2-runbook.md:113:5. In DevTools Network, confirm `POST /api/generate` returns HTTP 201.
-docs/dev-wsl2-runbook.md:114:6. Confirm polling requests to `GET /api/status/<job_id>` transition through `queued`, `processing`, then `finished`.
-docs/dev-wsl2-runbook.md:115:7. Confirm the status payload includes an `output_url` like `/api/v1/outputs/<job_id>/result.png`.
+docs/dev-wsl2-runbook.md:106:curl -X POST http://127.0.0.1:8000/api/generate \
+docs/dev-wsl2-runbook.md:114:curl http://127.0.0.1:8000/api/status/<job_id>
+docs/dev-wsl2-runbook.md:123:- API-visible output URLs stay backend-generated, such as `/api/v1/outputs/<job_id>/result.png`.
+docs/dev-wsl2-runbook.md:140:6. In DevTools Network, confirm `POST /api/generate` returns HTTP 201.
+docs/dev-wsl2-runbook.md:141:7. Confirm polling requests to `GET /api/status/<job_id>` transition through `queued`, `processing`, then `finished`.
+docs/dev-wsl2-runbook.md:142:8. Confirm the status payload includes an `output_url` like `/api/v1/outputs/<job_id>/result.png`.
 docs/final_local_verification.md:155:- `/api/generate` contract guardrails passed through `tests/test_backend_contract.py`.
 docs/legacy/frontend/dashboard_Backup.html:2037:                const response = await fetch(`${API_BASE}/api/generate`, {
 docs/legacy/frontend/dashboard_Backup.html:2091:                    const response = await fetch(`${API_BASE}/api/status/${jobId}`);
@@ -765,6 +810,8 @@ frontend/index.html:2038:                const response = await fetch(`${API_BAS
 frontend/index.html:2092:                    const response = await fetch(`${API_BASE}/api/status/${jobId}`);
 frontend/index.html:2373:                const response = await fetch(`${API_BASE}/api/generate`, {
 frontend/index.html:2431:                    const response = await fetch(`${API_BASE}/api/status/${jobId}`);
+scripts/dev/linux/scan-runtime-references.sh:47:  printf "Pattern: /api/generate | /api/status | /api/v1/jobs | /api/v1/assets | /api/v1/outputs\n"
+scripts/dev/linux/scan-runtime-references.sh:48:  run_git_grep "/api/generate|/api/status|/api/v1/jobs|/api/v1/assets|/api/v1/outputs"
 scripts/dev/linux/smoke-test.sh:17:curl --fail --silent -X POST "${BASE_URL}/api/v1/assets" -F "file=@${TMP_FILE};filename=sample.txt" >/dev/null
 scripts/dev/linux/smoke-test.sh:20:curl --fail --silent -X POST "${BASE_URL}/api/v1/jobs" \
 tests/locustfile.py:8:1. T2I 生成：POST /api/generate
@@ -810,6 +857,7 @@ tests/v2/test_output_serving.py:27:    response = client.get("/api/v1/outputs/C:
 tests/v2/test_output_serving.py:31:    response = client.get("/api/v1/outputs/C:job_id/result.png")
 tests/v2/test_output_serving.py:36:    response = client.get("/api/v1/outputs/non-existent-job/result.png")
 tests/v2/test_queue_payload.py:8:        "/api/v1/jobs",
+tests/v2/test_shared_runtime_contract.py:37:    assert build_output_url("abc-123", "result.png") == "/api/v1/outputs/abc-123/result.png"
 
 ## Compose, env, and start-script files
 .env.cloud-linux

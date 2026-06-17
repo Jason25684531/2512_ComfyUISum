@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Request, status
 
 from app.models.job import JobCreateRequest, JobPayload, JobStatus
 from app.services.redis_client import QueueUnavailableError
+from shared.v2.output_paths import parse_output_path_to_url
 from shared.v2.errors import REDIS_UNAVAILABLE
 
 
@@ -33,6 +34,14 @@ def _load_job_or_404(request: Request, job_id: str) -> dict:
     return record
 
 
+def _serialize_job_record(record: dict) -> dict:
+    payload = JobPayload.model_validate(record).model_dump(mode="json")
+    output_path = payload.get("output_path")
+    if output_path:
+        payload["output_url"] = parse_output_path_to_url(output_path)
+    return payload
+
+
 @router.post("/jobs", status_code=status.HTTP_201_CREATED)
 def create_job(payload: JobCreateRequest, request: Request) -> dict:
     registry = request.app.state.workflow_registry
@@ -57,13 +66,7 @@ def create_job(payload: JobCreateRequest, request: Request) -> dict:
     try:
         request.app.state.queue_client.enqueue_job(job.model_dump_json())
     except QueueUnavailableError:
-        failure_time = _now()
-        store.update_job(
-            str(job.job_id),
-            status=JobStatus.FAILED.value,
-            updated_at=failure_time.isoformat(),
-            error_message=REDIS_UNAVAILABLE,
-        )
+        store.delete_job(str(job.job_id))
         raise HTTPException(
             status_code=503,
             detail=REDIS_UNAVAILABLE,
@@ -76,14 +79,14 @@ def create_job(payload: JobCreateRequest, request: Request) -> dict:
         updated_at=queued_time.isoformat(),
     )
     record = store.get_job(str(job.job_id))
-    return JobPayload.model_validate(record).model_dump(mode="json")
+    return _serialize_job_record(record)
 
 
 @router.get("/jobs")
 def list_jobs(request: Request, offset: int = 0, limit: int = 20) -> dict:
     items, total = request.app.state.job_store.list_jobs(offset=offset, limit=_clamp_limit(limit))
     return {
-        "items": [JobPayload.model_validate(item).model_dump(mode="json") for item in items],
+        "items": [_serialize_job_record(item) for item in items],
         "total": total,
         "offset": offset,
         "limit": _clamp_limit(limit),
@@ -93,7 +96,7 @@ def list_jobs(request: Request, offset: int = 0, limit: int = 20) -> dict:
 @router.get("/jobs/{job_id}")
 def get_job(job_id: str, request: Request) -> dict:
     record = _load_job_or_404(request, job_id)
-    return JobPayload.model_validate(record).model_dump(mode="json")
+    return _serialize_job_record(record)
 
 
 @router.post("/jobs/{job_id}/cancel")
@@ -122,4 +125,4 @@ def cancel_job(job_id: str, request: Request) -> dict:
         )
 
     refreshed = store.get_job(job_id)
-    return JobPayload.model_validate(refreshed).model_dump(mode="json")
+    return _serialize_job_record(refreshed)

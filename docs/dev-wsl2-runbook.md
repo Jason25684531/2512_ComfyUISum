@@ -31,9 +31,9 @@ export STUDIO_V2_ENV_FILE=./.env.cloud-linux
 
 Key expectations:
 
-- `ENGINE_MODE=mock`
+- `ENGINE_MODE=mock` is the default local-safe mode
 - `STORAGE_ROOT=./storage`
-- `COMFYUI_BASE_URL` points at a Windows-hosted ComfyUI endpoint if you want health checks later
+- `COMFYUI_BASE_URL` points at a Windows-hosted ComfyUI endpoint if you want real v2 ComfyUI execution
 
 ## 3. Start the FastAPI backend
 
@@ -84,17 +84,43 @@ To run the same checks with one command:
 ./scripts/dev/linux/smoke-test.sh
 ```
 
-## 6. Optional ComfyUI validation
+## 6. Optional real ComfyUI validation
 
-V2 still does not execute real ComfyUI workflows, but it does support HTTP health checks.
+V2 now supports real `ENGINE_MODE=comfyui` text-to-image execution through the ComfyUI HTTP API.
 
-Check your configured endpoint:
+First confirm the Windows-hosted ComfyUI endpoint is reachable:
 
 ```bash
 curl "${COMFYUI_BASE_URL%/}/system_stats"
 ```
 
-If `ENGINE_MODE=comfyui`, the health endpoint reports `comfyui_ok`.
+Then switch modes:
+
+```bash
+export ENGINE_MODE=comfyui
+```
+
+Start the backend and worker again, then submit a real job:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/generate \
+  -H "Content-Type: application/json" \
+  -d '{"prompt":"real comfyui smoke from v2","aspect_ratio":"1:1"}'
+```
+
+Poll the job:
+
+```bash
+curl http://127.0.0.1:8000/api/status/<job_id>
+find storage/outputs -maxdepth 3 -type f
+```
+
+Expected outcome:
+
+- If `ENGINE_MODE=comfyui`, the health endpoint reports `comfyui_ok`.
+- The worker submits to `POST {COMFYUI_BASE_URL}/prompt`.
+- The final file is persisted under `storage/outputs/job_<uuid>/result.png`.
+- API-visible output URLs stay backend-generated, such as `/api/v1/outputs/<job_id>/result.png`.
 
 ## 7. Boundary reminder
 
@@ -109,11 +135,12 @@ To verify that the legacy frontend can bridge into the v2 FastAPI runtime:
 1. Start Redis, FastAPI, and Worker v2 from WSL2.
 2. Open `http://localhost:8000/` in a Windows browser and confirm the frontend loads.
 3. Confirm `http://localhost:8000/dashboard` and `http://localhost:8000/dashboard.html` both load the dashboard page.
-4. Submit a text-to-image prompt from the frontend.
-5. In DevTools Network, confirm `POST /api/generate` returns HTTP 201.
-6. Confirm polling requests to `GET /api/status/<job_id>` transition through `queued`, `processing`, then `finished`.
-7. Confirm the status payload includes an `output_url` like `/api/v1/outputs/<job_id>/result.png`.
-8. Confirm the generated mock file exists from WSL2:
+4. Confirm the browser can fetch `/config.js`, `/tailwind.generated.css`, `/vendor/lucide.min.js`, `/api/me`, and `/api/models` without 404s.
+5. Submit a text-to-image prompt from the frontend.
+6. In DevTools Network, confirm `POST /api/generate` returns HTTP 201.
+7. Confirm polling requests to `GET /api/status/<job_id>` transition through `queued`, `processing`, then `finished`.
+8. Confirm the status payload includes an `output_url` like `/api/v1/outputs/<job_id>/result.png`.
+9. Confirm the generated file exists from WSL2:
 
 ```bash
 find storage/outputs -maxdepth 3 -type f

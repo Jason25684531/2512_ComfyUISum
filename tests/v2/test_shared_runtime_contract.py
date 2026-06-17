@@ -57,6 +57,8 @@ def test_output_path_builder_rejects_bad_filename(bad_filename: str) -> None:
 
 def test_canned_errors_are_non_empty_and_mask_raw_exception_strings() -> None:
     from shared.v2.errors import (
+        COMFYUI_OUTPUT_MISSING,
+        COMFYUI_TIMEOUT,
         COMFYUI_UNAVAILABLE,
         ENGINE_EXECUTION_FAILED,
         INTERNAL_ERROR,
@@ -65,6 +67,8 @@ def test_canned_errors_are_non_empty_and_mask_raw_exception_strings() -> None:
         JOB_NOT_FOUND,
         OUTPUT_NOT_FOUND,
         REDIS_UNAVAILABLE,
+        UNKNOWN_ENGINE_MODE,
+        WORKFLOW_BINDING_INVALID,
         WORKFLOW_NOT_FOUND,
     )
 
@@ -74,8 +78,12 @@ def test_canned_errors_are_non_empty_and_mask_raw_exception_strings() -> None:
         INVALID_ASSET_UPLOAD,
         INVALID_PATH,
         WORKFLOW_NOT_FOUND,
+        WORKFLOW_BINDING_INVALID,
         ENGINE_EXECUTION_FAILED,
         COMFYUI_UNAVAILABLE,
+        COMFYUI_TIMEOUT,
+        COMFYUI_OUTPUT_MISSING,
+        UNKNOWN_ENGINE_MODE,
         OUTPUT_NOT_FOUND,
         INTERNAL_ERROR,
     ]:

@@ -54,3 +54,6 @@ def test_create_job_returns_canned_503_when_queue_unavailable(settings) -> None:
 
     assert response.status_code == 503
     assert response.json()["detail"] == "Job queue is temporarily unavailable."
+    listed, total = app.state.job_store.list_jobs(offset=0, limit=10)
+    assert listed == []
+    assert total == 0

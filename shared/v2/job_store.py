@@ -134,6 +134,10 @@ class JobStore(_SQLiteStore):
             ).fetchone()
         return self._row_to_dict(row) if row else None
 
+    def delete_job(self, job_id: str) -> None:
+        with self._connect() as connection:
+            connection.execute("DELETE FROM v2_jobs WHERE job_id = ?", (job_id,))
+
     def list_jobs(self, *, offset: int, limit: int) -> tuple[list[dict[str, Any]], int]:
         with self._connect() as connection:
             rows = connection.execute(

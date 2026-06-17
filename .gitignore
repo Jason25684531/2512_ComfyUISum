@@ -41,3 +41,7 @@ node_modules/
 
 .gemini/
 .codex/
+apps/backend-fastapi/storage/temp/
+apps/backend-fastapi/storage/assets/
+apps/worker-v2/storage/temp/
+apps/worker-v2/storage/outputs/

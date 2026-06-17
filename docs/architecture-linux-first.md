@@ -18,7 +18,7 @@ This document describes the first-round Studio Core v2 skeleton introduced by th
 - `apps/worker-v2/`
   - Redis queue consumer for `studio:v2:jobs`
   - `MockEngine` for verifiable placeholder outputs
-  - `ComfyUIEngine` health-check skeleton
+  - `ComfyUIEngine` for real `text_to_image` execution through ComfyUI HTTP APIs
 - `shared/v2/`
   - `JobStore` and `AssetStore` share the same SQLite-compatible persistence contract
   - Shared Linux-first path validation is the only supported v2 path validation entrypoint
@@ -43,7 +43,7 @@ This document describes the first-round Studio Core v2 skeleton introduced by th
    - Output paths are validated as `STORAGE_ROOT`-relative.
    - Asset and output records reject backslashes, null bytes, `..`, UNC paths, absolute POSIX paths, and Windows drive-letter paths.
 4. Worker -> ComfyUI
-   - Only HTTP health checks are implemented in v2 today.
+   - Real `text_to_image` execution uses `POST /prompt`, `GET /history/{prompt_id}`, and `GET /view`.
    - No direct ComfyUI filesystem reads are allowed.
 
 ## Data Contracts
@@ -72,6 +72,11 @@ This document describes the first-round Studio Core v2 skeleton introduced by th
 - `POST /api/v1/jobs`
 - `GET /api/v1/jobs`
 - `POST /api/v1/jobs/{job_id}/cancel`
+- `GET /`
+- `GET /dashboard`
+- `GET /api/me`
+- `GET /api/models`
+- `GET /api/v1/outputs/{job_id}/{filename}`
 - `python -m pytest tests/v2 -q`
 - `uvicorn app.main:app --host 0.0.0.0 --port 8000`
 
@@ -85,6 +90,7 @@ This document describes the first-round Studio Core v2 skeleton introduced by th
   - `apps/worker-v2/` owns the Linux-first queue consumer and mock-safe execution flow.
 - Frontend bridge:
   - `frontend/` still talks to legacy-compatible `/api/generate` and `/api/status` routes.
+  - FastAPI v2 serves `index.html`, `dashboard.html`, `login.html`, root-relative asset aliases, and compatibility reads at `/api/me` and `/api/models`.
   - `app/routes/legacy_bridge.py` translates those calls into the v2 job contract.
 - ComfyUI boundary:
   - Real ComfyUI stays an external HTTP dependency.

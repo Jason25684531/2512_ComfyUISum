@@ -25,6 +25,14 @@ The supported generation target for this repository is a single Flask Backend, o
 
 `storage/outputs` is the canonical output store. S3, COS, MinIO, object storage, presigned URLs, distributed rendering, and multi-render-node scheduling are out of scope for the current single-render-machine workflow. Older TWCC/S3 notes are historical migration material unless a future OpenSpec change reintroduces them.
 
+## Current v2 Mainline
+
+- FastAPI v2 serves the legacy frontend entry pages at `http://localhost:8000/`, `http://localhost:8000/dashboard`, `http://localhost:8000/login.html`, and root-relative assets such as `/config.js`, `/tailwind.generated.css`, `/vendor/lucide.min.js`, `/image/*`, and `/front/*`.
+- Legacy browser compatibility stays on top of the v2 runtime through `POST /api/generate`, `GET /api/status/{job_id}`, `GET /api/me`, and `GET /api/models`.
+- Worker v2 supports `ENGINE_MODE=mock` for safe local validation and `ENGINE_MODE=comfyui` for real `text_to_image` execution against a Windows-hosted ComfyUI HTTP endpoint.
+- Persisted output paths remain relative, for example `outputs/job_<job_id>/result.png`, and browser-visible files are served by `GET /api/v1/outputs/{job_id}/{filename}`.
+- Safe cleanup in the current v2 line is inventory-first: generated artifacts may be removed, but legacy runtime trees, workflow folders, env variants, and compose variants remain preserved until later evidence-backed cleanup work.
+
 ---
 
 ## 📋 目錄

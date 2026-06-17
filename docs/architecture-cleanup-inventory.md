@@ -12,6 +12,7 @@ This document is the authoritative map for the `map-and-consolidate-duplicate-ru
 | `apps/worker-v2/` | `v2-owned` | Linux-first worker with mock engine and future ComfyUI adapter. |
 | `frontend/` | `keep` | Legacy frontend remains active and bridges into v2 API routes. |
 | `packages/workflow_registry/` | `v2-owned` | Manifest registry for v2 workflows. |
+| `workflows/comfyui/` | `v2-owned` | Repo-owned ComfyUI API workflow and binding contracts for worker-v2. |
 | `ComfyUIworkflow/` | `legacy-owned` | Legacy and Windows-facing workflow definitions. |
 | `ComfyUIworkflow_api/` | `shared-candidate` | API-oriented workflow folder with overlap against legacy workflow JSONs. |
 | `shared/v2/` | `shared-candidate` | Canonical shared contract surface for v2 runtime behavior. |
@@ -26,7 +27,7 @@ This document is the authoritative map for the `map-and-consolidate-duplicate-ru
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Backend runtime split | `backend/` vs `apps/backend-fastapi/` | `legacy-owned` + `v2-owned` | frontend bridge, v2 tests, start scripts | High | keep both, consolidate only shared helpers | no | no |
 | Worker runtime split | `worker/` vs `apps/worker-v2/` | `legacy-owned` + `v2-owned` | queue consumers, engine adapters, worker tests | High | keep both, consolidate only shared helpers | no | no |
-| Workflow folder split | `ComfyUIworkflow/` vs `ComfyUIworkflow_api/` | `legacy-owned` + `shared-candidate` | docs, runtime scan, workflow registry migration work | High | inventory and review path-by-path before any archive | no | no |
+| Workflow folder split | `ComfyUIworkflow/` vs `ComfyUIworkflow_api/` vs `workflows/comfyui/` | `legacy-owned` + `shared-candidate` + `v2-owned` | docs, runtime scan, workflow registry migration work, worker-v2 ComfyUI adapter | High | keep legacy folders, treat `workflows/comfyui/` as the v2-owned HTTP contract surface | no | no |
 | Frontend bridge overlap | `frontend/` vs `apps/backend-fastapi/app/routes/legacy_bridge.py` | `keep` + `v2-owned` | `/api/generate`, `/api/status` compatibility | Medium | keep bridge until frontend migration completes | no | no |
 | Path helper duplication | legacy helpers vs `shared/v2/path_utils.py` and `shared/v2/output_paths.py` | `shared-candidate` | backend config, worker config, outputs route, mock engine | Medium | consolidate v2 callers on shared helpers | yes | no |
 | Status mapping duplication | `legacy_bridge.py` local mapping vs `shared/v2/status.py` | `shared-candidate` | legacy status polling tests | Low | merged into shared helper in this change | yes | no |
