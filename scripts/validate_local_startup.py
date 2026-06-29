@@ -19,6 +19,28 @@ import urllib.request
 import urllib.error
 
 
+def _load_env_file(path: str) -> None:
+    """讀取 key=value 格式的 env 檔，僅填入 os.environ 中尚未存在的 key。"""
+    try:
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, _, val = line.partition("=")
+                key = key.strip()
+                val = val.strip().strip('"').strip("'")
+                if key and key not in os.environ:
+                    os.environ[key] = val
+    except FileNotFoundError:
+        pass
+
+
+# 自動載入專案根目錄的 .env.local（shell 未 source 時也能正常讀到密碼）
+_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_load_env_file(os.path.join(_root, ".env.local"))
+
+
 def _check_comfyui(server_url: str) -> tuple[bool, str]:
     url = server_url.rstrip("/") + "/system_stats"
     try:

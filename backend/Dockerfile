@@ -9,8 +9,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 複製共用模組（Backend 和 Worker 都需要）
 COPY shared/ shared/
 
-# 複製應用程式
-COPY backend/src/ src/
+# 複製應用程式（保留 backend/src/ 層級，與本地路徑一致）
+# app.py 用 ../../frontend 計算前端目錄，需要 /app/backend/src/app.py 結構
+COPY backend/src/ backend/src/
 
 # 複製前端靜態檔案（供 Flask 直接提供）
 COPY frontend/ frontend/
@@ -23,4 +24,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD python -c "import requests; requests.get('http://localhost:5000/health')" || exit 1
 
 # 啟動應用
-CMD ["python", "src/app.py"]
+CMD ["python", "backend/src/app.py"]
