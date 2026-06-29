@@ -21,9 +21,20 @@
 
 ## Current Target Architecture
 
-The supported generation target for this repository is a single Flask Backend, one Worker, one local ComfyUI instance, Redis, MySQL, and the local filesystem. Backend `/api/generate` writes a job to MySQL, enqueues Redis job data, the Worker submits to the local ComfyUI API/WebSocket, and generated files are copied into `storage/outputs`.
+ComfyUI Studio 支援兩種部署拓撲：
 
-`storage/outputs` is the canonical output store. S3, COS, MinIO, object storage, presigned URLs, distributed rendering, and multi-render-node scheduling are out of scope for the current single-render-machine workflow. Older TWCC/S3 notes are historical migration material unless a future OpenSpec change reintroduces them.
+- **local-dev**：ComfyUI 在 Windows 原生執行（:8188），redis / mysql / backend / worker 在 Docker Desktop（WSL2）執行。Worker 透過 `host.docker.internal` 連到 Windows ComfyUI。
+- **cloud（twcc-base-vm + twcc-gpu-vm）**：CPU VM 跑 docker-compose.base.yml（Nginx + API + Redis + MySQL），GPU VM 跑 ComfyUI + Worker（systemd 服務）。兩 VM 在同一網域，Worker 透過私網 IP 連到 GPU VM 的 ComfyUI。
+
+Backend `/api/generate` 寫入 MySQL + 推送 Redis Queue，Worker 取出後提交 ComfyUI API/WebSocket，生成結果存入 `storage/outputs`（本地模式）或上傳 TWCC COS（雲端模式）。
+
+## Deployment Matrix
+
+| 拓撲 | Compose 檔案 | Env 範本 | 說明 |
+|------|-------------|---------|------|
+| `local-dev` | `docker-compose.yml` | `.env.local` | Windows ComfyUI + Docker Desktop (WSL2) |
+| `twcc-base-vm` | `docker-compose.base.yml` | `.env.twcc` | 雲端 CPU VM（Nginx + API + Redis + MySQL）|
+| `twcc-gpu-vm` | `scripts/twcc_gpu_setup.sh` + systemd | `.env.twcc` | 雲端 GPU VM（ComfyUI + Worker）|
 
 ## Current v2 Mainline
 
@@ -330,261 +341,91 @@ https://[your-id].ngrok-free.app/  → 對應 localhost:5000/
 
 ## 🚀 快速開始
 
-> **多環境部署支援！** 本地 Windows 開發、本地 MinIO S3 測試、TWCC 雲端生產三種模式，一份程式碼搞定。
-
 ### 部署方式選擇
 
-本專案提供三種部署方式，請根據需求選擇：
-
-| 方式 | 環境 | 儲存後端 | 說明 |
-|------|------|----------|------|
-| **方式 1** 🪟 | 本地 Windows | 本地檔案系統 | 日常開發、即時除錯 |
-| **方式 2** 🪣 | 本地 + MinIO | S3 (MinIO 模擬) | 驗證 S3 上傳/下載流程 |
-| **方式 3** ☁️ | TWCC Linux VM | TWCC COS (S3) | 生產環境部署 |
+| 方式 | 拓撲 | 說明 |
+|------|------|------|
+| **方式 1** 🪟 | `local-dev` | Windows ComfyUI + Docker Desktop (WSL2)，日常開發 |
+| **方式 2** ☁️ | `twcc-base-vm` + `twcc-gpu-vm` | 雲端 CPU/GPU VM 同網域，生產部署 |
 
 ---
 
-### 本地開發環境 (Windows)
+### 本地開發環境 (Windows + Docker Desktop)
 
-#### Canonical 本地 compose (推薦 ⭐)
+**前置要求：**
+1. ComfyUI 在 Windows 上啟動並監聽 `:8188`
+2. Docker Desktop 已安裝並運行
 
-本地正式邊界為 `docker-compose.yml`、`.env.local` 與 `ComfyUIworkflow/`。
+**啟動步驟：**
 
 ```powershell
-# 1. 建立本地環境契約
+# 1. 建立本地環境契約（填入密碼後儲存）
 copy .env.local.example .env.local
 
-# 2. 啟動本地 canonical compose
+# 2. 啟動 Docker 服務層（redis + mysql + backend + worker）
 docker compose -f docker-compose.yml --env-file .env.local up -d
 
-# 3. 若需要直接啟動 Python 行程，顯式指定 env contract
-set STUDIO_ENV_FILE=.env.local
-python backend/src/app.py
-python worker/src/main.py
+# 3. 驗證所有服務可達（ComfyUI + Redis + MySQL）
+python scripts/validate_local_startup.py
+
+# 4. 查看服務狀態
+docker compose -f docker-compose.yml ps
 ```
 
-📚 邊界說明：`docs/Environment_Boundary_Guide.md`
-
-#### 方式 1: 統一架構部署 (相容模式)
-
-使用 Docker Compose Profiles 實現跨平台統一部署。此模式保留做跨平台相容與參考，不取代上方的本地 canonical 邊界。
-
-**Windows 開發環境 (5分鐘)**
-```batch
-# 1. 配置環境
-copy .env.local.example .env.local
-# 編輯 .env.local 設定為 Windows 本地環境
-
-# 2. 啟動服務
-cd scripts
-start_unified_windows.bat
-┌─────────────────────────────────────────────────────────┐
-│  [1] Infrastructure only (MySQL + Redis)               │
-│  ──────────────────────────────────────────────        │
-│  啟動內容: MySQL (3307) + Redis (6379)                 │
-│  Backend:  需手動啟動 (python backend/src/app.py)      │
-│  Worker:   需手動啟動 (python worker/src/main.py)      │
-│  適用場景: 本地開發除錯、即時代碼修改                   │
-│  Ngrok:    ❌ 無法使用 (Backend 未運行)                │
-├─────────────────────────────────────────────────────────┤
-│  [2] Full stack with Docker Backend                    │
-│  ──────────────────────────────────────────────        │
-│  啟動內容: MySQL + Redis + Backend (Docker)            │
-│  Backend:  容器化運行 (自動啟動)                       │
-│  Worker:   需手動啟動                                   │
-│  適用場景: 完整測試、Ngrok 公網存取                    │
-│  Ngrok:    ✅ 可使用                                   │
-├─────────────────────────────────────────────────────────┤
-│  [3] Full stack with Local Backend + Worker ⭐ 推薦    │
-│  ──────────────────────────────────────────────        │
-│  啟動內容: MySQL + Redis + Backend + Worker (本地)     │
-│  Backend:  本地 Python 運行 (自動開啟新視窗)           │
-│  Worker:   本地 Python 運行 (自動開啟新視窗)           │
-│  適用場景: 完整開發、即時除錯、Ngrok 公網存取          │
-│  Ngrok:    ✅ 可使用                                   │
-├─────────────────────────────────────────────────────────┤
-│  [4] Stop all services                                  │
-│  停止所有 Docker 服務                                   │
-├─────────────────────────────────────────────────────────┤
-│  [5] View logs                                          │
-│  查看容器日誌 (即時輸出，Ctrl+C 退出)                  │
-├─────────────────────────────────────────────────────────┤
-│  [6] Rebuild containers                                 │
-│  重建容器 (清除快取，更新 Dockerfile 後使用)           │
-└─────────────────────────────────────────────────────────┘
-
----------------------------------------------------------------------------
-### 📌 推薦流程: Windows 開發 + Ngrok 公網存取
-
-# 步驟 1: 啟動 ComfyUI (獨立終端)
-D:\02_software\ComfyUI_windows_portable\run_nvidia_gpu.bat
-
-# 步驟 2: 啟動完整堆疊
-cd D:\01_Project\2512_ComfyUISum\scripts
-start_unified_windows.bat
-選擇 [3] Full stack with Local Backend + Worker ← 推薦！
-
-# 步驟 3: 等待服務啟動 (約 10 秒)
-# 會自動開啟 Backend 和 Worker 視窗
-
-# 步驟 4: 測試本地訪問
-瀏覽器打開: http://localhost:5000/
-
-# 步驟 5: 啟動 Ngrok 公網存取 (可選)
-cd D:\01_Project\2512_ComfyUISum\scripts
-start_ngrok.bat
-
-# 步驟 6: 訪問公網 URL
-複製 Ngrok URL (例如: https://abc123.ngrok-free.app)
-在任何設備訪問該 URL
----------------------------------------------------------------------------
+**存取應用：**
+```
+http://localhost:5000/
 ```
 
-**Linux 環境 (5分鐘)**
-```bash
-# 1. 配置環境
-cp .env.local.example .env.local
-# 編輯 .env.local 設定為 Linux 開發環境
-
-# 2. 啟動服務
-cd scripts
-chmod +x start_unified_linux.sh
-./start_unified_linux.sh
-選擇 [1] Development (開發) 或 [2] Production (生產)
-```
-
-📚 **完整指南**: [HYBRID_DEPLOYMENT_STRATEGY.md](HYBRID_DEPLOYMENT_STRATEGY.md)
-
-TWCC canonical 邊界另請參考 [docs/TWCC_HFS_COS_Mount_Guide.md](docs/TWCC_HFS_COS_Mount_Guide.md) 與 `nginx/`。
-
-#### 方式 2: 傳統部署 (向後兼容)
-
-使用原有的啟動腳本。
-
-### 前置要求
-
-1. **ComfyUI 已安裝並可運行**
-   ```
-   路徑: D:\02_software\ComfyUI_windows_portable\
-   端口: 8188
-   ```
-
-2. **Docker Desktop 已安裝並運行**
-   ```
-   版本: 20.10+
-   服務: MySQL (3307), Redis (6379)
-   ```
-
-3. **Python 環境**
-   ```
-   版本: 3.11+
-   虛擬環境: venv/
-   ```
-
-4. **(可選) Ngrok 已安裝**
-   ```
-   路徑: D:\02_software\Ngrok\ngrok-v3-stable-windows-amd64\ngrok.exe
-   用途: 公網存取
-   ```
-
-### 傳統一鍵啟動
-
+**停止服務：**
 ```powershell
-# 1. 啟動 ComfyUI (在獨立終端)
-D:\02_software\ComfyUI_windows_portable\run_nvidia_gpu.bat
+docker compose -f docker-compose.yml down
+```
 
-# 2. 啟動所有後端服務 (Docker + Backend + Worker)
-cd scripts
-start_all_with_docker.bat
+**開發模式（Backend/Worker 本地執行）：**
+```powershell
+# 只啟動基礎設施
+docker compose -f docker-compose.yml --env-file .env.local up -d redis mysql
 
-# 3. (可選) 啟動 Ngrok 公網存取
-start_ngrok.bat
-
-# 4. 訪問應用
-# 本地: http://localhost:5000/
-# 公網: https://[your-id].ngrok-free.app/
+# 本地執行（即時 code reload）
+$env:STUDIO_ENV_FILE=".env.local"
+python backend/src/app.py   # 另開終端
+python worker/src/main.py   # 另開終端
 ```
 
 ### 驗證系統狀態
 
 ```powershell
-# 統一架構 - 查看服務狀態
-docker-compose -f docker-compose.unified.yml ps
+# 查看 Docker 容器狀態
+docker compose -f docker-compose.yml ps
 
-# 傳統方式 - 快速驗證所有服務
-cd scripts
-verify.bat
+# 驗證三服務可達（ComfyUI + Redis + MySQL）
+python scripts/validate_local_startup.py
 
-# 手動檢查各服務
+# API 健康檢查
+curl http://localhost:5000/api/health
+
+# 端口檢查
 netstat -ano | findstr "5000 6379 3307 8188"
 
-# 測試 API 健康檢查
-curl http://localhost:5000/api/health
-```
-
----
-
-### 本地 MinIO S3 測試
-
-> 在 Windows 本地環境模擬 S3 物件儲存，驗證 COS 上傳/下載流程，無需 TWCC 帳號。
-
-```powershell
-# 1. 啟動 MinIO + Flask + Redis + MySQL
-docker compose -f docker-compose.dev-s3.yml --env-file .env.dev-s3 up -d
-
-# 2. 確認所有容器正在運行
-docker compose -f docker-compose.dev-s3.yml ps
-# 預期：minio, minio-init, api, redis, mysql 全部 running
-
-# 3. 開啟 MinIO 管理介面
-start http://localhost:9001
-# 帳號: minioadmin  密碼: minioadmin
-# 確認 studio-outputs bucket 已自動建立
-
-# 4. 啟動 Worker（另開終端，設定 S3 環境）
-$env:STORAGE_BACKEND="s3"
-$env:S3_ENDPOINT="http://localhost:9000"
-$env:S3_ACCESS_KEY="minioadmin"
-$env:S3_SECRET_KEY="minioadmin"
-$env:S3_BUCKET="studio-outputs"
-python worker/src/main.py
-
-# 5. 測試圖片生成 → 驗證 MinIO 上已有上傳檔案
-# 在 MinIO Console 的 studio-outputs bucket 中確認結果
-
-# 6. 測試結束後清理
-docker compose -f docker-compose.dev-s3.yml down
-```
-
-**驗證 storage_service 本地可用性：**
-```powershell
-# 虛擬環境啟動後
-.\venv\Scripts\Activate.ps1
-python -c "
-import sys; sys.path.insert(0, '.')
-from shared.storage_service import storage
-print('Storage type:', type(storage).__name__)
-# 預期: LocalStorage（本地開發無 S3 設定）
-"
+# 查看 Docker logs
+docker compose -f docker-compose.yml logs --tail=50
 ```
 
 ---
 
 ### TWCC 雲端部署（生產環境）
 
-> Repo 級 TWCC canonical 邊界以 `docker-compose.unified.yml`、`nginx/` 與 `docs/TWCC_HFS_COS_Mount_Guide.md` 為準；`docker-compose.base.yml` 則保留給 split VM runtime 的相容操作流程。
-
-📚 邊界與掛載說明：`docs/Environment_Boundary_Guide.md`、`docs/TWCC_HFS_COS_Mount_Guide.md`
+📚 邊界與掛載說明：`docs/TWCC_HFS_COS_Mount_Guide.md`
 
 #### 快速部署流程
 
 ```
-[本地 Windows]                    [TWCC]
-git push origin                    │
-feature/twcc-linux-migration       │
-                                   ▼
-                          Base VM: git pull + docker compose up
-                          GPU VM:  git pull + systemd restart
+[本地 Windows]               [TWCC]
+git push origin main          │
+                              ▼
+              Base VM: git pull + docker compose -f docker-compose.base.yml up
+              GPU VM:  git pull + systemd restart (comfyui + worker)
 ```
 
 #### Base VM — 啟動服務
@@ -690,11 +531,11 @@ bash scripts/twcc_healthcheck.sh
 
 ```bash
 # Base VM 更新
-git pull origin feature/twcc-linux-migration
-docker compose -f docker-compose.base.yml up -d --build
+git pull origin main
+docker compose -f docker-compose.base.yml --env-file .env.twcc up -d --build
 
 # GPU VM 更新
-git pull origin feature/twcc-linux-migration
+git pull origin main
 source venv/bin/activate
 pip install -r requirements.txt
 sudo systemctl restart worker      # Worker 更新
@@ -764,10 +605,10 @@ ComfyUISum/
 │   ├── sketch_to_image_*.json    # 草圖轉圖像
 │   └── InfiniteTalk_IndexTTS_2.json  # 虛擬人說話
 │
-├── .env.twcc                       # [TWCC] 環境變數範本（所有 TWCC 必填欄位）
-├── .env.dev-s3                    # [TWCC] MinIO 本地 S3 測試環境變數
-├── docker-compose.base.yml        # [TWCC] Base VM Compose（nginx+api+redis+mysql）
-├── docker-compose.dev-s3.yml      # [TWCC] MinIO S3 本地測試 Compose
+├── .env.local.example              # 本地 canonical env 範本（local-dev）
+├── .env.twcc.example              # 雲端 canonical env 範本（twcc-base-vm / twcc-gpu-vm）
+├── docker-compose.yml             # 本地 canonical Compose（local-dev）
+├── docker-compose.base.yml        # 雲端 Base VM Compose（nginx+api+redis+mysql）
 │
 ├── nginx/
 │   └── nginx.twcc.conf            # [TWCC] Nginx 反向代理配置（含 LB proxy headers）
@@ -806,30 +647,27 @@ ComfyUISum/
 │   ├── worker.log             # Worker 日誌 (5MB × 3)
 │   └── *.json.log             # JSON 格式日誌 (午夜輪換)
 │
-├── scripts/                    # 啟動腳本目錄
-│   ├── start_unified_windows.bat   # Windows 統一啟動 (推薦) ⭐
-│   ├── start_unified_linux.sh      # Linux 統一啟動 (推薦) ⭐
-│   ├── start_ngrok.bat             # Ngrok 啟動腳本
-│   ├── update_ngrok_config.ps1     # Ngrok 配置更新
+├── scripts/                    # 腳本目錄
+│   ├── validate_local_startup.py   # ⭐ 本地啟動驗證（ComfyUI + Redis + MySQL）
 │   ├── monitor_status.bat          # 狀態監控
 │   ├── run_stack_test.bat          # 整合測試
+│   ├── start_ngrok.bat             # Ngrok 啟動腳本
+│   ├── update_ngrok_config.ps1     # Ngrok 配置更新
 │   ├── twcc_start_gpu.sh           # [TWCC] GPU VM 開機（呼叫 TWCC CLI）
 │   ├── twcc_stop_gpu.sh            # [TWCC] GPU VM 安全關機（佇列檢查）
 │   ├── twcc_setup_cron.sh          # [TWCC] 安裝 Cron 自動排程
 │   ├── twcc_gpu_setup.sh           # [TWCC] GPU VM 首次建置腳本
 │   ├── twcc_healthcheck.sh         # [TWCC] 健康檢查（7 項檢查）
-│   └── *.bat/*.py                  # 其他輔助腳本
+│   └── validate_deployment_matrix.py  # Deployment Matrix 合規檢查
 │
 ├── mysql_data/                 # MySQL 數據卷
 ├── redis_data/                 # Redis 數據卷
 │
-├── .env                        # 環境變數配置 (使用中)
-├── .env.unified.example        # 環境變數模板 (推薦) ⭐
-├── docker-compose.unified.yml  # 統一 Docker 配置 (推薦) ⭐
-├── docker-compose.yml          # 生產環境 Docker 配置 (傳統)
-├── docker-compose.dev.yml      # 開發環境 Docker 配置 (傳統)
+├── .env.local                  # 本地環境契約（gitignored，從 .env.local.example 複製）
+├── .env.twcc                   # 雲端環境契約（gitignored，從 .env.twcc.example 複製）
+├── deployment_matrix.yaml      # 部署矩陣（拓撲定義與合規檢查）
 ├── requirements.txt            # Python 依賴
-└── README.md                   # 本文件 (1260+ 行)
+└── README.md                   # 本文件
 ```
 
 ---
@@ -945,44 +783,46 @@ GET /api/history?page=1&limit=20
 
 ## ⚙️ 配置說明
 
-### 環境變數 (.env)
+### 環境變數
 
+兩份 env 範本對應 2 個拓撲，從範本複製後填入實際值：
+
+```powershell
+# 本地開發（local-dev）
+copy .env.local.example .env.local
+
+# 雲端部署（TWCC）
+cp .env.twcc.example .env.twcc
+```
+
+**本地開發關鍵變數（.env.local）：**
 ```ini
-# Redis 配置
-REDIS_HOST=localhost
-REDIS_PORT=6379
-REDIS_PASSWORD=<REPLACE_WITH_SECURE_PASSWORD>
+# ComfyUI 端點 — Docker Desktop 透過此 hostname 連到 Windows 主機
+COMFYUI_SERVER_URL=http://host.docker.internal:8188
+COMFYUI_HOST=host.docker.internal
+COMFY_HOST=host.docker.internal
 
-# MySQL 配置
-DB_HOST=localhost
+# Redis / MySQL（Docker 服務名稱在 compose 內部通訊）
+REDIS_HOST=127.0.0.1   # 本地直連（compose 外部存取）
+DB_HOST=127.0.0.1
 DB_PORT=3307
-DB_USER=studio_user
-DB_PASSWORD=<REPLACE_WITH_SECURE_PASSWORD>
-DB_NAME=studio_db
+```
 
-# ComfyUI 配置
-COMFY_HOST=127.0.0.1
-COMFY_PORT=8188
-COMFYUI_ROOT=D:/02_software/ComfyUI_windows_portable/ComfyUI
-COMFYUI_INPUT_DIR=D:/02_software/ComfyUI_windows_portable/ComfyUI/input
-COMFYUI_OUTPUT_DIR=D:/02_software/ComfyUI_windows_portable/ComfyUI/output
-
-# Ngrok 公網存取 (自動更新)
-NGROK_URL=
-BACKEND_URL=
+**雲端關鍵變數（.env.twcc）：**
+```ini
+# GPU VM 的 ComfyUI 端點（同網域私網 IP 或 hostname）
+COMFYUI_SERVER_URL=http://<TWCC_GPU_NODE_HOST>:8188
+COMFY_HOST=<TWCC_GPU_NODE_HOST>
+STORAGE_BACKEND=s3
+S3_ENDPOINT=https://cos.twcc.ai
 ```
 
 ### Docker 配置
 
-#### 生產環境 (docker-compose.yml)
-- Backend API (容器化)
-- Worker (容器化)
-- MySQL + Redis (容器化)
-
-#### 開發環境 (docker-compose.dev.yml) ⭐ 推薦
-- MySQL + Redis (容器化)
-- Backend + Worker (本地 Python)
-- 優點: 即時代碼重載、易於除錯
+| Compose 檔案 | 用途 | Env |
+|-------------|------|-----|
+| `docker-compose.yml` | 本地 canonical（redis + mysql + backend + worker）| `.env.local` |
+| `docker-compose.base.yml` | 雲端 Base VM（nginx + api + redis + mysql）| `.env.twcc` |
 
 ---
 
@@ -1039,18 +879,16 @@ Ngrok 服務器 (雲端)
 ### 本地開發模式
 
 ```powershell
-# 1. 啟動基礎服務
-docker-compose -f docker-compose.dev.yml up -d
+# 1. 啟動基礎設施（redis + mysql）
+docker compose -f docker-compose.yml --env-file .env.local up -d redis mysql
 
-# 2. 啟動 Backend (開發模式)
-cd backend
-python src/app.py
-# Debug mode enabled, auto-reload on code changes
+# 2. 啟動 Backend（即時 code reload）
+$env:STUDIO_ENV_FILE=".env.local"
+python backend/src/app.py
 
-# 3. 啟動 Worker (開發模式)
-cd worker
-python src/main.py
-# Detailed logging for debugging
+# 3. 啟動 Worker（另開終端）
+$env:STUDIO_ENV_FILE=".env.local"
+python worker/src/main.py
 
 # 4. 訪問應用
 start http://localhost:5000/
@@ -1178,8 +1016,7 @@ ComfyUI Studio 已完成壓力測試基礎設施建立，系統經過優化可�
 pip install locust
 
 # 2. 啟動系統服務
-scripts\start_unified_windows.bat
-# 選擇 [3] Full stack with Local Backend + Worker
+docker compose -f docker-compose.yml --env-file .env.local up -d
 
 # 3. 啟動 Locust Web UI
 cd tests
@@ -1213,7 +1050,7 @@ locust -f locustfile.py --host=http://localhost:5000
 - SQLAlchemy `max_overflow`: 10 → 30
 - 新增 `pool_pre_ping=True` (連接健康檢查)
 
-**Docker 資源限制** (`docker-compose.unified.yml`):
+**Docker 資源限制** (可在 `docker-compose.yml` 的 `deploy.resources` 加入):
 ```yaml
 backend:  CPU 2.0 / RAM 2GB
 worker:   CPU 4.0 / RAM 4GB
@@ -1252,10 +1089,8 @@ Flask 的 `debug=True` 模式在 Windows PowerShell 中與 Werkzeug reloader 機
 
 **解決方案**:
 ```powershell
-# 方案 1: 使用啟動腳本 (推薦)
-cd scripts
-.\start_unified_windows.bat
-# 選擇 [3] Full stack with Local Backend + Worker
+# 方案 1: 用 Docker 跑 Backend（推薦）
+docker compose -f docker-compose.yml --env-file .env.local up -d backend
 
 # 方案 2: 使用 Start-Process
 Start-Process -FilePath ".\venv\Scripts\python.exe" -ArgumentList "backend\src\app.py" -NoNewWindow
@@ -1282,7 +1117,7 @@ redis.exceptions.ConnectionError: Error connecting to Redis
 docker ps | findstr redis
 
 # 重啟 Redis
-docker-compose -f docker-compose.dev.yml restart redis
+docker compose -f docker-compose.yml restart redis
 
 # 檢查端口占用
 netstat -ano | findstr 6379
@@ -1376,15 +1211,15 @@ python worker/src/main.py
 ### 診斷命令
 
 ```powershell
-# 快速診斷所有服務
-.\verify.bat
+# 驗證三服務可達
+python scripts/validate_local_startup.py
 
 # 詳細端口檢查
-netstat -ano | findstr "5000 6379 3307 8188 4040"
+netstat -ano | findstr "5000 6379 3307 8188"
 
 # Docker 服務狀態
 docker ps -a
-docker-compose logs --tail=50
+docker compose -f docker-compose.yml logs --tail=50
 
 # 磁盤空間檢查
 Get-PSDrive C
@@ -1634,7 +1469,7 @@ curl http://localhost:5000/api/metrics
 - ✅ `shared/storage_service.py`：LocalStorage / S3Storage 抽象層
 - ✅ Worker 任務完成後自動上傳至 TWCC COS (S3)
 - ✅ Flask `serve_output()` S3 模式回傳 302 presigned URL 重導向
-- ✅ `docker-compose.dev-s3.yml`：本地 MinIO 模擬 S3 測試環境
+- ✅ S3Storage 抽象層支援 MinIO 本地模擬與 TWCC COS
 - ✅ `boto3>=1.34.0` 加入 requirements.txt
 
 **韌性強化**
@@ -1755,3 +1590,10 @@ Made with ❤️ by ComfyUI Studio Team
 [⬆ 回到頂部](#-comfyui-studio---ai-creative-platform)
 
 </div>
+## Runtime Contract
+
+Studio 現在把 runtime 與 workflow catalog 集中在 shared 層管理，包含 canonical workflow id、alias、endpoint 解析與 TWCC fail-closed 規則。
+
+- 說明文件: [docs/RUNTIME_CONTRACT.md](docs/RUNTIME_CONTRACT.md)
+- Runtime endpoint: `/api/runtime-config`
+- 共享實作: `shared/runtime_contract.py`, `shared/workflow_catalog.py`

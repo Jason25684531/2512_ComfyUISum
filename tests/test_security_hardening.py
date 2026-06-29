@@ -502,6 +502,55 @@ def test_health_and_metrics_escape_warmup_strings(monkeypatch):
     assert health_payload['warmup_last_error'] == '&lt;script&gt;alert(1)&lt;/script&gt;'
 
 
+def test_health_and_metrics_include_deployment_diagnostics(monkeypatch):
+    fake_redis = FakeWarmupRedis(
+        warmup_map={
+            'status': 'idle',
+            'profile': '',
+            'last_error': '',
+            'mode': 'managed',
+            'started_at': '',
+            'completed_at': '',
+            'updated_at': '',
+            'enabled': 'true',
+            'terminal': 'false',
+            'timeout_seconds': '120',
+        },
+        queue_length=1,
+        active_jobs={'job:status:1': {'status': 'processing'}},
+        worker_alive=False,
+    )
+    monkeypatch.setenv("DEPLOYMENT_TOPOLOGY", "twcc-base-vm")
+    monkeypatch.setenv("PROXY_FIX", "true")
+    monkeypatch.setenv("COMFYUI_SERVER_URL", "http://gpu-vm.internal:8188")
+    monkeypatch.setattr(backend_app, 'redis_client', fake_redis)
+    monkeypatch.setattr(backend_app, 'db_client', FakeDbClient([]))
+
+    client = backend_app.app.test_client()
+    metrics_response = client.get('/api/metrics', environ_base={'REMOTE_ADDR': '203.0.113.10'})
+    health_response = client.get('/api/health', environ_base={'REMOTE_ADDR': '203.0.113.11'})
+
+    assert metrics_response.status_code == 200
+    assert health_response.status_code == 200
+
+    metrics_payload = metrics_response.get_json()
+    health_payload = health_response.get_json()
+
+    assert metrics_payload['deployment_topology'] == 'twcc-base-vm'
+    assert metrics_payload['validation_status'] == 'degraded'
+    assert metrics_payload['proxy_fix_enabled'] is True
+    assert metrics_payload['gpu_dependency'] == 'external'
+
+    assert health_payload['deployment_topology'] == 'twcc-base-vm'
+    assert health_payload['validation_status'] == 'degraded'
+    assert health_payload['proxy_fix_enabled'] is True
+    assert health_payload['gpu_dependency'] == 'external'
+    assert 'Worker heartbeat unavailable' in health_payload['warnings']
+    assert health_payload['runtime_profile'] in {'windows', 'linux'}
+    assert health_payload['config_valid'] is True
+    assert health_payload['comfyui']['status'] in {'healthy', 'degraded', 'unavailable'}
+
+
 def test_flask_client_authenticated_flow_covers_login_profile_history_status(monkeypatch):
     user = FakeUser(
         user_id=7,

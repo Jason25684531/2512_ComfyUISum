@@ -21,7 +21,7 @@
   預期：strict validate 成功
 
 - [ ] 確認核心配置檔存在
-  檔案：`docker-compose.base.yml`、`docker-compose.unified.yml`、`nginx/nginx.twcc.conf`、`.env.twcc`
+  檔案：`deployment_matrix.yaml`、`docs/DEPLOYMENT_MATRIX.md`、`docker-compose.base.yml`、`docker-compose.unified.yml`、`nginx/nginx.twcc.conf`、`.env.twcc`
 
 ---
 
@@ -32,6 +32,9 @@
 
 - [ ] 驗證 unified compose 語法
   指令：`docker compose -f docker-compose.unified.yml config`
+
+- [ ] 確認 canonical / compatibility 角色一致
+  檢查：`twcc-base-vm` 指向 `docker-compose.base.yml`，`single-host-linux` 指向 `docker-compose.unified.yml`
 
 - [ ] 驗證 Python 受影響檔案語法
   指令：`python -m py_compile worker/src/config.py worker/src/comfy_client.py backend/src/app.py`

@@ -29,7 +29,8 @@ MODEL_PATH=/mnt/twcc/hfs/models
 
 ## 操作原則
 
-- `docker-compose.unified.yml` 是 repo 內 TWCC canonical compose 入口。
+- `docker-compose.base.yml` 是 `twcc-base-vm` 的 canonical compose 入口。
+- `deployment_matrix.yaml` 與 `docs/DEPLOYMENT_MATRIX.md` 是角色邊界與 validation gates 的單一真實來源。
 - `nginx/nginx.twcc.conf` 是 TWCC 對外入口的受控設定。
 - `ComfyUIworkflow/` 可以作為工作流內容來源，但不是 TWCC canonical 邊界的部署入口。
 - 若要同步模型或輸出到 COS，請以 `.env.twcc` 提供 bucket/endpoint，不要把雲端位址硬寫在 compose、shell script 或 README 內。

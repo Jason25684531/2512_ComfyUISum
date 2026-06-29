@@ -90,7 +90,7 @@ docker compose -f docker-compose.base.yml --env-file .env.twcc ps
 docker compose -f docker-compose.base.yml --env-file .env.twcc logs -f
 ```
 
-雲端 canonical 邊界請同時參考 `docker-compose.unified.yml`、`nginx/` 與 `docs/TWCC_HFS_COS_Mount_Guide.md`。
+雲端 canonical 邊界請優先參考 `deployment_matrix.yaml`、`docs/DEPLOYMENT_MATRIX.md`、`docker-compose.base.yml`、`nginx/` 與 `docs/TWCC_HFS_COS_Mount_Guide.md`。
 
 ### Step 6：驗證 Base VM
 

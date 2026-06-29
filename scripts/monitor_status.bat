@@ -58,7 +58,7 @@ echo.
 :: 4. Docker Containers
 :: ========================================
 echo [4] Docker Containers
-docker-compose -f docker-compose.dev.yml ps 2>nul
+docker compose -f docker-compose.yml ps 2>nul
 if errorlevel 1 (
     echo   Docker service not available
 )

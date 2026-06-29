@@ -1534,8 +1534,12 @@
         /**
          * Initialize on Page Load
          */
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
             console.log('[Dashboard] Initializing...');
+            await window.STUDIO_RUNTIME_READY;
+            Object.assign(toolConfig, window.buildStudioImageToolConfig());
+            Object.assign(toolInfo, window.buildStudioToolInfo());
+            window.toolStates = window.buildStudioToolStates(window.toolStates);
 
             // Restore last view
             const savedView = localStorage.getItem('currentView');
@@ -1586,13 +1590,7 @@
         let uploadedImages = { source: null, target: null, input: null, extra: null };
 
         // Tool States
-        window.toolStates = {
-            text_to_image: { prompt: '', images: {}, isGenerating: false },
-            face_swap: { prompt: '', images: {}, isGenerating: false },
-            multi_image_blend: { prompt: '', images: {}, isGenerating: false },
-            sketch_to_image: { prompt: '', images: {}, isGenerating: false },
-            single_image_edit: { prompt: '', images: {}, isGenerating: false }
-        };
+        window.toolStates = window.buildStudioToolStates(window.toolStates);
 
         // Tool Configuration
         const toolConfig = {
@@ -1610,6 +1608,8 @@
             'text_to_image': { name: 'Text to Image', desc: '文生圖', icon: 'type', color: 'blue' },
             'single_image_edit': { name: 'Single Image Edit', desc: '單圖編輯', icon: 'image', color: 'pink' }
         };
+        Object.assign(toolConfig, window.buildStudioImageToolConfig());
+        Object.assign(toolInfo, window.buildStudioToolInfo());
 
         // ==========================================
         // Image Composition Menu Control
@@ -1620,6 +1620,7 @@
         // Tool Selection
         // ==========================================
         function selectTool(toolId) {
+            toolId = window.normalizeStudioWorkflowId(toolId);
             console.log(`[Tool] 切換工具: ${currentTool} -> ${toolId}`);
 
             // 1. 保存當前工具的狀態（如果有的話）

@@ -267,6 +267,49 @@ def test_generate_success_records_db_redis_and_response_contract(monkeypatch):
     ]
 
 
+def test_generate_normalizes_legacy_workflow_alias_before_persisting(monkeypatch):
+    events = []
+    fake_redis = RecordingRedis(events=events)
+    fake_session = RecordingSession(events=events)
+    fake_db_client = RecordingDbClient()
+    monkeypatch.setattr(backend_app, "redis_client", fake_redis)
+    monkeypatch.setattr(backend_app, "db_client", fake_db_client)
+    monkeypatch.setattr(backend_app, "get_db_session", lambda: fake_session)
+
+    response = backend_app.app.test_client().post(
+        "/api/generate",
+        json={
+            "workflow": "single_image_edit",
+            "prompt": "edit this",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    db_job = fake_session.added[0]
+    queue_name, job_data = fake_redis.enqueued[0]
+
+    assert queue_name == backend_app.REDIS_QUEUE_NAME
+    assert db_job.workflow_name == "image_edit"
+    assert job_data["workflow"] == "image_edit"
+    assert payload["status"] == "queued"
+
+
+def test_runtime_config_endpoint_returns_canonical_workflow_catalog(monkeypatch):
+    monkeypatch.setattr(backend_app, "db_client", RecordingDbClient())
+    monkeypatch.setattr(backend_app, "redis_client", RecordingRedis())
+
+    response = backend_app.app.test_client().get("/api/runtime-config")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+
+    assert payload["runtime_profile"] in {"windows", "linux"}
+    image_edit = next(item for item in payload["workflow_catalog"] if item["id"] == "image_edit")
+    assert "single_image_edit" in image_edit["aliases"]
+    assert image_edit["frontend"]["inputs"] == ["input"]
+
+
 def test_generate_redis_push_failure_rolls_back_and_preserves_error_contract(monkeypatch):
     events = []
     fake_session = RecordingSession(events=events)

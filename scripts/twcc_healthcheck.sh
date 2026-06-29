@@ -25,7 +25,11 @@ REDIS_CONTAINER="studio-redis"
 MYSQL_CONTAINER="studio-mysql"
 
 # 載入環境變數
-if [ -f "$PROJECT_DIR/.env" ]; then
+if [ -f "$PROJECT_DIR/.env.twcc" ]; then
+    set -a
+    source "$PROJECT_DIR/.env.twcc"
+    set +a
+elif [ -f "$PROJECT_DIR/.env" ]; then
     set -a
     source "$PROJECT_DIR/.env"
     set +a
@@ -157,6 +161,10 @@ check "Nginx 回應 (HTTP 200)" \
 
 warn_check "Flask API 回應" \
     "curl -sf http://localhost/api/health > /dev/null 2>&1 || curl -sf http://localhost/health > /dev/null 2>&1"
+if [ -n "${LB_DOMAIN:-}" ]; then
+    warn_check "LB / Edge health 回應" \
+        "curl -sf https://${LB_DOMAIN}/health > /dev/null 2>&1 || curl -sf https://${LB_DOMAIN}/api/health > /dev/null 2>&1"
+fi
 echo ""
 
 # ==========================================

@@ -1,7 +1,9 @@
 {
   "text_to_image": {
+    "id": "text_to_image",
+    "aliases": [],
     "file": "text_to_image_z_image_turbo_fp8_1222.json",
-    "description": "Z-Image Turbo 快速文生圖",
+    "description": "Z-Image Turbo 文字生圖",
     "category": "image",
     "mapping": {
       "prompt_text_node_id": "33:6",
@@ -26,11 +28,22 @@
           "value": "z-image\\ae.safetensors"
         }
       ]
+    },
+    "frontend": {
+      "title": "Text to Image",
+      "description": "文字生圖",
+      "icon": "type",
+      "color": "blue",
+      "inputs": []
     }
   },
   "virtual_human": {
+    "id": "virtual_human",
+    "aliases": [
+      "avatar_talk"
+    ],
     "file": "InfiniteTalk_IndexTTS_2.json",
-    "description": "InfiniteTalk 虛擬人說話 (IndexTTS)",
+    "description": "InfiniteTalk 數位人像說話",
     "category": "avatar",
     "mapping": {
       "text_node_id": "312",
@@ -40,22 +53,50 @@
     },
     "image_map": {
       "avatar": "284"
+    },
+    "frontend": {
+      "title": "Avatar Talk",
+      "description": "數位人像",
+      "icon": "mic",
+      "color": "teal",
+      "inputs": [
+        "avatar"
+      ]
     }
   },
   "image_edit": {
+    "id": "image_edit",
+    "aliases": [
+      "single_image_edit",
+      "single_edit"
+    ],
     "file": "single_image_edit_qwen_2509_gguf_1222.json",
-    "description": "Qwen 單圖指令編輯",
+    "description": "Qwen 單圖編輯",
     "category": "image",
     "mapping": {
       "input_image_node_id": "120",
       "prompt_text_node_id": "123:111",
       "seed_node_id": "123:3",
       "output_node_id": "119"
+    },
+    "image_map": {
+      "input": "120"
+    },
+    "frontend": {
+      "title": "Image Edit",
+      "description": "單圖編輯",
+      "icon": "image",
+      "color": "pink",
+      "inputs": [
+        "input"
+      ]
     }
   },
   "face_swap": {
+    "id": "face_swap",
+    "aliases": [],
     "file": "face_swap_qwen_2509_gguf_1222.json",
-    "description": "Qwen 換臉工作流",
+    "description": "Qwen 換臉",
     "category": "image",
     "mapping": {
       "input_image_face_node_id": "501",
@@ -63,22 +104,56 @@
       "prompt_text_node_id": "504:348",
       "seed_node_id": "504:395",
       "output_node_id": "503"
+    },
+    "image_map": {
+      "source": "501",
+      "target": "502"
+    },
+    "frontend": {
+      "title": "Face Swap",
+      "description": "換臉",
+      "icon": "users",
+      "color": "purple",
+      "inputs": [
+        "source",
+        "target"
+      ]
     }
   },
   "sketch_to_image": {
+    "id": "sketch_to_image",
+    "aliases": [
+      "sketch"
+    ],
     "file": "sketch_to_image_qwen_2509_gguf_1222.json",
-    "description": "Qwen 線稿轉精緻圖",
+    "description": "Qwen 草圖轉圖像",
     "category": "image",
     "mapping": {
       "input_image_node_id": "120",
       "prompt_text_node_id": "124:111",
       "seed_node_id": "124:3",
       "output_node_id": "119"
+    },
+    "image_map": {
+      "input": "120"
+    },
+    "frontend": {
+      "title": "Sketch to Image",
+      "description": "草圖轉圖",
+      "icon": "pencil",
+      "color": "emerald",
+      "inputs": [
+        "input"
+      ]
     }
   },
   "multi_image_blend": {
+    "id": "multi_image_blend",
+    "aliases": [
+      "multi_blend"
+    ],
     "file": "multi_image_blend_qwen_2509_gguf_1222.json",
-    "description": "Qwen 多圖場景融合",
+    "description": "Qwen 多圖融合",
     "category": "image",
     "mapping": {
       "input_image_1_node_id": "78",
@@ -98,11 +173,24 @@
       "source": "78",
       "target": "436",
       "extra": "437"
+    },
+    "frontend": {
+      "title": "Multi-Blend",
+      "description": "多圖融合",
+      "icon": "layers-3",
+      "color": "amber",
+      "inputs": [
+        "source",
+        "target",
+        "extra"
+      ]
     }
   },
   "veo3_long_video": {
+    "id": "veo3_long_video",
+    "aliases": [],
     "file": "Veo3_VideoConnection.json",
-    "description": "Veo3 Long Video - 5 段視頻拼接",
+    "description": "Veo3 多鏡頭長影片",
     "category": "video",
     "mapping": {
       "output_node_id": "110",
@@ -113,20 +201,73 @@
         "3": "41",
         "4": "51"
       }
+    },
+    "frontend": {
+      "title": "Veo3 Long Video",
+      "description": "多鏡頭長影片",
+      "icon": "video",
+      "color": "cyan",
+      "inputs": [
+        "shot_0",
+        "shot_1",
+        "shot_2",
+        "shot_3",
+        "shot_4"
+      ]
+    }
+  },
+  "image_to_video": {
+    "id": "image_to_video",
+    "aliases": [],
+    "file": "Veo3_VideoConnection.json",
+    "description": "Veo3 圖生影片",
+    "category": "video",
+    "mapping": {
+      "output_node_id": "110",
+      "prompt_segments": {
+        "0": "10"
+      }
+    },
+    "image_map": {
+      "shot_0": "6"
+    },
+    "frontend": {
+      "title": "Image to Video",
+      "description": "圖生影片",
+      "icon": "clapperboard",
+      "color": "sky",
+      "inputs": [
+        "shot_0"
+      ]
     }
   },
   "t2v_veo3": {
+    "id": "t2v_veo3",
+    "aliases": [
+      "T2V"
+    ],
     "file": "T2V.json",
     "description": "Veo3 文字轉影片",
     "category": "video",
     "mapping": {
       "prompt_node_id": "10",
       "output_node_id": "110"
+    },
+    "frontend": {
+      "title": "T2V",
+      "description": "文字轉影片",
+      "icon": "sparkles",
+      "color": "indigo",
+      "inputs": []
     }
   },
   "flf_veo3": {
+    "id": "flf_veo3",
+    "aliases": [
+      "FLF"
+    ],
     "file": "FLF.json",
-    "description": "Veo3 首尾禎動畫",
+    "description": "Veo3 首尾幀動畫",
     "category": "video",
     "mapping": {
       "prompt_node_id": "111",
@@ -135,6 +276,16 @@
     "image_map": {
       "first_frame": "112",
       "last_frame": "113"
+    },
+    "frontend": {
+      "title": "FLF",
+      "description": "首尾幀動畫",
+      "icon": "film",
+      "color": "rose",
+      "inputs": [
+        "first_frame",
+        "last_frame"
+      ]
     }
   }
 }

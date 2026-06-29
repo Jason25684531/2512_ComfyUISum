@@ -1656,6 +1656,9 @@
             'text_to_image': { name: 'Text to Image', desc: '文生圖', icon: 'type', color: 'blue' },
             'single_image_edit': { name: 'Single Image Edit', desc: '單圖編輯', icon: 'image', color: 'pink' }
         };
+        Object.assign(toolConfig, window.buildStudioImageToolConfig());
+        Object.assign(toolInfo, window.buildStudioToolInfo());
+        window.toolStates = window.buildStudioToolStates(window.toolStates);
 
         /**
          * 保存當前工具的狀態
@@ -1769,6 +1772,7 @@
         }
 
         function selectTool(toolId) {
+            toolId = window.normalizeStudioWorkflowId(toolId);
             console.log(`[Tool] 切換工具: ${currentTool} -> ${toolId}`);
 
             // 1. 保存當前工具的狀態（如果有的話）
@@ -2842,14 +2846,7 @@
 
             showCompositionMenu();
             setTimeout(() => {
-                const toolMapping = {
-                    'text_to_image': 'text_to_image',
-                    'face_swap': 'face_swap',
-                    'multi_image_blend': 'multi_blend',
-                    'sketch_to_image': 'sketch',
-                    'single_image_edit': 'single_edit'
-                };
-                const toolId = toolMapping[jobData.workflow] || 'text_to_image';
+                const toolId = window.normalizeStudioWorkflowId(jobData.workflow) || 'text_to_image';
                 selectTool(toolId);
 
                 setTimeout(() => {
@@ -2926,11 +2923,15 @@
         // ==========================================
         // 頁面載入完成後初始化
         // ==========================================
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
             console.log('[Init] 頁面載入完成');
             lucide.createIcons();
 
             // 初始狀態
+            await window.STUDIO_RUNTIME_READY;
+            Object.assign(toolConfig, window.buildStudioImageToolConfig());
+            Object.assign(toolInfo, window.buildStudioToolInfo());
+            window.toolStates = window.buildStudioToolStates(window.toolStates);
             currentTool = null;
 
             // 初始化 Motion Workspace 的 Shot 上傳區域

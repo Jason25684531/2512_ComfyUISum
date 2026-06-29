@@ -8,37 +8,29 @@ Shared Configuration Base
 from dataclasses import dataclass
 import os
 from pathlib import Path
-from urllib.parse import urlparse
 
+from shared import env_resolution
 from shared.security import get_required_env
 
 
+# 平台名稱（os.name 在 Windows 為 "nt"，統一映射成 env_resolution 預期的字串）
+_PLATFORM_NAME = "windows" if os.name == "nt" else "linux"
+
+
 def get_env_str(name: str, default: str = "") -> str:
-    raw_value = os.getenv(name)
-    if raw_value is None:
-        return default
-    return raw_value.strip()
+    return env_resolution.read_env_str(name, default)
 
 
 def get_env_int(name: str, default: int) -> int:
-    raw_value = os.getenv(name)
-    if raw_value is None or not raw_value.strip():
-        return default
-    return int(raw_value)
+    return env_resolution.read_env_int(name, default)
 
 
 def get_env_float(name: str, default: float) -> float:
-    raw_value = os.getenv(name)
-    if raw_value is None or not raw_value.strip():
-        return default
-    return float(raw_value)
+    return env_resolution.read_env_float(name, default)
 
 
 def get_env_bool(name: str, default: bool = False) -> bool:
-    raw_value = os.getenv(name)
-    if raw_value is None or not raw_value.strip():
-        return default
-    return raw_value.strip().lower() == "true"
+    return env_resolution.read_env_bool(name, default)
 
 
 def _expand_path_value(path_value: str) -> str:
@@ -158,22 +150,24 @@ def resolve_service_endpoint(
     default_port: int,
     default_scheme: str = "http",
 ) -> ServiceEndpoint:
-    raw_service_url = get_env_str(url_env_name, "")
-    if raw_service_url and "://" not in raw_service_url:
-        raw_service_url = f"{default_scheme}://{raw_service_url}"
-
     configured_host = get_env_str(host_env_name, default_host) or default_host
     configured_port = get_env_int(port_env_name, default_port)
+    raw_service_url = get_env_str(url_env_name, "")
 
     if raw_service_url:
-        parsed_service_url = urlparse(raw_service_url)
-        if not parsed_service_url.hostname:
+        parsed = env_resolution.parse_endpoint_url(
+            raw_service_url,
+            default_scheme=default_scheme,
+            default_host=configured_host,
+            default_port=configured_port,
+        )
+        if parsed is None:
             raise ValueError(f"Invalid service URL for {url_env_name}: {raw_service_url}")
         return ServiceEndpoint(
-            scheme=parsed_service_url.scheme or default_scheme,
-            host=parsed_service_url.hostname or configured_host,
-            port=parsed_service_url.port or configured_port,
-            base_path=parsed_service_url.path.rstrip("/"),
+            scheme=parsed.scheme,
+            host=parsed.host,
+            port=parsed.port,
+            base_path=parsed.base_path,
         )
 
     return ServiceEndpoint(
@@ -183,32 +177,33 @@ def resolve_service_endpoint(
     )
 
 
-def _should_use_localhost(configured_host: str, docker_service_names: set[str]) -> bool:
-    if os.name != "nt":
-        return False
-    return configured_host.strip().lower() in docker_service_names
+def _resolve_redis_endpoint_for(env=None, platform_name: str = _PLATFORM_NAME) -> tuple[str, int]:
+    configured_host = env_resolution.read_env_str("REDIS_HOST", "localhost", env=env) or "localhost"
+    configured_port = env_resolution.read_env_int("REDIS_PORT", 6379, env=env)
+    resolution = env_resolution.resolve_service_host(
+        configured_host, configured_port, platform_name=platform_name, aliases={"redis", "studio-redis"}
+    )
+    return resolution.resolved_host, resolution.port
+
+
+def _resolve_db_endpoint_for(env=None, platform_name: str = _PLATFORM_NAME) -> tuple[str, int]:
+    configured_host = env_resolution.read_env_str("DB_HOST", "localhost", env=env) or "localhost"
+    configured_port = env_resolution.read_env_int("DB_PORT", 3306, env=env)
+    resolution = env_resolution.resolve_service_host(
+        configured_host, configured_port, platform_name=platform_name, aliases={"mysql", "studio-mysql"}
+    )
+    if resolution.alias_applied:
+        port = env_resolution.read_env_int("MYSQL_PORT", 3307, env=env) if configured_port == 3306 else configured_port
+        return resolution.resolved_host, port
+    return resolution.resolved_host, resolution.port
 
 
 def _resolve_redis_endpoint() -> tuple[str, int]:
-    configured_host = get_env_str("REDIS_HOST", "localhost") or "localhost"
-    configured_port = get_env_int("REDIS_PORT", 6379)
-
-    if _should_use_localhost(configured_host, {"redis", "studio-redis"}):
-        return "127.0.0.1", configured_port
-
-    return configured_host, configured_port
+    return _resolve_redis_endpoint_for()
 
 
 def _resolve_db_endpoint() -> tuple[str, int]:
-    configured_host = get_env_str("DB_HOST", "localhost") or "localhost"
-    configured_port = get_env_int("DB_PORT", 3306)
-
-    if _should_use_localhost(configured_host, {"mysql", "studio-mysql"}):
-        if configured_port == 3306:
-            configured_port = get_env_int("MYSQL_PORT", 3307)
-        return "127.0.0.1", configured_port
-
-    return configured_host, configured_port
+    return _resolve_db_endpoint_for()
 
 # ==========================================
 # 專案根目錄

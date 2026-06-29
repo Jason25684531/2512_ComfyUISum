@@ -37,6 +37,9 @@ from shared.security import (
     sanitize_response_payload,
 )
 load_env()
+from frontend_compat import resolve_legacy_redirect, resolve_root_document
+from generation_service import build_job_data, normalize_history_jobs, resolve_workflow_request
+from runtime_diagnostics import build_runtime_config_payload, build_runtime_diagnostics
 
 # ============================================
 # Configuration & Logging Setup
@@ -118,6 +121,15 @@ def _get_cookie_secure_setting() -> bool:
 
 
 COOKIE_SECURE = _get_cookie_secure_setting()
+
+
+def _build_deployment_diagnostics(redis_status: str, mysql_status: str, worker_status: str) -> dict:
+    return build_runtime_diagnostics(
+        project_root=PROJECT_ROOT,
+        redis_status=redis_status,
+        mysql_status=mysql_status,
+        worker_status=worker_status,
+    )
 
 # Session Cookie 配置 - 確保跨域請求能正確處理 cookies
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # 允許同站導航攜帶 cookie
@@ -768,7 +780,15 @@ def generate():
         
         prompt = data.get('prompt', '').strip()
         prompts = data.get('prompts', [])  # Veo3 Long Video: 5 段視頻的 prompts
-        workflow = data.get('workflow', 'text_to_image')
+        workflow_resolution = resolve_workflow_request(PROJECT_ROOT, data.get('workflow', 'text_to_image'))
+        workflow = workflow_resolution.workflow_id
+        if workflow_resolution.alias_hit:
+            logger.info(
+                "workflow alias normalized: requested=%s canonical=%s source=%s",
+                workflow_resolution.requested_id,
+                workflow_resolution.workflow_id,
+                workflow_resolution.source,
+            )
         
         # ===== 安全性驗證：Prompt 長度限制 =====
         if len(prompt) > 1000:
@@ -836,7 +856,9 @@ def generate():
             'prompt': prompt,
             'prompts': prompts,  # Veo3 Long Video: 新增 prompts 列表
             'seed': data.get('seed', -1),  # -1 表示随机
-            'workflow': data.get('workflow', 'text_to_image'),
+            'workflow': workflow,
+            'workflow_requested': workflow_resolution.requested_id,
+            'workflow_resolution': workflow_resolution.source,
             'user_id': user_id_for_job,
             'user_label': user_label_for_job,
             'model': data.get('model', 'turbo_fp8'),
@@ -1192,7 +1214,8 @@ def get_history():
         
         # 從資料庫獲取歷史記錄
         jobs = db_client.get_history(limit=limit, offset=offset, user_id=user_id_filter)
-        
+        jobs = normalize_history_jobs(PROJECT_ROOT, jobs)
+
         logger.info(f"📤 資料庫返回: {len(jobs)} 筆記錄")
         
         # 處理 output_path：轉換為前端可訪問的 URL 格式
@@ -1253,6 +1276,7 @@ def metrics():
         worker_heartbeat = redis_client.get('worker:heartbeat')
         worker_status = 'online' if worker_heartbeat else 'offline'
         warmup_snapshot = _get_worker_warmup_snapshot()
+        deployment_diagnostics = _build_deployment_diagnostics('healthy', 'n/a', worker_status)
         
         # 3. 統計當前正在處理的任務（status='processing'）
         active_jobs = 0
@@ -1269,6 +1293,7 @@ def metrics():
             'queue_length': queue_length,
             'worker_status': worker_status,
             'active_jobs': active_jobs,
+            **deployment_diagnostics,
             **warmup_snapshot,
         }), 200
     
@@ -1303,15 +1328,26 @@ def health():
         warnings.append('GPU warmup in progress')
     if warmup_snapshot['warmup_status'] == 'failed' and warmup_snapshot['warmup_last_error']:
         warnings.append(warmup_snapshot['warmup_last_error'])
+    deployment_diagnostics = _build_deployment_diagnostics(redis_status, mysql_status, worker_status)
     
     return jsonify({
         'status': overall_status,
         'redis': redis_status,
         'mysql': mysql_status,
         'worker': worker_status,
+        **deployment_diagnostics,
         **warmup_snapshot,
         'warnings': warnings,
     }), 200
+
+
+@app.route('/api/runtime-config', methods=['GET'])
+def runtime_config():
+    try:
+        return jsonify(build_runtime_config_payload(PROJECT_ROOT)), 200
+    except Exception as exc:
+        logger.error(f"runtime-config failed: {exc.__class__.__name__}", exc_info=True)
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @app.route('/api/models', methods=['GET'])
@@ -1606,7 +1642,11 @@ def serve_index():
     try:
         frontend_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'frontend')
         frontend_dir = os.path.abspath(frontend_dir)
-        
+        target_document = resolve_root_document(Path(frontend_dir), current_user.is_authenticated)
+        target_path = os.path.join(frontend_dir, target_document)
+        if os.path.exists(target_path):
+            return send_from_directory(frontend_dir, target_document)
+
         # 檢查登入狀態
         if current_user.is_authenticated:
             # 已登入：返回主應用頁面
@@ -1644,6 +1684,9 @@ def serve_static(path):
     try:
         frontend_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'frontend')
         frontend_dir = os.path.abspath(frontend_dir)
+        redirect_target = resolve_legacy_redirect(path, current_user.is_authenticated)
+        if redirect_target:
+            return redirect(redirect_target, code=302)
 
         guest_only_pages = {'login.html'}
         member_only_pages = {'dashboard.html', 'profile.html'}

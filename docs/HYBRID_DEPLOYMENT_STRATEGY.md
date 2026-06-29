@@ -2,9 +2,10 @@
 
 > **統一配置架構** - 一套配置，多環境部署 | Windows 開發 + Linux 生產無縫切換
 
-> **TWCC MVP 補充**
-> 目前 TWCC 的雙 VM 生產部署仍以 [docker-compose.base.yml](d:/01_Project/2512_ComfyUISum/docker-compose.base.yml) 作為 CPU Web Node 的執行主檔。
-> [docker-compose.unified.yml](d:/01_Project/2512_ComfyUISum/docker-compose.unified.yml) 在現階段仍是跨平台與單機 Linux 的共用參考配置，尚未直接承載 TWCC Web Node 的 `nginx + frontend` runtime。
+> **Canonical 邊界補充**
+> `deployment_matrix.yaml` 與 [DEPLOYMENT_MATRIX.md](d:/01_Project/2512_ComfyUISum/docs/DEPLOYMENT_MATRIX.md) 是目前部署角色與 validation gates 的單一真實來源。
+> [docker-compose.base.yml](d:/01_Project/2512_ComfyUISum/docker-compose.base.yml) 是 `twcc-base-vm` 的 canonical CPU Web Node 入口。
+> [docker-compose.unified.yml](d:/01_Project/2512_ComfyUISum/docker-compose.unified.yml) 是 `single-host-linux` 的 canonical compose，並保留 Windows docker-assisted compatibility 角色。
 
 ---
 
@@ -28,25 +29,25 @@
 
 ### 設計理念
 
-ComfyUI Studio 採用 **統一配置架構**，透過 Docker Compose Profiles 和環境變數實現跨平台部署：
+ComfyUI Studio 採用 **deployment matrix + canonical entry** 架構，透過明確的 topology 邊界、Docker Compose Profiles 和環境變數實現跨平台部署：
 
 ```
-單一配置檔案 (docker-compose.unified.yml)
+Deployment Matrix
     ↓
-Docker Compose Profiles 自動選擇服務
+選擇 topology 對應的 canonical entry
     ↓
-.env 環境變數動態調整參數
+Docker Compose Profiles / systemd / env contract
     ↓
-Windows / Linux 無縫切換
+Local / Single-host Linux / TWCC 角色對齊
 ```
 
 ### 三種部署模式
 
 | 模式 | Profile | 適用場景 | 服務組合 |
 |------|---------|---------|---------|
-| **Windows 開發** | `windows-dev` | 本地開發測試 | MySQL + Redis + Backend |
-| **Linux 開發** | `linux-dev` | 完整開發環境 | MySQL + Redis + ComfyUI + Backend + Worker |
-| **Linux 生產** | `linux-prod` | 生產部署 | 同上 + 自動重啟 + 持久化路徑 |
+| **local-dev** | `docker-compose.yml` | 本地完整開發 | ComfyUI + MySQL + Redis + Backend + Worker |
+| **single-host-linux** | `docker-compose.unified.yml` (`linux-dev` / `linux-prod`) | 單機 Linux | ComfyUI + MySQL + Redis + Backend + Worker + Nginx |
+| **twcc-base-vm** | `docker-compose.base.yml` | TWCC CPU Web Node | Nginx + Backend + Redis + MySQL |
 
 ### 架構優勢
 

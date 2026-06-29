@@ -1,0 +1,195 @@
+topologies:
+  local-dev:
+    canonical_entry:
+      path: docker-compose.yml
+      kind: compose
+    env_file: .env.local
+    services:
+      - redis
+      - mysql
+      - backend
+      - worker
+    external_dependencies: []
+    compatibility_entries: []
+    required_env:
+      - DEPLOYMENT_TOPOLOGY
+      - ENV_CONTRACT_FILE
+      - REDIS_PASSWORD
+      - MYSQL_ROOT_PASSWORD
+      - DB_PASSWORD
+      - SECRET_KEY
+      - COMFYUI_SERVER_URL
+      - COMFY_HOST
+    optional_env:
+      - NGROK_URL
+      - MODEL_PATH
+    unsupported_assumptions:
+      - twcc-load-balancer
+      - external-cos-storage
+    preflight_checks:
+      - python scripts/validate_deployment_matrix.py
+      - docker compose -f docker-compose.yml --env-file .env.local config
+      - python -m py_compile backend/src/app.py worker/src/main.py
+    postdeploy_checks:
+      - curl http://127.0.0.1:5000/health
+      - curl http://host.docker.internal:8188/system_stats
+    deploy_steps:
+      - docker compose -f docker-compose.yml --env-file .env.local up -d
+    rollback_steps:
+      - docker compose -f docker-compose.yml --env-file .env.local down
+
+  twcc-base-vm:
+    canonical_entry:
+      path: docker-compose.base.yml
+      kind: compose
+    env_file: .env.twcc
+    services:
+      - nginx
+      - backend
+      - redis
+      - mysql
+    external_dependencies:
+      - twcc-load-balancer
+      - twcc-gpu-vm
+      - twcc-cos
+    compatibility_entries:
+      - docs/TWCC_HFS_COS_Mount_Guide.md
+      - scripts/twcc_healthcheck.sh
+    required_env:
+      - DEPLOYMENT_TOPOLOGY
+      - ENV_CONTRACT_FILE
+      - REDIS_PASSWORD
+      - MYSQL_ROOT_PASSWORD
+      - DB_PASSWORD
+      - SECRET_KEY
+      - LB_DOMAIN
+      - S3_ENDPOINT
+      - S3_BUCKET
+      - S3_ACCESS_KEY
+      - S3_SECRET_KEY
+      - TWCC_API_KEY
+      - TWCC_PROJECT_ID
+      - TWCC_GPU_VM_ID
+      - TWCC_GATEWAY_HOST
+      - TWCC_BASE_HOST
+      - TWCC_GPU_NODE_HOST
+      - GPU_VM_REDIS_HOST
+      - COMFYUI_SERVER_URL
+      - COMFY_HOST
+    optional_env:
+      - S3_REGION
+      - COMFY_HTTP_TIMEOUT
+      - WORKER_TIMEOUT
+      - TWCCLI_PATH
+    unsupported_assumptions:
+      - local-comfyui-filesystem
+      - kubernetes-ingress
+    proxy_contract:
+      nginx_config: nginx/nginx.twcc.conf
+      upstream: api_backend
+      required_headers:
+        - Host
+        - X-Real-IP
+        - X-Forwarded-For
+        - X-Forwarded-Proto
+        - X-Forwarded-Host
+      trusted_proxy_hops: 1
+      websocket_required: true
+      long_poll_timeout_seconds: 300
+    preflight_checks:
+      - python scripts/validate_deployment_matrix.py
+      - docker compose -f docker-compose.base.yml --env-file .env.twcc config
+      - python -m py_compile backend/src/app.py worker/src/main.py shared/storage_service.py
+      - nginx -t -c /etc/nginx/nginx.conf
+    postdeploy_checks:
+      - curl http://127.0.0.1/health
+      - curl http://127.0.0.1/api/health
+      - bash scripts/twcc_healthcheck.sh
+    deploy_steps:
+      - docker compose -f docker-compose.base.yml --env-file .env.twcc up -d
+    rollback_steps:
+      - docker compose -f docker-compose.base.yml --env-file .env.twcc down
+
+  twcc-gpu-vm:
+    canonical_entry:
+      path: scripts/twcc_gpu_setup.sh
+      kind: script
+    env_file: .env.twcc
+    services:
+      - comfyui
+      - studio-worker
+    external_dependencies:
+      - twcc-base-vm
+      - twcc-cos
+      - twccli
+    compatibility_entries:
+      - scripts/twcc_start_gpu.sh
+      - scripts/twcc_stop_gpu.sh
+      - scripts/twcc_setup_cron.sh
+    required_env:
+      - DEPLOYMENT_TOPOLOGY
+      - REDIS_PASSWORD
+      - DB_PASSWORD
+      - GPU_VM_REDIS_HOST
+      - COMFYUI_SERVER_URL
+      - COMFY_HOST
+      - TWCC_GPU_NODE_HOST
+      - TWCCLI_PATH
+    optional_env:
+      - WORKER_TIMEOUT
+      - COMFY_HTTP_TIMEOUT
+      - COMFY_POLLING_INTERVAL
+    unsupported_assumptions:
+      - base-vm-nginx-runtime
+      - direct-public-comfyui-access
+    preflight_checks:
+      - python scripts/validate_deployment_matrix.py
+      - python -m py_compile worker/src/main.py worker/src/comfy_client.py
+      - test -x scripts/twcc_gpu_setup.sh
+    postdeploy_checks:
+      - curl http://127.0.0.1:8188/system_stats
+      - systemctl is-active comfyui
+      - systemctl is-active studio-worker
+    deploy_steps:
+      - sudo bash scripts/twcc_gpu_setup.sh
+      - sudo systemctl enable --now comfyui studio-worker
+    rollback_steps:
+      - sudo systemctl stop studio-worker comfyui
+
+# Operational / runtime-tuning keys allowed in any env example file without being
+# repeated under each topology's optional_env. Declaring them here keeps the matrix
+# the single source of truth for env contracts: a key in an example file that is in
+# neither a topology's required_env/optional_env nor this list is treated as drift.
+common_optional_env:
+  - BACKEND_PORT
+  - COMFYUI_HOST
+  - COMFYUI_PORT
+  - COMFY_HTTP_TIMEOUT
+  - COMFY_POLLING_INTERVAL
+  - DB_HOST
+  - DB_INTERNAL_PORT
+  - DB_NAME
+  - DB_PORT
+  - DB_USER
+  - FLASK_DEBUG
+  - FLASK_ENV
+  - LOG_DIR
+  - MYSQL_PORT
+  - PLATFORM
+  - PROXY_FIX
+  - REDIS_HOST
+  - REDIS_INTERNAL_PORT
+  - REDIS_PORT
+  - RESTART_POLICY
+  - SESSION_COOKIE_SECURE
+  - STORAGE_BACKEND
+  - STORAGE_DIR
+  - STORAGE_OUTPUT_DIR
+  - STUDIO_ENV
+  - WORKER_TIMEOUT
+  - WORKFLOW_DIR
+
+legacy_entries:
+  - path: docker-compose.base.yml
+    role: canonical-for-twcc-base-vm
+    notes: canonical CPU web node entry for TWCC cloud deployment

@@ -59,6 +59,7 @@ logger.info("=" * 60)
 from json_parser import parse_workflow
 from comfy_client import ComfyClient
 from warmup import WarmupController
+from workflow_registry import WorkflowRegistry
 from config import (
     REDIS_HOST, REDIS_PORT, REDIS_PASSWORD,
     COMFYUI_INPUT_DIR, COMFYUI_OUTPUT_DIR, JOB_QUEUE, TEMP_FILE_MAX_AGE_HOURS,
@@ -71,6 +72,12 @@ from config import (
 )
 from shared.config_base import (
     DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
+)
+from shared.v2.errors import (
+    COMFYUI_OUTPUT_MISSING,
+    COMFYUI_TIMEOUT,
+    COMFYUI_UNAVAILABLE,
+    ENGINE_EXECUTION_FAILED,
 )
 
 # Keep existing call sites compatible while using the operation-specific render wait timeout.
@@ -97,6 +104,9 @@ def save_base64_image(base64_data: str, job_id: str, field_name: str) -> str:
         base64_data = base64_data.split(",", 1)[1].strip()
     
     # 解碼 base64
+    if requested_workflow != workflow_name:
+        job_logger.info("workflow alias normalized: requested=%s canonical=%s", requested_workflow, workflow_name)
+
     try:
         image_bytes = base64.b64decode(base64_data)
     except Exception as e:
@@ -427,7 +437,11 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
     }
     """
     job_id = job_data.get("job_id", "unknown")
-    workflow_name = job_data.get("workflow", "text_to_image")
+    requested_workflow = job_data.get("workflow", "text_to_image")
+    workflow_registry = WorkflowRegistry()
+    workflow_name = workflow_registry.resolve_name(requested_workflow)
+    job_data["workflow"] = workflow_name
+    job_data.setdefault("workflow_requested", requested_workflow)
     user_id = job_data.get("user_id")
     user_label = job_data.get("user_label") or ("anonymous" if not user_id else f"user:{user_id}")
     
@@ -540,9 +554,13 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
         
         # 6. 提交任務到 ComfyUI
         update_job_status(r, job_id, "processing", progress=30, db_client=db_client)
+        if not client.check_connection():
+            raise RuntimeError(COMFYUI_UNAVAILABLE)
         
         job_logger.info("ComfyUI submit start")
         prompt_id = client.queue_prompt(workflow)
+        if not prompt_id:
+            raise RuntimeError(ENGINE_EXECUTION_FAILED)
         if not prompt_id:
             raise Exception("任務提交失敗")
         
@@ -680,7 +698,7 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
                             job_id,
                             "failed",
                             progress=95,
-                            error="output persistence failed",
+                            error=COMFYUI_OUTPUT_MISSING,
                             db_client=db_client,
                         )
                         job_logger.error(f"❌ 本地輸出落庫失敗: {output_err}")
@@ -734,7 +752,7 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
             
     except Exception as e:
         job_logger.exception("❌ 處理錯誤")
-        update_job_status(r, job_id, "failed", progress=0, error="unexpected failure", db_client=db_client)
+        update_job_status(r, job_id, "failed", progress=0, error=ENGINE_EXECUTION_FAILED, db_client=db_client)
 
 
 def main():

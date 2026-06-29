@@ -3,8 +3,9 @@
 > Studio Core (ComfyUI Middleware) — 從單機 Windows 遷移至 TWCC Linux 雙 VM 架構
 
 > **執行主檔說明**
-> Repo 級 TWCC canonical 邊界為 `docker-compose.unified.yml`、`nginx/` 與 `docs/TWCC_HFS_COS_Mount_Guide.md`。
-> `docker-compose.base.yml` 仍保留作為 split VM CPU Web Node 的相容 runtime 檔，用於實際 Base VM 啟動流程。
+> `docker-compose.base.yml` 是 `twcc-base-vm` 的 canonical CPU Web Node 入口。
+> `scripts/twcc_gpu_setup.sh` + systemd (`comfyui`, `studio-worker`) 是 `twcc-gpu-vm` 的 canonical 入口。
+> `deployment_matrix.yaml` 與 `docs/DEPLOYMENT_MATRIX.md` 負責定義 canonical / compatibility 角色、env contract 與 validation gates。
 
 ---
 
