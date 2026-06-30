@@ -428,7 +428,9 @@ class Database:
         """
         
         workflow_json = json.dumps(workflow_data) if workflow_data else None
-        
+
+        conn = None
+        cursor = None
         try:
             conn = self.pool.get_connection()
             cursor = conn.cursor()
@@ -440,8 +442,9 @@ class Database:
             logger.exception("✗ 插入任務失敗")
             return False
         finally:
-            if conn.is_connected():
-                cursor.close()
+            if conn is not None and conn.is_connected():
+                if cursor is not None:
+                    cursor.close()
                 conn.close()
     
     def update_job_status(
@@ -463,7 +466,9 @@ class Database:
         """
         sql = "UPDATE jobs SET status = %s WHERE id = %s"
         params = (status, job_id)
-        
+
+        conn = None
+        cursor = None
         try:
             conn = self.pool.get_connection()
             cursor = conn.cursor()
@@ -475,8 +480,9 @@ class Database:
             logger.exception("✗ 更新任務狀態失敗")
             return False
         finally:
-            if conn.is_connected():
-                cursor.close()
+            if conn is not None and conn.is_connected():
+                if cursor is not None:
+                    cursor.close()
                 conn.close()
     
     def get_history(
@@ -616,14 +622,16 @@ class Database:
         Returns:
             用戶 ID (INT)
         """
+        conn = None
+        cursor = None
         try:
             conn = self.pool.get_connection()
             cursor = conn.cursor(dictionary=True)
-            
+
             query_sql = "SELECT id FROM user_mapping WHERE ip_address = %s"
             cursor.execute(query_sql, (ip_address,))
             result = cursor.fetchone()
-            
+
             if result:
                 update_sql = "UPDATE user_mapping SET last_active = CURRENT_TIMESTAMP WHERE ip_address = %s"
                 cursor.execute(update_sql, (ip_address,))
@@ -640,12 +648,15 @@ class Database:
             logger.exception("✗ 獲取或建立用戶 ID 失敗")
             return -1
         finally:
-            if conn.is_connected():
-                cursor.close()
+            if conn is not None and conn.is_connected():
+                if cursor is not None:
+                    cursor.close()
                 conn.close()
-    
+
     def get_active_users_count(self) -> int:
         """獲取過去 24 小時內活躍的用戶數"""
+        conn = None
+        cursor = None
         try:
             conn = self.pool.get_connection()
             cursor = conn.cursor()
@@ -657,12 +668,15 @@ class Database:
             logger.exception("✗ 查詢活躍用戶失敗")
             return 0
         finally:
-            if conn.is_connected():
-                cursor.close()
+            if conn is not None and conn.is_connected():
+                if cursor is not None:
+                    cursor.close()
                 conn.close()
-    
+
     def check_connection(self) -> bool:
         """檢查資料庫連接是否正常"""
+        conn = None
+        cursor = None
         try:
             conn = self.pool.get_connection()
             cursor = conn.cursor()
@@ -673,6 +687,7 @@ class Database:
             logger.exception("✗ 資料庫連接檢查失敗")
             return False
         finally:
-            if conn.is_connected():
-                cursor.close()
+            if conn is not None and conn.is_connected():
+                if cursor is not None:
+                    cursor.close()
                 conn.close()

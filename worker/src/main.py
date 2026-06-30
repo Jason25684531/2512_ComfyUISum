@@ -104,9 +104,6 @@ def save_base64_image(base64_data: str, job_id: str, field_name: str) -> str:
         base64_data = base64_data.split(",", 1)[1].strip()
     
     # 解碼 base64
-    if requested_workflow != workflow_name:
-        job_logger.info("workflow alias normalized: requested=%s canonical=%s", requested_workflow, workflow_name)
-
     try:
         image_bytes = base64.b64decode(base64_data)
     except Exception as e:

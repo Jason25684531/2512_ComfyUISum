@@ -19,6 +19,7 @@ mysql_data/
 __pycache__/
 openspec/
 .vscode/
+.serena/
 
 # 日誌檔案 (保留目錄結構)
 logs/*.log

@@ -481,6 +481,7 @@ def test_job_log_adapter_and_formatter_include_workflow_and_user_context():
 
 
 def test_normalize_comfy_paths_rewrites_known_windows_model_paths(monkeypatch):
+    monkeypatch.setenv("COMFYUI_RUNTIME_PROFILE", "linux")
     module_path = WORKER_SRC / "comfy_paths.py"
     assert module_path.exists(), "worker/src/comfy_paths.py should exist"
 
@@ -517,7 +518,47 @@ def test_normalize_comfy_paths_rewrites_known_windows_model_paths(monkeypatch):
     assert inputs["talk_model"] == "InfiniteTalk/Wan2_1-InfiniTetalk-Single_fp16.safetensors"
 
 
+def test_normalize_comfy_paths_rewrites_linux_paths_to_windows(monkeypatch):
+    """Linux 路徑在 Windows profile 下應轉為 Windows 反斜線路徑"""
+    monkeypatch.setenv("COMFYUI_RUNTIME_PROFILE", "windows")
+    module_path = WORKER_SRC / "comfy_paths.py"
+    assert module_path.exists(), "worker/src/comfy_paths.py should exist"
+
+    module_spec = importlib.util.spec_from_file_location(
+        "worker_runtime_test_comfy_paths_win", module_path
+    )
+    comfy_paths = importlib.util.module_from_spec(module_spec)
+    assert module_spec.loader is not None
+    module_spec.loader.exec_module(comfy_paths)
+
+    payload = {
+        "prompt": {
+            "504:404": {
+                "inputs": {
+                    "unet_name": "Qwen_Image_Edit/Qwen-Image-Edit-2509-Q4_K_M.gguf",
+                    "clip_name": "Qwen_Image_Edit/split_files/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors",
+                    "vae_name": "Qwen_Image_Edit/split_files/vae/qwen_image_vae.safetensors",
+                    "lora_name": "Qwen_Edit/Lightning/Qwen-Image-Lightning-4steps-V1.0.safetensors",
+                    "bfs_name": "bfs_head_v3_qwen_image_edit_2509.safetensors",
+                    "wan_name": "Wan2.1/umt5-xxl-enc-bf16.safetensors",
+                }
+            }
+        }
+    }
+
+    normalized = comfy_paths.normalize_comfy_paths(payload)
+    inputs = normalized["prompt"]["504:404"]["inputs"]
+
+    assert inputs["unet_name"] == "Qwen_Image_Edit\\Qwen-Image-Edit-2509-Q4_K_M.gguf"
+    assert inputs["clip_name"] == "Qwen_Image_Edit\\qwen_2.5_vl_7b_fp8_scaled.safetensors"
+    assert inputs["vae_name"] == "Qwen_Image_Edit\\qwen_image_vae.safetensors"
+    assert inputs["lora_name"] == "Qwen_Image_Edit\\Qwen-Image-Edit-2509-Lightning-4steps-V1.0-bf16.safetensors"
+    assert inputs["bfs_name"] == "Qwen_Image_Edit\\bfs_head_v3_qwen_image_edit_2509.safetensors"
+    assert inputs["wan_name"] == "Wan2.1\\umt5-xxl-enc-bf16.safetensors"
+
+
 def test_queue_prompt_normalizes_payload_before_submit(monkeypatch):
+    monkeypatch.setenv("COMFYUI_RUNTIME_PROFILE", "linux")
     comfy_client = load_worker_module(monkeypatch, "comfy_client.py", "worker_runtime_test_comfy_client")
     captured = {}
 
