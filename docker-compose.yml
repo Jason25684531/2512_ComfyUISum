@@ -88,6 +88,7 @@ services:
       - ${ENV_CONTRACT_FILE:-./.env.local}:/app/.env.selected:ro
       - ./storage/outputs:/app/storage/outputs
       - ./logs:/app/logs
+      - ./ComfyUIworkflow:/app/ComfyUIworkflow:ro
 
   # =========================================
   # 4. Worker 服務
@@ -106,11 +107,12 @@ services:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - STUDIO_ENV_FILE=.env.selected
 
-      # ComfyUI 端點從 env 讀取，請在 .env.local 設定 COMFY_HOST=host.docker.internal
-      - COMFY_HOST=${COMFY_HOST:-host.docker.internal}
+      # ComfyUI 在 Windows 原生執行，容器內必須固定使用 host.docker.internal
+      # 不讀取 .env 變數，避免 .env 中的 127.0.0.1 覆蓋 Docker 正確路由
+      - COMFY_HOST=host.docker.internal
       - COMFY_PORT=${COMFY_PORT:-8188}
-      - COMFYUI_HOST=${COMFYUI_HOST:-host.docker.internal}
-      - COMFYUI_SERVER_URL=${COMFYUI_SERVER_URL:-http://host.docker.internal:8188}
+      - COMFYUI_HOST=host.docker.internal
+      - COMFYUI_SERVER_URL=http://host.docker.internal:${COMFY_PORT:-8188}
 
       - DB_HOST=mysql
       - DB_PORT=3306
@@ -125,8 +127,10 @@ services:
       - COMFY_POLLING_INTERVAL=${COMFY_POLLING_INTERVAL:-0.5}
 
     depends_on:
-      - redis
-      - mysql
+      redis:
+        condition: service_started
+      mysql:
+        condition: service_healthy
     restart: always
     networks:
       - studio-net
@@ -134,7 +138,7 @@ services:
       - ${ENV_CONTRACT_FILE:-./.env.local}:/worker/.env.selected:ro
       - ./storage:/worker/storage
       - ./logs:/worker/logs
-      - ./ComfyUIworkflow:/app/ComfyUIworkflow
+      - ./ComfyUIworkflow:/worker/ComfyUIworkflow:ro
 
 networks:
   studio-net:
