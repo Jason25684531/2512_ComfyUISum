@@ -19,6 +19,10 @@ PATH_REPLACEMENTS = (
         "Qwen_Image_Edit/Qwen-Image-Edit-2509-Q4_K_M.gguf",
     ),
     (
+        "Qwen" + BACKSLASH + "qwen_image_edit_2511_bf16.safetensors",
+        "Qwen/qwen_image_edit_2511_bf16.safetensors",
+    ),
+    (
         "Qwen" + BACKSLASH + "qwen_image_vae.safetensors",
         "Qwen_Image_Edit/split_files/vae/qwen_image_vae.safetensors",
     ),
@@ -70,6 +74,10 @@ REVERSE_PATH_REPLACEMENTS = (
     (
         "Qwen_Image_Edit/Qwen-Image-Edit-2509-Q4_K_M.gguf",
         "Qwen_Image_Edit" + BACKSLASH + "Qwen-Image-Edit-2509-Q4_K_M.gguf",
+    ),
+    (
+        "Qwen/qwen_image_edit_2511_bf16.safetensors",
+        "Qwen_Image_Edit" + BACKSLASH + "qwen_image_edit_2511_bf16.safetensors",
     ),
     (
         "Qwen_Image_Edit/split_files/vae/qwen_image_vae.safetensors",

@@ -557,6 +557,33 @@ def test_normalize_comfy_paths_rewrites_linux_paths_to_windows(monkeypatch):
     assert inputs["wan_name"] == "Wan2.1\\umt5-xxl-enc-bf16.safetensors"
 
 
+def test_normalize_comfy_paths_rewrites_multi_image_blend_windows_unet(monkeypatch):
+    monkeypatch.setenv("COMFYUI_RUNTIME_PROFILE", "windows")
+    module_path = WORKER_SRC / "comfy_paths.py"
+    assert module_path.exists(), "worker/src/comfy_paths.py should exist"
+
+    module_spec = importlib.util.spec_from_file_location(
+        "worker_runtime_test_comfy_paths_multi_blend_win", module_path
+    )
+    comfy_paths = importlib.util.module_from_spec(module_spec)
+    assert module_spec.loader is not None
+    module_spec.loader.exec_module(comfy_paths)
+
+    payload = {
+        "433:37": {
+            "inputs": {
+                "unet_name": "Qwen/qwen_image_edit_2511_bf16.safetensors",
+            }
+        }
+    }
+
+    normalized = comfy_paths.normalize_comfy_paths(payload)
+
+    assert normalized["433:37"]["inputs"]["unet_name"] == (
+        "Qwen_Image_Edit\\qwen_image_edit_2511_bf16.safetensors"
+    )
+
+
 def test_queue_prompt_normalizes_payload_before_submit(monkeypatch):
     monkeypatch.setenv("COMFYUI_RUNTIME_PROFILE", "linux")
     comfy_client = load_worker_module(monkeypatch, "comfy_client.py", "worker_runtime_test_comfy_client")
