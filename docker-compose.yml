@@ -113,6 +113,8 @@ services:
       - COMFY_PORT=${COMFY_PORT:-8188}
       - COMFYUI_HOST=host.docker.internal
       - COMFYUI_SERVER_URL=http://host.docker.internal:${COMFY_PORT:-8188}
+      # Worker 跑在 Linux 容器但 ComfyUI 在 Windows，model 路徑用反斜線格式
+      - COMFYUI_RUNTIME_PROFILE=windows
 
       - DB_HOST=mysql
       - DB_PORT=3306
@@ -139,6 +141,7 @@ services:
       - ./storage:/worker/storage
       - ./logs:/worker/logs
       - ./ComfyUIworkflow:/worker/ComfyUIworkflow:ro
+      - ./ComfyUIworkflow_api:/ComfyUIworkflow_api:ro
 
 networks:
   studio-net:
