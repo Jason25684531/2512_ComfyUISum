@@ -53,18 +53,19 @@ Backend `/api/generate` 寫入 MySQL + 推送 Redis Queue，Worker 取出後提�
 - [系統架構](#-系統架構)
 - [技術棧](#-技術棧)
 - [快速開始](#-快速開始)
-  - [本地開發環境](#本地開發環境-windows)
-  - [本地 MinIO S3 測試](#本地-minio-s3-測試)
-  - [TWCC 雲端部署](#twcc-雲端部署-生產環境)
+  - [本地開發環境](#本地開發環境-windows--docker-desktop)
+  - [TWCC 雲端部署](#twcc-雲端部署生產環境)
 - [文件結構](#-文件結構)
 - [API 端點](#-api-端點)
 - [配置說明](#-配置說明)
 - [Ngrok 公網存取](#-ngrok-公網存取)
 - [開發指南](#-開發指南)
-- [故障排除](#-故障排除)
+- [測試](#-測試)
 - [壓力測試](#-壓力測試)
-- [更新日誌](#-更新日誌)
+- [故障排除](#-故障排除)
 - [系統監控](#-系統監控)
+- [Runtime Contract & Workflow Catalog](#-runtime-contract--workflow-catalog)
+- [更新日誌](#-更新日誌)
 
 ---
 
@@ -313,9 +314,10 @@ https://[your-id].ngrok-free.app/  → 對應 localhost:5000/
 
 ### 後端技術
 - **Python 3.11+** - 主要開發語言
-- **Flask 3.0** - Web 框架
+- **Flask 3.0** - Web 框架（v1 production）
+- **FastAPI** - 非同步 Web 框架（v2 開發中，`apps/backend-fastapi/`）
 - **MySQL 8.0** - 關係型數據庫
-- **Redis 7.0** - 內存數據庫/消息隊列
+- **Redis 7.2** - 內存數據庫/消息隊列
 - **boto3 1.34+** - S3 相容物件儲存（TWCC COS / MinIO）
 - **Docker** - 容器化部署
 - **Nginx** - 反向代理（TWCC 生產環境）
@@ -328,12 +330,13 @@ https://[your-id].ngrok-free.app/  → 對應 localhost:5000/
 
 ### AI 引擎
 - **ComfyUI** - 節點式 AI 圖像生成工具
-- **Stable Diffusion** - 圖像生成模型
-- **Custom Workflows** - 預定義工作流模板
+- **Stable Diffusion / Z-Image Turbo** - 圖像生成模型
+- **Custom Workflows** - 預定義工作流模板（config-driven catalog）
 
-### 開發工具
+### 基礎設施 & 工具
 - **Docker Compose** - 多容器編排
-- **Ngrok** - 公網隧道服務
+- **Deployment Matrix** - 拓撲宣告式部署契約（`deployment_matrix.yaml`）
+- **Ngrok** - 公網隧道服務（本地開發用）
 - **VS Code** - 推薦開發環境
 - **Git** - 版本控制
 
@@ -551,121 +554,133 @@ sudo systemctl restart comfyui     # ComfyUI 更新（需要時）
 
 ```
 ComfyUISum/
-├── shared/                     # 共用模組 (核心 - Phase 10 優化)
-│   ├── __init__.py            # 模組導出 (18 個配置項)
-│   ├── utils.py               # load_env(), setup_logger(), get_redis_client() 等
-│   │                          # ⭐ [TWCC] get_redis_client 支援指數退避重試
+├── shared/                     # 共用模組（v1 + v2 共享）
+│   ├── __init__.py            # 模組導出
 │   ├── config_base.py         # 共用配置 (Redis, DB, Storage, ComfyUI)
-│   ├── storage_service.py     # ⭐ [TWCC] 儲存抽象層（LocalStorage / S3Storage）
-│   └── database.py            # Database 類 + ORM 模型 (User, Job)
+│   ├── database.py            # Database 類 + ORM 模型 (User, Job)
+│   ├── env_resolution.py      # 環境變數解析邏輯
+│   ├── runtime_contract.py    # Runtime 端點解析 & TWCC fail-closed 規則
+│   ├── security.py            # 安全工具（路徑驗證等）
+│   ├── storage_service.py     # 儲存抽象層（LocalStorage / S3Storage）
+│   ├── utils.py               # load_env(), setup_logger(), get_redis_client() 等
+│   ├── workflow_catalog.py    # Workflow catalog 集中管理（canonical ID / alias 解析）
+│   └── v2/                    # v2 共用模組
+│       ├── constants.py       # v2 常數定義
+│       ├── errors.py          # 統一錯誤型別
+│       ├── job_store.py       # Job 儲存介面
+│       ├── model_safety.py    # 模型路徑安全驗證
+│       ├── output_paths.py    # 輸出路徑管理
+│       ├── path_utils.py      # 路徑工具
+│       ├── runtime_config.py  # v2 Runtime 配置
+│       └── status.py          # Job 狀態列舉
 │
-├── backend/                    # Flask 後端服務
+├── backend/                    # Flask 後端服務（v1 production）
 │   ├── src/
 │   │   ├── app.py             # 主應用 (API + 會員系統)
-│   │   │                      # ⭐ 使用 shared.config_base 統一配置
-│   │   └── config.py          # 配置管理 (繼承 shared.config_base)
+│   │   ├── config.py          # 配置管理 (繼承 shared.config_base)
+│   │   ├── frontend_compat.py # 前端相容層
+│   │   ├── generation_service.py  # 任務生成服務
+│   │   └── runtime_diagnostics.py # Runtime 診斷工具
 │   ├── Readme/                # 文檔目錄
-│   │   ├── README.md          # Backend 使用指南
-│   │   └── API_TESTING.md     # API 測試集合
 │   └── Dockerfile             # Backend 容器定義
 │
-├── worker/                     # 任務處理器
+├── worker/                     # 任務處理器（v1 production）
 │   ├── src/
-│   │   ├── main.py            # Worker 主邏輯
-│   │   │                      # ⭐ 使用 shared.utils.get_redis_client()
-│   │   │                      # ⭐ [TWCC] SIGTERM 優雅關機 + S3上傳 + VRAM暖機
-│   │   ├── json_parser.py     # Workflow 解析
-│   │   ├── comfy_client.py    # ComfyUI 客戶端
-│   │   │                      # ⭐ [TWCC] check_connection 指數退避重試
+│   │   ├── main.py            # Worker 主邏輯（BLPOP + 任務處理）
+│   │   ├── comfy_client.py    # ComfyUI HTTP/WS 客戶端
+│   │   ├── comfy_paths.py     # ComfyUI 路徑解析（跨平台）
+│   │   ├── json_parser.py     # Workflow JSON 解析
+│   │   ├── config.py          # 配置管理
+│   │   ├── warmup.py          # GPU VRAM 暖機機制
 │   │   ├── check_comfy_connection.py  # 連線檢查工具
-│   │   └── config.py          # 配置管理 (繼承 shared.config_base)
+│   │   ├── workflow_registry.py       # Workflow 註冊器
+│   │   └── workflow/          # Workflow 子模組
+│   │       ├── injectors.py   # 參數注入器
+│   │       ├── loader.py      # Workflow 載入器
+│   │       ├── node_utils.py  # 節點工具
+│   │       ├── legacy_maps.py # 舊版對照表
+│   │       └── video_trim.py  # 影片裁切邏輯
 │   ├── comfyui.service.template   # [TWCC] ComfyUI systemd 服務範本
 │   ├── worker.service.template    # [TWCC] Worker systemd 服務範本
 │   └── Dockerfile             # Worker 容器定義
 │
+├── apps/                       # v2 應用（開發中）
+│   ├── backend-fastapi/       # FastAPI 後端
+│   │   └── app/
+│   │       ├── main.py        # FastAPI 入口
+│   │       ├── config.py      # v2 配置
+│   │       ├── models/        # Pydantic 模型 (asset, job)
+│   │       ├── routes/        # API 路由 (assets, health, jobs, outputs, workflows)
+│   │       └── services/      # 服務層 (path_validator, redis_client)
+│   └── worker-v2/            # v2 Worker（引擎化架構）
+│       └── worker/
+│           ├── main.py        # v2 Worker 入口
+│           ├── config.py      # v2 配置
+│           └── engines/       # 可插拔引擎 (base, comfyui_engine, mock_engine)
+│
+├── packages/                   # 可重用套件
+│   └── workflow_registry/     # Workflow 註冊套件
+│
 ├── frontend/                   # Web 前端
 │   ├── index.html             # 主頁面 (SPA + 會員狀態切換)
-│   ├── login.html             # 登入/註冊頁面 (會員系統)
+│   ├── login.html             # 登入/註冊頁面
 │   ├── profile.html           # 會員中心
-│   ├── dashboard.html         # 儀表板 (Phase 9 整合完成)
+│   ├── dashboard.html         # 儀表板（多工作區整合）
 │   ├── motion-workspace.js    # Video Studio 邏輯
-│   ├── image-utils.js         # ⭐ 統一圖片處理模組
+│   ├── image-utils.js         # 統一圖片處理模組
+│   ├── config.js              # API 配置（runtime catalog 驅動）
 │   ├── style.css              # 擴展樣式
-│   ├── config.js              # API 配置 (自動生成)
-│   └── backups/               # 備份文件目錄
+│   └── vendor/                # 第三方前端庫
 │
-├── ComfyUIworkflow/           # Workflow 模板
-│   ├── config.json            # Workflow 配置映射 (含 image_map)
-│   ├── T2V.json, FLF.json     # Video Studio 工作流
-│   ├── Veo3_VideoConnection.json  # 長片生成
-│   ├── text_to_image_*.json   # 文字轉圖像
-│   ├── face_swap_*.json       # 人臉替換
-│   ├── multi_image_blend_*.json  # 圖片混合
-│   ├── single_image_edit_*.json  # 單圖編輯
-│   ├── sketch_to_image_*.json    # 草圖轉圖像
-│   └── InfiniteTalk_IndexTTS_2.json  # 虛擬人說話
+├── ComfyUIworkflow/           # Workflow 模板（Windows 路徑格式）
+│   ├── config.json            # Workflow catalog 配置（canonical ID / alias / mapping）
+│   ├── linux_fixed/           # Linux 路徑格式副本
+│   ├── text_to_image_*.json   # 文字轉圖像 (Z-Image Turbo)
+│   ├── single_image_edit_*.json  # 單圖編輯 (Qwen)
+│   ├── multi_image_blend_*.json  # 圖片混合 (Qwen)
+│   ├── face_swap_*.json       # 人臉替換 (Qwen)
+│   ├── sketch_to_image_*.json # 草圖轉圖像 (Qwen)
+│   ├── InfiniteTalk_IndexTTS_2.json  # 虛擬人說話 (Avatar Talk)
+│   ├── T2V.json               # Text-to-Video
+│   ├── FLF.json               # First-Last Frame 影片
+│   └── Veo3_VideoConnection.json  # 長片生成
 │
-├── .env.local.example              # 本地 canonical env 範本（local-dev）
-├── .env.twcc.example              # 雲端 canonical env 範本（twcc-base-vm / twcc-gpu-vm）
-├── docker-compose.yml             # 本地 canonical Compose（local-dev）
-├── docker-compose.base.yml        # 雲端 Base VM Compose（nginx+api+redis+mysql）
+├── ComfyUIworkflow_api/       # API 格式 Workflow（worker 直接使用）
 │
-├── nginx/
-│   └── nginx.twcc.conf            # [TWCC] Nginx 反向代理配置（含 LB proxy headers）
+├── tests/                      # 測試套件
+│   ├── test_backend_contract.py       # Backend API 契約測試
+│   ├── test_backend_auth_contract.py  # 認證契約測試
+│   ├── test_comfy_workflow_runtime.py # Workflow Runtime 測試
+│   ├── test_deployment_matrix_*.py    # 部署矩陣驗證
+│   ├── test_security_hardening.py     # 安全強化測試
+│   ├── test_shared_config_resolution.py # 共用配置解析測試
+│   ├── test_workflow_*.py             # Workflow 相關測試
+│   ├── locustfile.py                  # 壓力測試 (Locust)
+│   └── v2/                            # v2 測試
+│       ├── test_health.py, test_jobs.py, test_assets.py  # v2 API 測試
+│       ├── test_comfyui_execution_adapter.py  # ComfyUI 適配器測試
+│       └── test_worker_v2.py          # v2 Worker 測試
 │
-├── openspec/                   # ⭐ OpenSpec 規格文件系統 (Phase 10 新增)
-│   ├── AGENTS.md              # OpenSpec 代理指南
-│   ├── specs/                 # 規格文件目錄
-│   │   └── 001-stability-refactor.md  # 穩定性重構規格
-│   └── changes/               # 變更提案目錄
-│       └── Stability Refactor/
-│           └── Stability Refactor.md  # 穩定性重構任務
+├── scripts/                    # 工具腳本
+│   ├── validate_deployment_matrix.py  # 部署矩陣驗證
+│   ├── validate_local_startup.py      # 本地啟動驗證
+│   ├── validate_environment_boundary.py # 環境邊界驗證
+│   ├── twcc_*.sh              # TWCC 雲端管理腳本
+│   ├── monitor_status.bat     # 監控腳本
+│   └── dev/                   # 開發輔助腳本
 │
-├── docs/                       # 文檔目錄 (11 個檔案)
-│   ├── UpdateList.md          # 詳細更新日誌
-│   ├── BEST_PRACTICES.md      # 開發最佳實踐
-│   ├── TWCC_Deployment_Guide.md   # [TWCC] 雲端部署完整指南（新增）
-│   ├── TWCC_Migration_Proposal.md # [TWCC] 遷移提案書與變更總結（新增）
-│   ├── HYBRID_DEPLOYMENT_STRATEGY.md  # 混合部署策略指南
-│   ├── NAVIGATION_FLOW.md     # 導航流程文檔
-│   ├── Phase8C_Monitoring_Guide.md    # 監控指南
-│   ├── Phase9_Completion_Report.md    # Phase 9 完成報告
-│   ├── PersonalGallery_Debug_Guide.md # Gallery 除錯指南
-│   ├── Stability_Refactor_Validation_Guide.md  # 穩定性驗證指南
-│   ├── Environment_Boundary_Guide.md  # 環境邊界與維護入口
-│   ├── Veo3_LongVideo_Guide.md        # Veo3 長片指南
-│   ├── VEO3_TEST_MODE_DEBUG.md        # Veo3 測試模式除錯
-│   └── VEO3_TEST_MODE_README.md       # Veo3 測試模式說明
+├── docs/                       # 文檔
+│   ├── DEPLOYMENT_MATRIX.md   # 部署矩陣說明
+│   ├── HYBRID_DEPLOYMENT_STRATEGY.md  # 混合部署策略
+│   ├── RUNTIME_CONTRACT.md    # Runtime Contract 說明
+│   ├── TWCC_Deployment_Guide.md       # TWCC 完整部署指南
+│   └── ...                    # 其他文檔
 │
-├── storage/                    # 數據存儲
-│   ├── inputs/                # 上傳圖片暫存
-│   ├── outputs/               # 生成結果
-│   └── models/                # AI 模型文件
-│
-├── logs/                       # 日誌文件
-│   ├── backend.log            # Backend 日誌 (5MB × 3)
-│   ├── worker.log             # Worker 日誌 (5MB × 3)
-│   └── *.json.log             # JSON 格式日誌 (午夜輪換)
-│
-├── scripts/                    # 腳本目錄
-│   ├── validate_local_startup.py   # ⭐ 本地啟動驗證（ComfyUI + Redis + MySQL）
-│   ├── monitor_status.bat          # 狀態監控
-│   ├── run_stack_test.bat          # 整合測試
-│   ├── start_ngrok.bat             # Ngrok 啟動腳本
-│   ├── update_ngrok_config.ps1     # Ngrok 配置更新
-│   ├── twcc_start_gpu.sh           # [TWCC] GPU VM 開機（呼叫 TWCC CLI）
-│   ├── twcc_stop_gpu.sh            # [TWCC] GPU VM 安全關機（佇列檢查）
-│   ├── twcc_setup_cron.sh          # [TWCC] 安裝 Cron 自動排程
-│   ├── twcc_gpu_setup.sh           # [TWCC] GPU VM 首次建置腳本
-│   ├── twcc_healthcheck.sh         # [TWCC] 健康檢查（7 項檢查）
-│   └── validate_deployment_matrix.py  # Deployment Matrix 合規檢查
-│
-├── mysql_data/                 # MySQL 數據卷
-├── redis_data/                 # Redis 數據卷
-│
-├── .env.local                  # 本地環境契約（gitignored，從 .env.local.example 複製）
-├── .env.twcc                   # 雲端環境契約（gitignored，從 .env.twcc.example 複製）
-├── deployment_matrix.yaml      # 部署矩陣（拓撲定義與合規檢查）
+├── deployment_matrix.yaml     # 部署拓撲宣告（3 拓撲: local-dev, twcc-base-vm, twcc-gpu-vm）
+├── docker-compose.yml         # 本地 canonical compose（local-dev）
+├── docker-compose.base.yml    # 雲端 Base VM compose（twcc-base-vm）
+├── .env.local.example         # 本地 canonical env 範本（local-dev）
+├── .env.twcc.example          # 雲端 canonical env 範本（twcc-base-vm / twcc-gpu-vm）
 ├── requirements.txt            # Python 依賴
 └── README.md                   # 本文件
 ```
@@ -870,7 +885,7 @@ Ngrok 服務器 (雲端)
 3. 自動更新 `.env` 和 `frontend/config.js`
 4. 前端自動選擇正確的 API 端點
 
-詳細說明請參閱 [NGROK_SETUP.md](NGROK_SETUP.md)
+詳細說明請參閱 `scripts/start_ngrok.bat` 與 `scripts/update_ngrok_config.ps1`
 
 ---
 
@@ -961,36 +976,37 @@ UPDATE jobs SET is_deleted = 1 WHERE created_at < DATE_SUB(NOW(), INTERVAL 30 DA
 
 ## 🧪 測試
 
-### 整合測試腳本
-
-專案包含自動化測試腳本，用於驗證完整的 API 流程：
+### 測試套件
 
 ```bash
-# 進入專案目錄
-cd D:\01_Project\2512_ComfyUISum
+# 執行所有契約測試（不需要 ComfyUI 運行）
+pytest tests/ -v
 
-# 完整測試 (需要 Backend + Worker + ComfyUI)
-python tests/test_virtual_human_flow.py
+# 僅執行 v1 契約測試
+pytest tests/test_backend_contract.py tests/test_security_hardening.py -v
 
-# 僅測試上傳功能 (快速驗證)
-python tests/test_virtual_human_flow.py --upload-only
+# 僅執行 v2 測試
+pytest tests/v2/ -v
 
-# 跳過生成步驟 (測試 API 但不等待結果)
-python tests/test_virtual_human_flow.py --skip-generation
+# 部署矩陣合規驗證
+python scripts/validate_deployment_matrix.py
 
-# 使用自訂 Backend URL
-python tests/test_virtual_human_flow.py --url http://192.168.1.100:5000
+# 本地啟動驗證（ComfyUI + Redis + MySQL）
+python scripts/validate_local_startup.py
 ```
 
 ### 測試覆蓋範圍
 
-| 測試項目 | 說明 |
-|---------|-----|
-| 健康檢查 | 驗證 Backend、Redis、MySQL 連線 |
-| 音訊上傳 | 驗證 `/api/upload` 支援 .wav/.mp3 |
-| 任務提交 | 驗證 `/api/generate` 支援 audio 參數 |
-| 狀態輪詢 | 驗證狀態從 queued → processing → finished |
-| 輸出驗證 | 驗證生成的檔案可正確存取 |
+| 測試類型 | 檔案 | 說明 |
+|---------|------|-----|
+| Backend 契約 | `test_backend_contract.py` | API 端點行為驗證 |
+| 認證契約 | `test_backend_auth_contract.py` | 會員認證流程 |
+| 安全強化 | `test_security_hardening.py` | Rate Limit、Path Traversal |
+| Workflow Runtime | `test_comfy_workflow_runtime.py` | Workflow 載入 / 注入 / 路徑解析 |
+| 部署矩陣 | `test_deployment_matrix_*.py` | 拓撲定義合規性 |
+| 共用配置 | `test_shared_config_resolution.py` | 環境變數解析鏈 |
+| Runtime Contract | `test_runtime_contract.py` | Runtime 端點 / fail-closed |
+| v2 API | `tests/v2/test_*.py` | FastAPI 路由 / Worker v2 / 引擎適配 |
 
 ---
 
@@ -1378,8 +1394,8 @@ curl http://localhost:5000/api/metrics
 
 ### 詳細說明文件
 
-- 📄 [PHASE_8C_IMPROVEMENT.md](./PHASE_8C_IMPROVEMENT.md) - 監控儀表板置頂改進詳解
-- 📄 [Update_MD/UpdateList.md](./Update_MD/UpdateList.md) - 完整更新日誌
+- 📄 [docs/Phase8C_Monitoring_Guide.md](docs/Phase8C_Monitoring_Guide.md) - 監控指南
+- 📄 [docs/UpdateList.md](docs/UpdateList.md) - 完整更新日誌
 
 **Path Traversal Protection**:
 - 檔案路徑驗證確保在 `storage/outputs/` 內
@@ -1405,9 +1421,54 @@ curl http://localhost:5000/api/metrics
 - 自動輪轉，保留最近 15MB 日誌
 
 ---
+## 📋 Runtime Contract & Workflow Catalog
+
+Studio 把 runtime 配置與 workflow catalog 集中在 `shared/` 層管理：
+
+| 元件 | 路徑 | 說明 |
+|------|------|------|
+| Runtime Contract | `shared/runtime_contract.py` | 端點解析、TWCC fail-closed 規則 |
+| Workflow Catalog | `shared/workflow_catalog.py` | Canonical ID / alias 解析、config.json 驅動 |
+| Env Resolution | `shared/env_resolution.py` | 環境變數解析鏈 |
+| Deployment Matrix | `deployment_matrix.yaml` | 3 拓撲宣告（local-dev, twcc-base-vm, twcc-gpu-vm）|
+
+**Runtime API**: `GET /api/runtime-config` — 前端據此動態載入 workflow catalog 與 API 端點。
+
+📚 說明文件: [docs/RUNTIME_CONTRACT.md](docs/RUNTIME_CONTRACT.md) | [docs/DEPLOYMENT_MATRIX.md](docs/DEPLOYMENT_MATRIX.md)
+
+---
+
 ## 📝 更新日誌
 
-### Phase 12 - 架構審查與代碼清理 (2026-01-28) ⭐ 最新
+### v2 架構 & Runtime Contract 整合 (2026-06 ~ 2026-07) ⭐ 最新
+
+**v2 應用層**
+- ✅ `apps/backend-fastapi/`：FastAPI 後端（路由 / 模型 / 服務分層）
+- ✅ `apps/worker-v2/`：引擎化 Worker（base / comfyui_engine / mock_engine）
+- ✅ `shared/v2/`：v2 共用模組（constants, errors, job_store, path_utils, status）
+
+**Runtime Contract & Workflow Catalog**
+- ✅ `shared/runtime_contract.py`：Runtime 端點解析 + TWCC fail-closed 規則
+- ✅ `shared/workflow_catalog.py`：集中式 Workflow Catalog（canonical ID / alias / mapping）
+- ✅ `shared/env_resolution.py`：環境變數解析鏈
+- ✅ 前端 `config.js` 改由 `/api/runtime-config` 驅動
+
+**Worker 模組化**
+- ✅ `worker/src/workflow/`：Workflow 子模組（injectors, loader, node_utils, video_trim）
+- ✅ `worker/src/comfy_paths.py`：跨平台 ComfyUI 路徑解析
+- ✅ `worker/src/workflow_registry.py`：Workflow 註冊器
+
+**部署矩陣標準化**
+- ✅ `deployment_matrix.yaml`：3 拓撲宣告式定義（local-dev, twcc-base-vm, twcc-gpu-vm）
+- ✅ `scripts/validate_deployment_matrix.py`：矩陣合規驗證
+- ✅ 環境範本 `.env.local.example` / `.env.twcc.example` 與矩陣同步
+
+**測試強化**
+- ✅ `tests/v2/`：v2 API / Worker / 引擎適配測試
+- ✅ Workflow Runtime 測試、部署矩陣驗證、Runtime Contract 測試
+- ✅ Docker 路徑修復（多圖路徑、frontend 資料夾）
+
+### Phase 12 - 架構審查與代碼清理 (2026-01-28)
 - ✅ 執行 OpenSpec Apply 工作流程
 - ✅ 全面審查 Backend、Worker、Shared、Frontend 代碼
 - ✅ 確認無核心代碼重複（共用函式統一位於 `shared/` 模組）
@@ -1546,16 +1607,17 @@ curl http://localhost:5000/api/metrics
 
 ### 文檔資源
 - [README.md](README.md) - 項目完整文檔（本文件）
-- [BEST_PRACTICES.md](frontend/BEST_PRACTICES.md) - **前端最佳實踐指南** ⭐ 新增
-- [UpdateList.md](docs/UpdateList.md) - 更新日誌
-- [Stability Refactor Spec](openspec/specs/001-stability-refactor.md) - 穩定性重構規格文件
-- [Stability Refactor Validation Guide](docs/Stability_Refactor_Validation_Guide.md) - 驗證測試指南
-- [API_TESTING.md](backend/Readme/API_TESTING.md) - API 測試指南
+- [docs/DEPLOYMENT_MATRIX.md](docs/DEPLOYMENT_MATRIX.md) - 部署矩陣說明
+- [docs/RUNTIME_CONTRACT.md](docs/RUNTIME_CONTRACT.md) - Runtime Contract 說明
+- [docs/HYBRID_DEPLOYMENT_STRATEGY.md](docs/HYBRID_DEPLOYMENT_STRATEGY.md) - 混合部署策略
+- [docs/TWCC_Deployment_Guide.md](docs/TWCC_Deployment_Guide.md) - TWCC 完整部署指南
+- [docs/UpdateList.md](docs/UpdateList.md) - 完整更新日誌
+- [backend/Readme/](backend/Readme/) - Backend API 文檔
 
 ### 獲取幫助
 1. 查看 [故障排除](#-故障排除) 章節
 2. 檢查日誌文件 (`logs/backend.log`, `logs/worker.log`)
-3. 使用 `verify.bat` 診斷服務狀態
+3. 執行 `python scripts/validate_local_startup.py` 診斷服務狀態
 
 ### 貢獻指南
 1. Fork 本項目
@@ -1590,10 +1652,3 @@ Made with ❤️ by ComfyUI Studio Team
 [⬆ 回到頂部](#-comfyui-studio---ai-creative-platform)
 
 </div>
-## Runtime Contract
-
-Studio 現在把 runtime 與 workflow catalog 集中在 shared 層管理，包含 canonical workflow id、alias、endpoint 解析與 TWCC fail-closed 規則。
-
-- 說明文件: [docs/RUNTIME_CONTRACT.md](docs/RUNTIME_CONTRACT.md)
-- Runtime endpoint: `/api/runtime-config`
-- 共享實作: `shared/runtime_contract.py`, `shared/workflow_catalog.py`
