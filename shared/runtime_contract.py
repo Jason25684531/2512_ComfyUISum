@@ -189,7 +189,7 @@ class RuntimeContractLoader:
         return "http://localhost:5000"
 
     def _missing_secrets(self, deployment_topology: str) -> tuple[str, ...]:
-        required = ["DB_PASSWORD"]
+        required = []
         if deployment_topology.startswith("twcc"):
             required.extend(["TWCC_API_KEY", "TWCC_PROJECT_ID", "TWCC_GPU_VM_ID"])
 

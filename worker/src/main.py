@@ -70,9 +70,6 @@ from config import (
     DEFAULT_UNET_MODEL, DEFAULT_CLIP_MODEL,
     DEFAULT_VAE_MODEL, WARMUP_MODE,
 )
-from shared.config_base import (
-    DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
-)
 from shared.v2.errors import (
     COMFYUI_OUTPUT_MISSING,
     COMFYUI_TIMEOUT,
@@ -770,23 +767,9 @@ def main():
         logger.exception("❌ Redis 連接失敗")
         sys.exit(1)
     
-    # 2. 連接資料庫 (可選) - 使用共用配置 (shared.config_base)
+    # 2. 資料庫已移除，MySQL 相關功能不再使用 (Redis 為唯一狀態來源)
     db_client = None
-    try:
-        # 從 shared 模組導入 Database 類
-        from shared.database import Database
-        
-        db_client = Database(
-            host=DB_HOST,
-            port=DB_PORT,
-            user=DB_USER,
-            password=DB_PASSWORD,
-            database=DB_NAME
-        )
-        logger.info(f"✅ 資料庫連接成功 ({DB_HOST}:{DB_PORT}/{DB_NAME})")
-    except Exception as e:
-        logger.exception("⚠️ 資料庫連接失敗 (功能降級)")
-    
+
     # 3. 初始化 ComfyUI 客戶端
     client = ComfyClient()
     warmup_controller = WarmupController(

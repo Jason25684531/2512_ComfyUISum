@@ -10,7 +10,6 @@ import os
 from pathlib import Path
 
 from shared import env_resolution
-from shared.security import get_required_env
 
 
 # 平台名稱（os.name 在 Windows 為 "nt"，統一映射成 env_resolution 預期的字串）
@@ -186,24 +185,8 @@ def _resolve_redis_endpoint_for(env=None, platform_name: str = _PLATFORM_NAME) -
     return resolution.resolved_host, resolution.port
 
 
-def _resolve_db_endpoint_for(env=None, platform_name: str = _PLATFORM_NAME) -> tuple[str, int]:
-    configured_host = env_resolution.read_env_str("DB_HOST", "localhost", env=env) or "localhost"
-    configured_port = env_resolution.read_env_int("DB_PORT", 3306, env=env)
-    resolution = env_resolution.resolve_service_host(
-        configured_host, configured_port, platform_name=platform_name, aliases={"mysql", "studio-mysql"}
-    )
-    if resolution.alias_applied:
-        port = env_resolution.read_env_int("MYSQL_PORT", 3307, env=env) if configured_port == 3306 else configured_port
-        return resolution.resolved_host, port
-    return resolution.resolved_host, resolution.port
-
-
 def _resolve_redis_endpoint() -> tuple[str, int]:
     return _resolve_redis_endpoint_for()
-
-
-def _resolve_db_endpoint() -> tuple[str, int]:
-    return _resolve_db_endpoint_for()
 
 # ==========================================
 # 專案根目錄
@@ -216,14 +199,6 @@ PROJECT_ROOT = Path(__file__).parent.parent.resolve()
 REDIS_HOST, REDIS_PORT = _resolve_redis_endpoint()
 REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
 JOB_QUEUE = os.getenv("JOB_QUEUE", "job_queue")
-
-# ==========================================
-# 資料庫配置 (共用)
-# ==========================================
-DB_HOST, DB_PORT = _resolve_db_endpoint()
-DB_USER = os.getenv("DB_USER", "studio_user")
-DB_PASSWORD = get_required_env("DB_PASSWORD")
-DB_NAME = os.getenv("DB_NAME", "studio_db")
 
 # ==========================================
 # 本地儲存配置 (共用)
@@ -261,7 +236,6 @@ def print_base_config():
     print("=" * 50)
     print(f"  PROJECT_ROOT: {PROJECT_ROOT}")
     print(f"  REDIS: {REDIS_HOST}:{REDIS_PORT}")
-    print(f"  DB: {DB_HOST}:{DB_PORT}/{DB_NAME}")
     print(f"  STORAGE_DIR: {STORAGE_DIR}")
     print(f"  WORKFLOW_DIR: {WORKFLOW_DIR}")
     print(f"  COMFYUI_ROOT: {COMFYUI_ROOT}")

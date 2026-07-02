@@ -18,8 +18,6 @@ from flask import Flask, request, jsonify, send_from_directory, g, redirect
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from flask_login import LoginManager, login_user, logout_user, login_required, current_user
-from flask_bcrypt import Bcrypt
 from markupsafe import escape
 from redis import Redis, RedisError
 from werkzeug.utils import secure_filename
@@ -38,7 +36,7 @@ from shared.security import (
 )
 load_env()
 from frontend_compat import resolve_legacy_redirect, resolve_root_document
-from generation_service import build_job_data, normalize_history_jobs, resolve_workflow_request
+from generation_service import build_job_data, resolve_workflow_request
 from runtime_diagnostics import build_runtime_config_payload, build_runtime_diagnostics
 
 # ============================================
@@ -139,20 +137,6 @@ app.config['REMEMBER_COOKIE_SAMESITE'] = 'Lax'
 app.config['REMEMBER_COOKIE_SECURE'] = COOKIE_SECURE
 
 # ============================================
-# Flask-Login 和 Flask-Bcrypt 設定
-# ============================================
-bcrypt = Bcrypt(app)
-login_manager = LoginManager(app)
-login_manager.login_view = 'api_login'  # 未登入時重定向的端點
-
-
-@login_manager.unauthorized_handler
-def handle_unauthorized():
-    if request.path.startswith('/api/'):
-        return jsonify({'error': 'Authentication required'}), 401
-    return redirect('/login.html')
-
-# ============================================
 # 自訂日誌過濾器
 # ============================================
 
@@ -196,8 +180,7 @@ def before_request_handler():
     """
     在每個請求前處理：
     1. 提取客戶端 IP 地址
-    2. 從資料庫獲取或建立用戶 ID
-    3. 存儲到 Flask g 對象，供日誌使用
+    2. 存儲到 Flask g 對象，供日誌使用
     """
     # 獲取客戶端 IP 地址（考慮代理）
     ip_address = request.headers.get('X-Forwarded-For')
@@ -206,17 +189,9 @@ def before_request_handler():
         ip_address = ip_address.split(',')[0].strip()
     else:
         ip_address = request.remote_addr or 'unknown'
-    
-    # 從資料庫獲取或建立用戶 ID
-    if db_client:
-        user_id = db_client.get_or_create_user_id(ip_address)
-        if user_id > 0:
-            g.user_id = f"User#{user_id:03d}"
-        else:
-            g.user_id = "User#ERR"
-    else:
-        g.user_id = "User#N/A"
-    
+
+    g.user_id = f"IP#{ip_address}"
+
     # 記錄請求開始
     logger.debug(f"📨 {request.method} {request.path} - IP: {ip_address}")
 
@@ -270,41 +245,6 @@ REDIS_QUEUE_NAME = JOB_QUEUE
 WARMUP_STATUS_KEY = os.getenv('WARMUP_STATUS_KEY', 'worker:warmup:status')
 
 # ============================================
-# Database Connection Setup
-# ============================================
-from shared.database import Database, User, get_db_session, init_db
-from shared.config_base import (
-    DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME
-)
-
-# 初始化資料庫連接 (使用 shared.config_base 統一配置)
-db_client = None
-try:
-    db_client = Database(
-        host=DB_HOST,
-        port=DB_PORT,
-        user=DB_USER,
-        password=DB_PASSWORD,
-        database=DB_NAME
-    )
-    logger.info(f"✓ 資料庫連接成功: {DB_HOST}:{DB_PORT}/{DB_NAME}")
-except Exception as e:
-    logger.exception("⚠️ 資料庫連接失敗 (功能降級)")
-
-# ============================================
-# Flask-Login user_loader callback
-# ============================================
-@login_manager.user_loader
-def load_user(user_id):
-    """載入用戶（Flask-Login 回調）"""
-    try:
-        session = get_db_session()
-        return session.query(User).get(int(user_id))
-    except Exception as e:
-        logger.exception("載入用戶失敗")
-        return None
-
-# ============================================
 # Redis Connection Setup
 # ============================================
 try:
@@ -330,349 +270,6 @@ UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
 # ============================================
 # API Endpoints
 # ============================================
-
-# ============================================
-# Auth API - 會員認證
-# ============================================
-
-@app.route('/api/register', methods=['POST'])
-@limiter.limit("5 per minute")
-def api_register():
-    """
-    POST /api/register
-    會員註冊
-    
-    Request Body:
-    {
-        "email": "user@example.com",
-        "password": "password123",
-        "name": "用戶名稱"
-    }
-    
-    Response:
-    {
-        "success": true,
-        "user": {...}
-    }
-    """
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({'error': 'Missing JSON data'}), 400
-        
-        email = data.get('email', '').strip().lower()
-        password = data.get('password', '')
-        name = data.get('name', '').strip()
-        
-        # 驗證必填欄位
-        if not email or not password or not name:
-            return jsonify({'error': 'Email, password and name are required'}), 400
-        
-        # 驗證 Email 格式
-        if '@' not in email or '.' not in email:
-            return jsonify({'error': 'Invalid email format'}), 400
-        
-        # 驗證密碼長度
-        if len(password) < 6:
-            return jsonify({'error': 'Password must be at least 6 characters'}), 400
-        
-        session = get_db_session()
-        
-        # 檢查 Email 是否已存在
-        existing_user = session.query(User).filter_by(email=email).first()
-        if existing_user:
-            return jsonify({'error': 'Email already registered'}), 409
-        
-        # 建立新用戶
-        password_hash = bcrypt.generate_password_hash(password).decode('utf-8')
-        new_user = User(
-            email=email,
-            password_hash=password_hash,
-            name=name,
-            role='member'
-        )
-        
-        session.add(new_user)
-        session.commit()
-        
-        logger.info(f"✓ 新用戶註冊: {email}")
-        
-        return jsonify({
-            'success': True,
-            'user': new_user.to_dict()
-        }), 201
-    
-    except Exception as e:
-        logger.error(f"✗ 註冊失敗: {e}", exc_info=True)
-        return jsonify({'error': 'Internal server error'}), 500
-
-
-@app.route('/api/login', methods=['POST'])
-@limiter.limit("10 per minute")
-def api_login():
-    """
-    POST /api/login
-    會員登入
-    
-    Request Body:
-    {
-        "email": "user@example.com",
-        "password": "password123"
-    }
-    
-    Response:
-    {
-        "success": true,
-        "user": {...}
-    }
-    """
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({'error': 'Missing JSON data'}), 400
-        
-        email = data.get('email', '').strip().lower()
-        password = data.get('password', '')
-        
-        if not email or not password:
-            return jsonify({'error': 'Email and password are required'}), 400
-        
-        session = get_db_session()
-        user = session.query(User).filter_by(email=email).first()
-        
-        if not user:
-            return jsonify({'error': 'Invalid email or password'}), 401
-        
-        if not bcrypt.check_password_hash(user.password_hash, password):
-            return jsonify({'error': 'Invalid email or password'}), 401
-        
-        login_user(user, remember=True)
-        logger.info(f"✓ 用戶登入: {email}")
-        
-        return jsonify({
-            'success': True,
-            'user': user.to_dict()
-        }), 200
-    
-    except Exception as e:
-        logger.error(f"✗ 登入失敗: {e}", exc_info=True)
-        return jsonify({'error': 'Internal server error'}), 500
-
-
-@app.route('/api/logout', methods=['POST'])
-def api_logout():
-    """
-    POST /api/logout
-    會員登出
-    
-    Response:
-    {
-        "success": true,
-        "message": "Logged out successfully"
-    }
-    """
-    try:
-        if current_user.is_authenticated:
-            logger.info(f"✓ 用戶登出: {current_user.email}")
-        logout_user()
-        return jsonify({
-            'success': True,
-            'message': 'Logged out successfully'
-        }), 200
-    except Exception as e:
-        logger.error(f"✗ 登出失敗: {e}", exc_info=True)
-        return jsonify({'error': 'Internal server error'}), 500
-
-
-@app.route('/api/me', methods=['GET'])
-def api_me():
-    """
-    GET /api/me
-    檢查登入狀態
-    
-    Response:
-    {
-        "logged_in": true,
-        "user": {...}
-    }
-    """
-    try:
-        if current_user.is_authenticated:
-            return jsonify({
-                'logged_in': True,
-                'user': current_user.to_dict()
-            }), 200
-        else:
-            return jsonify({
-                'logged_in': False,
-                'user': None
-            }), 200
-    except Exception as e:
-        logger.error(f"✗ 檢查登入狀態失敗: {e}", exc_info=True)
-        return jsonify({
-            'logged_in': False,
-            'user': None
-        }), 200
-
-
-# ============================================
-# Member API - 會員管理
-# ============================================
-
-@app.route('/api/user/profile', methods=['PUT'])
-@login_required
-def api_update_profile():
-    """
-    PUT /api/user/profile
-    修改個人資料
-    
-    Request Body:
-    {
-        "name": "新名稱",
-        "email": "new@example.com"  // 可選
-    }
-    
-    Response:
-    {
-        "success": true,
-        "user": {...}
-    }
-    """
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({'error': 'Missing JSON data'}), 400
-        
-        session = get_db_session()
-        user = session.query(User).get(current_user.id)
-        
-        if not user:
-            return jsonify({'error': 'User not found'}), 404
-        
-        # 更新名稱
-        if 'name' in data:
-            name = data['name'].strip()
-            if name:
-                user.name = name
-        
-        # 更新 Email（需要檢查唯一性）
-        if 'email' in data:
-            new_email = data['email'].strip().lower()
-            if new_email and new_email != user.email:
-                existing = session.query(User).filter_by(email=new_email).first()
-                if existing:
-                    return jsonify({'error': 'Email already in use'}), 409
-                user.email = new_email
-        
-        session.commit()
-        logger.info(f"✓ 用戶資料更新: {user.email}")
-        
-        return jsonify({
-            'success': True,
-            'user': user.to_dict()
-        }), 200
-    
-    except Exception as e:
-        logger.error(f"✗ 更新資料失敗: {e}", exc_info=True)
-        return jsonify({'error': 'Internal server error'}), 500
-
-
-@app.route('/api/user/password', methods=['PUT'])
-@login_required
-def api_update_password():
-    """
-    PUT /api/user/password
-    修改密碼
-    
-    Request Body:
-    {
-        "old_password": "舊密碼",
-        "new_password": "新密碼"
-    }
-    
-    Response:
-    {
-        "success": true,
-        "message": "Password updated successfully"
-    }
-    """
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({'error': 'Missing JSON data'}), 400
-        
-        old_password = data.get('old_password', '')
-        new_password = data.get('new_password', '')
-        
-        if not old_password or not new_password:
-            return jsonify({'error': 'Old password and new password are required'}), 400
-        
-        if len(new_password) < 6:
-            return jsonify({'error': 'New password must be at least 6 characters'}), 400
-        
-        session = get_db_session()
-        user = session.query(User).get(current_user.id)
-        
-        if not user:
-            return jsonify({'error': 'User not found'}), 404
-        
-        # 驗證舊密碼
-        if not bcrypt.check_password_hash(user.password_hash, old_password):
-            return jsonify({'error': 'Old password is incorrect'}), 401
-        
-        # 更新密碼
-        user.password_hash = bcrypt.generate_password_hash(new_password).decode('utf-8')
-        session.commit()
-        
-        logger.info(f"✓ 用戶密碼更新: {user.email}")
-        
-        return jsonify({
-            'success': True,
-            'message': 'Password updated successfully'
-        }), 200
-    
-    except Exception as e:
-        logger.error(f"✗ 更新密碼失敗: {e}", exc_info=True)
-        return jsonify({'error': 'Internal server error'}), 500
-
-
-@app.route('/api/user/delete', methods=['DELETE'])
-@login_required
-def api_delete_user():
-    """
-    DELETE /api/user/delete
-    刪除帳號
-    
-    Response:
-    {
-        "success": true,
-        "message": "Account deleted successfully"
-    }
-    """
-    try:
-        session = get_db_session()
-        user = session.query(User).get(current_user.id)
-        
-        if not user:
-            return jsonify({'error': 'User not found'}), 404
-        
-        email = user.email
-        
-        # 刪除用戶（CASCADE 會處理相關的 jobs）
-        session.delete(user)
-        session.commit()
-        
-        logout_user()
-        logger.info(f"✓ 用戶帳號刪除: {email}")
-        
-        return jsonify({
-            'success': True,
-            'message': 'Account deleted successfully'
-        }), 200
-    
-    except Exception as e:
-        logger.error(f"✗ 刪除帳號失敗: {e}", exc_info=True)
-        return jsonify({'error': 'Internal server error'}), 500
 
 
 # ============================================
@@ -845,11 +442,8 @@ def generate():
                 return jsonify({'error': 'Invalid base64 audio data'}), 400
         # 2. 生成唯一的 job_id
         job_id = str(uuid.uuid4())
-        user_id_for_job = current_user.id if current_user.is_authenticated else None
-        user_label_for_job = f"user:{user_id_for_job}" if user_id_for_job else getattr(g, 'user_id', 'anonymous')
-        if not user_label_for_job:
-            user_label_for_job = 'anonymous'
-        
+        user_label_for_job = getattr(g, 'user_id', 'anonymous') or 'anonymous'
+
         # 3. 构造任务数据 (包含所有前端傳來的參數)
         job_data = {
             'job_id': job_id,
@@ -859,7 +453,7 @@ def generate():
             'workflow': workflow,
             'workflow_requested': workflow_resolution.requested_id,
             'workflow_resolution': workflow_resolution.source,
-            'user_id': user_id_for_job,
+            'user_id': None,
             'user_label': user_label_for_job,
             'model': data.get('model', 'turbo_fp8'),
             'aspect_ratio': data.get('aspect_ratio', '1:1'),
@@ -924,51 +518,24 @@ def generate():
             else:
                 logger.info(f"🔧 [TEST MODE] ❌ 未檢測到圖片上傳，繼續正常流程")
         
-        # ===== Phase 10: 嚴格事務處理開始 =====
         # 4. 檢查 Redis 可用性
         if redis_client is None:
             logger.error("Redis 客户端未初始化")
             return jsonify({'error': 'Redis service unavailable'}), 503
-        
-        # 5. 開始資料庫事務 (使用 SQLAlchemy Session)
-        session = get_db_session()
-        
+
+        trace_extra = {
+            'job_id': job_id,
+            'workflow': workflow,
+            'user_label': user_label_for_job,
+        }
+
         try:
-            # Member System: 獲取當前用戶 ID（如已登入）
-            # 6. 建立 Job 物件並加入 Session
-            from shared.database import Job
-            new_job = Job(
-                id=job_id,
-                user_id=user_id_for_job,
-                prompt=prompt,
-                workflow_name=workflow,
-                workflow_data=job_data,
-                model=job_data.get('model', 'turbo_fp8'),
-                aspect_ratio=job_data.get('aspect_ratio', '1:1'),
-                batch_size=job_data.get('batch_size', 1),
-                seed=job_data.get('seed', -1),
-                status='queued',
-                input_audio_path=job_data.get('audio', None)
-            )
-            session.add(new_job)
-            
-            # 7. Flush：強制寫入資料庫但不提交事務
-            session.flush()
-            trace_extra = {
-                'job_id': job_id,
-                'workflow': workflow,
-                'user_id': user_id_for_job,
-                'user_label': user_label_for_job,
-            }
-            logger.info("job db record flushed", extra=trace_extra)
-            logger.info(f"✓ Job {job_id} 已寫入資料庫 (未提交)")
-            
-            # 8. 推送到 Redis 佇列
+            # 5. 推送到 Redis 佇列
             redis_client.rpush(REDIS_QUEUE_NAME, json.dumps(job_data))
             logger.info("job enqueued to redis", extra=trace_extra)
             logger.info(f"✓ Job {job_id} 已推送至 Redis")
-            
-            # 9. 初始化 Redis 狀態 Hash
+
+            # 6. 初始化 Redis 狀態 Hash
             status_key = f"job:status:{job_id}"
             redis_client.hset(status_key, mapping={
                 'job_id': job_id,
@@ -980,44 +547,23 @@ def generate():
             })
             redis_client.expire(status_key, 86400)  # 24小时过期
             logger.info(f"✓ Job {job_id} Redis 狀態已初始化")
-            
-            # 10. 提交事務
-            session.commit()
-            logger.info(f"✓ Job {job_id} 事務已提交")
-            
-            # 11. 返回成功响应 (只有在事務提交成功後才返回)
+
+            # 7. 返回成功响应
             return jsonify({
                 'job_id': job_id,
                 'status': 'queued',
                 'message': '任務已成功提交'
             }), 200
-            
-        except RedisError as redis_err:
-            # Redis 失敗：回滾資料庫
-            session.rollback()
-            logger.exception("❌ Redis Push 失敗，已回滾資料庫")
+
+        except RedisError:
+            logger.exception("❌ Redis Push 失敗")
             return jsonify({
                 'error': OPERATION_FAILED_MESSAGE
             }), 500
-            
-        except Exception as db_err:
-            # 資料庫錯誤：回滾
-            session.rollback()
-            logger.exception("❌ 資料庫操作失敗")
-            return jsonify({
-                'error': OPERATION_FAILED_MESSAGE
-            }), 500
-        
-        # ===== Phase 10: 嚴格事務處理結束 =====
-    
+
     except Exception as e:
         logger.exception("✗ generate 接口异常")
         return jsonify({'error': INTERNAL_SERVER_ERROR_MESSAGE}), 500
-    
-    finally:
-        # 確保 Session 關閉
-        if session:
-            session.close()
 
 
 @app.route('/api/status/<job_id>', methods=['GET'])
@@ -1026,10 +572,10 @@ def status(job_id):
     """
     GET /api/status/<job_id>
     查询任务状态
-    
-    ⭐ Phase 10: 增強查詢邏輯 - 優先 Redis，回退至資料庫
-    流程: Redis (活動任務) → Database (歷史任務) → 404
-    
+
+    流程: Redis (活動任務) → 404
+    (無歷史資料庫回退，Job 狀態僅存活於 Redis TTL 期間)
+
     Response:
     {
         "job_id": "...",
@@ -1046,12 +592,8 @@ def status(job_id):
             job_status = redis_client.hgetall(status_key)
             
             if job_status:
-                # Redis 中找到任務，同步到資料庫（如果已完成）
                 current_status = job_status.get('status', 'unknown')
-                if db_client and current_status in ['finished', 'failed', 'cancelled']:
-                    output_path = job_status.get('image_url', '')
-                    db_client.update_job_status(job_id, current_status, output_path)
-                
+
                 # 返回 Redis 中的狀態
                 return jsonify({
                     'job_id': str(escape(job_status.get('job_id', job_id))),
@@ -1061,46 +603,13 @@ def status(job_id):
                     'error': str(escape(job_status.get('error', ''))),
                     'source': 'redis'  # 標記數據來源
                 }), 200
-        
-        # 2. Redis 中沒找到，查詢資料庫 (歷史任務或 Redis 過期)
-        if db_client:
-            session = get_db_session()
-            try:
-                from shared.database import Job
-                
-                # 查詢資料庫中的任務記錄
-                job = session.query(Job).filter_by(id=job_id).first()
-                
-                if job:
-                    # 從資料庫恢復狀態
-                    logger.info(f"✓ 從資料庫恢復任務狀態: {job_id} (status={job.status})")
-                    
-                    # 處理 output_path 轉換為 image_url 格式
-                    image_url = ''
-                    if job.status == 'finished':
-                        # 從 Job ID 推導輸出檔案路徑 (根據實際儲存邏輯)
-                        # 假設格式為: {job_id}_0.png
-                        image_url = f"/outputs/{job_id}_0.png"
-                    
-                    return jsonify({
-                        'job_id': str(escape(job.id)),
-                        'status': str(escape(job.status)),
-                        'progress': 100 if job.status == 'finished' else 0,
-                        'image_url': str(escape(image_url)),
-                        'error': '',
-                        'source': 'database',  # 標記數據來源
-                        'created_at': job.created_at.isoformat() if job.created_at else None
-                    }), 200
-                    
-            finally:
-                session.close()
-        
-        # 3. Redis 和資料庫都沒找到，返回 404
-        logger.warning(f"任務不存在: job_id={job_id} (Redis 和資料庫均未找到)")
+
+        # 2. Redis 中沒找到（不存在或已過期），返回 404
+        logger.warning(f"任務不存在: job_id={job_id} (Redis 未找到，可能已過期)")
         return jsonify({
             'error': 'Job not found',
             'job_id': job_id,
-            'message': '任務不存在或已被刪除'
+            'message': '任務不存在或已過期'
         }), 404
     
     except Exception as e:
@@ -1155,98 +664,6 @@ def cancel_job(job_id):
     
     except Exception as e:
         logger.error(f"✗ cancel 接口异常: {e}", exc_info=True)
-        return jsonify({'error': 'Internal server error'}), 500
-
-
-@app.route('/api/history', methods=['GET'])
-def get_history():
-    """
-    GET /api/history?limit=50&offset=0
-    獲取歷史記錄列表
-    
-    Query Parameters:
-        limit: 返回數量 (預設 50)
-        offset: 偏移量 (預設 0)
-    
-    Response:
-    {
-        "total": 120,
-        "limit": 50,
-        "offset": 0,
-        "jobs": [
-            {
-                "id": "uuid",
-                "prompt": "...",
-                "workflow": "text_to_image",
-                "model": "turbo_fp8",
-                "status": "finished",
-                "output_path": "/outputs/xxx.png,/outputs/yyy.png",
-                "created_at": "2024-12-31T10:00:00"
-            }
-        ]
-    }
-    """
-    try:
-        if db_client is None:
-            logger.error("資料庫未初始化")
-            return jsonify({'error': 'Database service unavailable'}), 503
-        
-        # 解析查詢參數
-        limit = int(request.args.get('limit', 50))
-        offset = int(request.args.get('offset', 0))
-        
-        # 顯式邊界檢查
-        if limit > 100:
-            limit = 100
-        elif limit < 1:
-            limit = 1
-            
-        if offset < 0:
-            offset = 0
-        
-        logger.info(f"📥 準備查詢資料庫: db_client={db_client is not None}, limit={limit}, offset={offset}")
-        
-        # Member System: 按登入用戶過濾
-        user_id_filter = None
-        if current_user.is_authenticated:
-            user_id_filter = current_user.id
-            logger.info(f"🔒 會員模式: 過濾 user_id={user_id_filter}")
-        
-        # 從資料庫獲取歷史記錄
-        jobs = db_client.get_history(limit=limit, offset=offset, user_id=user_id_filter)
-        jobs = normalize_history_jobs(PROJECT_ROOT, jobs)
-
-        logger.info(f"📤 資料庫返回: {len(jobs)} 筆記錄")
-        
-        # 處理 output_path：轉換為前端可訪問的 URL 格式
-        for job in jobs:
-            output_path = job.get('output_path')
-            if output_path:
-                # 如果是逗號分隔的多個路徑，處理每一個
-                paths = output_path.split(',')
-                # 移除路徑前綴，只保留檔名，並轉換為 URL 格式
-                formatted_paths = []
-                for path in paths:
-                    path = path.strip()
-                    if path:
-                        # 提取檔名（移除可能的路徑前綴）
-                        filename = path.split('/')[-1].split('\\')[-1]
-                        # 轉換為完整 URL
-                        formatted_paths.append(f"/outputs/{filename}")
-                # 用逗號連接所有路徑
-                job['output_path'] = ','.join(formatted_paths) if formatted_paths else ''
-        
-        logger.info(f"✓ 查詢歷史記錄: {len(jobs)} 筆 (limit={limit}, offset={offset})")
-        
-        return jsonify({
-            'total': len(jobs),  # 簡化版本，實際可查詢總數
-            'limit': limit,
-            'offset': offset,
-            'jobs': jobs
-        }), 200
-    
-    except Exception as e:
-        logger.error(f"✗ history 接口异常: {e}", exc_info=True)
         return jsonify({'error': 'Internal server error'}), 500
 
 
@@ -1305,7 +722,7 @@ def metrics():
 @app.route('/health', methods=['GET'])
 @app.route('/api/health', methods=['GET'])
 def health():
-    """健康检查接口 - 檢查 Redis 和 MySQL 狀態"""
+    """健康检查接口 - 檢查 Redis 狀態"""
     redis_status = 'healthy' if redis_client and redis_client.ping() else 'unavailable'
     worker_status = 'offline'
     warnings = []
@@ -1315,11 +732,9 @@ def health():
             worker_status = 'online' if redis_client.get('worker:heartbeat') else 'offline'
         except Exception as exc:
             logger.warning(f"讀取 Worker 心跳失敗: {exc.__class__.__name__}")
-    
-    mysql_status = 'unavailable'
-    if db_client:
-        mysql_status = 'healthy' if db_client.check_connection() else 'error'
-    
+
+    mysql_status = 'n/a'
+
     overall_status = 'ok' if redis_status == 'healthy' else 'degraded'
 
     if worker_status == 'offline':
@@ -1635,39 +1050,19 @@ def serve_output(filename):
 @app.route('/')
 def serve_index():
     """
-    根據登入狀態提供不同頁面：
-    - 未登入：返回 login.html
-    - 已登入：返回 dashboard.html (主應用)
+    單使用者模式：直接提供 dashboard.html（無登入閘門）
     """
     try:
         frontend_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'frontend')
         frontend_dir = os.path.abspath(frontend_dir)
-        target_document = resolve_root_document(Path(frontend_dir), current_user.is_authenticated)
+        target_document = resolve_root_document(Path(frontend_dir))
         target_path = os.path.join(frontend_dir, target_document)
         if os.path.exists(target_path):
             return send_from_directory(frontend_dir, target_document)
 
-        # 檢查登入狀態
-        if current_user.is_authenticated:
-            # 已登入：返回主應用頁面
-            dashboard_path = os.path.join(frontend_dir, 'dashboard.html')
-            if os.path.exists(dashboard_path):
-                logger.info(f"✓ 已登入用戶 {current_user.email}，返回 dashboard.html")
-                return send_from_directory(frontend_dir, 'dashboard.html')
-            else:
-                # 向後兼容：如果沒有 dashboard.html，使用 index.html
-                logger.warning(f"dashboard.html 不存在，使用 index.html")
-                return send_from_directory(frontend_dir, 'index.html')
-        else:
-            # 未登入：返回登入頁面
-            login_path = os.path.join(frontend_dir, 'login.html')
-            if os.path.exists(login_path):
-                logger.info("訪客訪問 /，返回 login.html")
-                return send_from_directory(frontend_dir, 'login.html')
-            else:
-                logger.error(f"login.html not found at {login_path}")
-                return jsonify({"error": "Login page not found"}), 404
-                
+        logger.error(f"frontend document not found at {target_path}")
+        return jsonify({"error": "Frontend not found"}), 404
+
     except Exception as e:
         logger.exception("Error serving page")
         return jsonify({"error": "Internal server error"}), 500
@@ -1684,22 +1079,9 @@ def serve_static(path):
     try:
         frontend_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'frontend')
         frontend_dir = os.path.abspath(frontend_dir)
-        redirect_target = resolve_legacy_redirect(path, current_user.is_authenticated)
+        redirect_target = resolve_legacy_redirect(path)
         if redirect_target:
             return redirect(redirect_target, code=302)
-
-        guest_only_pages = {'login.html'}
-        member_only_pages = {'dashboard.html', 'profile.html'}
-        legacy_pages = {'index.html'}
-
-        if path in guest_only_pages and current_user.is_authenticated:
-            return redirect('/dashboard.html', code=302)
-
-        if path in member_only_pages and not current_user.is_authenticated:
-            return redirect('/login.html', code=302)
-
-        if path in legacy_pages:
-            return redirect('/dashboard.html' if current_user.is_authenticated else '/login.html', code=302)
 
         if path == 'favicon.ico':
             favicon_path = os.path.join(frontend_dir, 'favicon.ico')

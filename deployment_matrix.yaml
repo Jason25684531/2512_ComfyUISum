@@ -6,7 +6,6 @@ topologies:
     env_file: .env.local
     services:
       - redis
-      - mysql
       - backend
       - worker
     external_dependencies: []
@@ -15,8 +14,6 @@ topologies:
       - DEPLOYMENT_TOPOLOGY
       - ENV_CONTRACT_FILE
       - REDIS_PASSWORD
-      - MYSQL_ROOT_PASSWORD
-      - DB_PASSWORD
       - SECRET_KEY
       - COMFYUI_SERVER_URL
       - COMFY_HOST

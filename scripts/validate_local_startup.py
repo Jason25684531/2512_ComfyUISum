@@ -1,9 +1,8 @@
 """本地啟動驗證腳本（Win ComfyUI + WSL2 Docker 拓撲）
 
-驗證三個服務是否可達：
+驗證兩個服務是否可達：
   1. ComfyUI  — GET http://<COMFYUI_SERVER_URL>/system_stats
   2. Redis    — PING via redis-py
-  3. MySQL    — SELECT 1 via pymysql
 
 全部 OK → exit 0
 任一 FAIL → exit 1
@@ -72,38 +71,11 @@ def _check_redis(host: str, port: int, password: str) -> tuple[bool, str]:
         return False, str(exc)
 
 
-def _check_mysql(host: str, port: int, user: str, password: str, db: str) -> tuple[bool, str]:
-    try:
-        import pymysql
-        conn = pymysql.connect(
-            host=host, port=port, user=user, password=password, database=db,
-            connect_timeout=5,
-        )
-        with conn.cursor() as cur:
-            cur.execute("SELECT 1")
-        conn.close()
-        return True, "SELECT 1 OK"
-    except ImportError:
-        import socket
-        try:
-            with socket.create_connection((host, port), timeout=5):
-                return True, "TCP OK (pymysql not installed)"
-        except Exception as exc:
-            return False, str(exc)
-    except Exception as exc:
-        return False, type(exc).__name__
-
-
 def main() -> int:
     comfyui_url = os.environ.get("COMFYUI_SERVER_URL", "http://host.docker.internal:8188")
     redis_host = os.environ.get("REDIS_HOST", "127.0.0.1")
     redis_port = int(os.environ.get("REDIS_PORT", "6379"))
     redis_pw = os.environ.get("REDIS_PASSWORD", "")
-    db_host = os.environ.get("DB_HOST", "127.0.0.1")
-    db_port = int(os.environ.get("DB_PORT", "3307"))
-    db_user = os.environ.get("DB_USER", "studio_user")
-    db_pw = os.environ.get("DB_PASSWORD", "")
-    db_name = os.environ.get("DB_NAME", "studio_db")
 
     results = []
 
@@ -112,9 +84,6 @@ def main() -> int:
 
     ok, detail = _check_redis(redis_host, redis_port, redis_pw)
     results.append(("Redis", f"{redis_host}:{redis_port}", ok, detail))
-
-    ok, detail = _check_mysql(db_host, db_port, db_user, db_pw, db_name)
-    results.append(("MySQL", f"{db_host}:{db_port}", ok, detail))
 
     col_w = [8, 40, 6, 30]
     header = f"{'Service':<{col_w[0]}}  {'Endpoint':<{col_w[1]}}  {'Status':<{col_w[2]}}  Detail"

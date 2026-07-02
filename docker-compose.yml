@@ -29,32 +29,11 @@ services:
     networks:
       - studio-net
 
-  # =========================================
-  # 2. MySQL 資料庫服務
-  # =========================================
-  mysql:
-    image: mysql:8.0
-    container_name: studio-mysql
-    ports:
-      - "3307:3306"
-    environment:
-      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
-      - MYSQL_DATABASE=studio_db
-      - MYSQL_USER=studio_user
-      - MYSQL_PASSWORD=${DB_PASSWORD}
-    volumes:
-      - ./mysql_data:/var/lib/mysql
-    restart: always
-    networks:
-      - studio-net
-    healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$$MYSQL_ROOT_PASSWORD"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+  # 註：舊版 mysql 服務與 ./mysql_data 磁碟區已移除（單一使用者模式不再需要 MySQL）。
+  # 若本機仍存在 mysql_data/ 目錄，屬於過期資料，可安全手動刪除。
 
   # =========================================
-  # 3. Backend API 服務
+  # 2. Backend API 服務
   # =========================================
   backend:
     build:
@@ -70,14 +49,7 @@ services:
       - STUDIO_ENV_FILE=.env.selected
       - FLASK_HOST=0.0.0.0
       - FLASK_PORT=5000
-      - DB_HOST=mysql
-      - DB_PORT=3306
-      - DB_USER=studio_user
-      - DB_PASSWORD=${DB_PASSWORD}
-      - DB_NAME=studio_db
     depends_on:
-      mysql:
-        condition: service_healthy
       redis:
         condition: service_started
     restart: always
@@ -116,12 +88,6 @@ services:
       # Worker 跑在 Linux 容器但 ComfyUI 在 Windows，model 路徑用反斜線格式
       - COMFYUI_RUNTIME_PROFILE=windows
 
-      - DB_HOST=mysql
-      - DB_PORT=3306
-      - DB_USER=studio_user
-      - DB_PASSWORD=${DB_PASSWORD}
-      - DB_NAME=studio_db
-
       - COMFYUI_INPUT_DIR=/worker/storage/inputs
       - COMFYUI_OUTPUT_DIR=/worker/storage/outputs
 
@@ -131,8 +97,6 @@ services:
     depends_on:
       redis:
         condition: service_started
-      mysql:
-        condition: service_healthy
     restart: always
     networks:
       - studio-net
