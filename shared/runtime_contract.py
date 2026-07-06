@@ -116,7 +116,6 @@ class RuntimeContractLoader:
             port_name="DB_PORT",
             default_host="localhost",
             default_port=3306,
-            alias_names={"mysql", "studio-mysql"},
         )
         api_origin = self._resolve_api_origin(deployment_topology)
         missing_secrets = self._missing_secrets(deployment_topology)

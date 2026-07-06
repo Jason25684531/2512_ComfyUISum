@@ -1,7 +1,7 @@
 # ============================================
 # TWCC Base VM 專用 - 常駐基礎服務
 # ============================================
-# 用途：TWCC v2.super 常駐 VM，僅包含 nginx + API + Redis + MySQL
+# 用途：TWCC v2.super 常駐 VM，僅包含 nginx + API + Redis
 # 不包含 Worker、ComfyUI、Ngrok（Worker 在 GPU VM 上直接運行）
 #
 # 使用方式：
@@ -64,25 +64,12 @@ services:
       - STUDIO_ENV_FILE=.env.selected
       - FLASK_HOST=0.0.0.0
       - FLASK_PORT=5000
-      - DB_HOST=${DB_HOST:-mysql}
-      - DB_PORT=${DB_INTERNAL_PORT:-3306}
-      - DB_USER=${DB_USER:-studio_user}
-      - DB_PASSWORD=${DB_PASSWORD}
-      - DB_NAME=${DB_NAME:-studio_db}
       - COMFYUI_HOST=${COMFYUI_HOST:-127.0.0.1}
       - COMFYUI_PORT=${COMFYUI_PORT:-8188}
       # TWCC 雲端專用
       - PROXY_FIX=${PROXY_FIX:-true}
       - SESSION_COOKIE_SECURE=${SESSION_COOKIE_SECURE:-true}
-      - STORAGE_BACKEND=${STORAGE_BACKEND:-s3}
-      - S3_ENDPOINT=${S3_ENDPOINT}
-      - S3_BUCKET=${S3_BUCKET}
-      - S3_ACCESS_KEY=${S3_ACCESS_KEY}
-      - S3_SECRET_KEY=${S3_SECRET_KEY}
-      - S3_REGION=${S3_REGION:-}
     depends_on:
-      mysql:
-        condition: service_healthy
       redis:
         condition: service_healthy
     restart: unless-stopped
@@ -152,42 +139,8 @@ services:
       timeout: 5s
       retries: 5
 
-  # =========================================
-  # MySQL 資料庫
-  # =========================================
-  mysql:
-    image: mysql:8.0
-    container_name: studio-mysql
-    ports:
-      - "${MYSQL_PORT:-3307}:3306"
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-    environment:
-      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
-      - MYSQL_DATABASE=${DB_NAME:-studio_db}
-      - MYSQL_USER=${DB_USER:-studio_user}
-      - MYSQL_PASSWORD=${DB_PASSWORD}
-    volumes:
-      - ${MYSQL_DATA_PATH:-./mysql_data}:/var/lib/mysql
-    restart: unless-stopped
-    networks:
-      - studio-net
-    deploy:
-      resources:
-        limits:
-          cpus: '2.0'
-          memory: 2G
-        reservations:
-          cpus: '0.5'
-          memory: 512M
-    healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$$MYSQL_ROOT_PASSWORD"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+  # 註：舊版 mysql 服務與 ${MYSQL_DATA_PATH:-./mysql_data} 磁碟區已移除（單一使用者模式不再需要 MySQL）。
+  # 若 TWCC VM 上仍存在 mysql_data/ 目錄，屬於過期資料，可安全手動刪除。
 
 networks:
   studio-net:

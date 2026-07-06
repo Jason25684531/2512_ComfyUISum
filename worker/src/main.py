@@ -275,13 +275,9 @@ def validate_local_output_file(filename: str, job_logger) -> tuple[Path, int]:
     return output_path, file_size
 
 
-def cleanup_old_output_files(db_client=None):
+def cleanup_old_output_files():
     """
     清理 storage/outputs 中超過 30 天的圖片檔案
-    並同步軟刪除資料庫記錄
-    
-    Args:
-        db_client: Database 客戶端實例（用於同步軟刪除）
     """
     if not COMFYUI_OUTPUT_DIR.exists():
         return
@@ -289,39 +285,27 @@ def cleanup_old_output_files(db_client=None):
     cutoff_time = datetime.now() - timedelta(days=30)
     deleted_count = 0
     total_size = 0
-    db_synced = 0
-    
+
     for filepath in COMFYUI_OUTPUT_DIR.glob("*"):
         if not filepath.is_file():
             continue
-        
+
         try:
             file_mtime = datetime.fromtimestamp(filepath.stat().st_mtime)
             if file_mtime < cutoff_time:
                 file_size = filepath.stat().st_size
-                filename = filepath.name
-                
+
                 # 刪除檔案
                 filepath.unlink()
                 deleted_count += 1
                 total_size += file_size
-                
-                # 同步軟刪除資料庫記錄 (如果有資料庫連接)
-                if db_client:
-                    try:
-                        if db_client.soft_delete_by_output_path(filename):
-                            db_synced += 1
-                    except Exception as db_err:
-                        logger.warning(f"⚠️ 資料庫軟刪除失敗: {db_err}")
-                
+
         except Exception as e:
             logger.warning(f"⚠️ 無法刪除 {filepath}: {e}")
-    
+
     if deleted_count > 0:
         size_mb = total_size / (1024 * 1024)
         logger.info(f"🗑️ 已清理 {deleted_count} 個超過 30 天的輸出圖片 (釋放 {size_mb:.2f} MB)")
-        if db_client and db_synced > 0:
-            logger.info(f"📊 已同步軟刪除資料庫記錄: {db_synced} 筆")
 
 
 def worker_heartbeat(redis_client):
@@ -351,11 +335,10 @@ def update_job_status(
     image_url: str = None,
     error: str = None,
     public_error: bool = False,
-    db_client=None
 ):
     """
-    更新任務狀態到 Redis 和 MySQL
-    
+    更新任務狀態到 Redis
+
     Args:
         r: Redis 客戶端
         job_id: 任務 ID
@@ -363,55 +346,24 @@ def update_job_status(
         progress: 進度 (0-100)
         image_url: 輸出圖片 URL
         error: 錯誤訊息
-        db_client: Database 客戶端 (可選，用於同步到 MySQL)
     """
-    # 1. 更新 Redis
     status_key = f"job:status:{job_id}"
     data = {
         "status": status,
         "progress": progress
     }
-    
+
     if image_url:
         data["image_url"] = image_url
     if error:
         data["error"] = error if public_error else get_public_error_message(error)
-    
+
     r.hset(status_key, mapping=data)
     r.expire(status_key, JOB_STATUS_EXPIRE_SECONDS)
     logger.info(f"✓ Redis 狀態更新: {job_id} -> {status}")
-    
-    # 2. 同步到 MySQL (如果可用且狀態為 finished 或 failed)
-    if db_client and status in ['finished', 'failed']:
-        try:
-            # 轉換 image_url 為 output_path (去除 /outputs/ 前綴)
-            output_path = None
-            if image_url:
-                output_path = image_url.replace('/outputs/', '')
-
-            import inspect
-
-            update_kwargs = {
-                "job_id": job_id,
-                "status": status,
-            }
-            update_signature = inspect.signature(db_client.update_job_status)
-            if "image_url" in update_signature.parameters:
-                update_kwargs["image_url"] = image_url
-            elif "output_path" in update_signature.parameters:
-                update_kwargs["output_path"] = output_path
-
-            success = db_client.update_job_status(**update_kwargs)
-            if success:
-                logger.info(f"✓ MySQL 狀態同步: {job_id} -> {status}")
-            else:
-                logger.warning(f"⚠️ MySQL 狀態同步失敗: {job_id}")
-        except Exception as e:
-            logger.exception("❌ MySQL 同步錯誤")
 
 
-
-def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=None):
+def process_job(r: redis.Redis, client: ComfyClient, job_data: dict):
     """
     處理單個任務
     
@@ -459,7 +411,7 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
     
     try:
         # 1. 更新狀態為處理中
-        update_job_status(r, job_id, "processing", progress=10, db_client=db_client)
+        update_job_status(r, job_id, "processing", progress=10)
         
         # 2. 提取參數
         prompt = job_data.get("prompt", "")
@@ -490,7 +442,7 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
         
         # 3. 處理上傳的圖片 (base64 -> 檔案)
         # 3. 處理上傳的圖片 (base64 -> 檔案)
-        update_job_status(r, job_id, "processing", progress=15, db_client=db_client)
+        update_job_status(r, job_id, "processing", progress=15)
         
         image_files = {}  # 儲存檔名映射 {"source": "upload_xxx_source.png"}
         if images:
@@ -524,7 +476,7 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
                 comfyui_audio_file = ""
         
         # 4. 解析 workflow (包含圖片與音訊注入)
-        update_job_status(r, job_id, "processing", progress=20, db_client=db_client)
+        update_job_status(r, job_id, "processing", progress=20)
         
         job_logger.info("parse start")
         workflow = parse_workflow(
@@ -547,7 +499,7 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
             raise Exception("無法連接 ComfyUI，請確認是否已啟動")
         
         # 6. 提交任務到 ComfyUI
-        update_job_status(r, job_id, "processing", progress=30, db_client=db_client)
+        update_job_status(r, job_id, "processing", progress=30)
         if not client.check_connection():
             raise RuntimeError(COMFYUI_UNAVAILABLE)
         
@@ -572,7 +524,7 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
             
             # 將進度從 30% 開始映射到 30-95%
             mapped_progress = 30 + int(progress * 0.65)
-            update_job_status(r, job_id, "processing", progress=mapped_progress, db_client=db_client)
+            update_job_status(r, job_id, "processing", progress=mapped_progress)
             job_logger.info("progress heartbeat: progress=%s mapped_progress=%s", progress, mapped_progress)
 
         # 8. 等待 ComfyUI 執行完成
@@ -693,23 +645,22 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
                             "failed",
                             progress=95,
                             error=COMFYUI_OUTPUT_MISSING,
-                            db_client=db_client,
                         )
                         job_logger.error(f"❌ 本地輸出落庫失敗: {output_err}")
                         return
 
                     # 無論是圖片還是影片，都通過 image_url 欄位回傳 (前端會根據副檔名判斷)
                     file_url = f"/outputs/{new_filename}"
-                    update_job_status(r, job_id, "finished", progress=100, image_url=file_url, db_client=db_client)
+                    update_job_status(r, job_id, "finished", progress=100, image_url=file_url)
                     job_logger.info(
                         f"✅ 任務完成，輸出 ({output_type}): {file_url} "
                         f"-> {local_output_path.name} ({file_size} bytes)"
                     )
                 else:
-                    update_job_status(r, job_id, "finished", progress=100, db_client=db_client)
+                    update_job_status(r, job_id, "finished", progress=100)
                     job_logger.warning("⚠️ 任務完成，但所有輸出檔案都無法複製")
             else:
-                update_job_status(r, job_id, "finished", progress=100, db_client=db_client)
+                update_job_status(r, job_id, "finished", progress=100)
                 job_logger.info("✅ 任務完成，但沒有輸出檔案")
         else:
             error = result.get("error", "未知錯誤")
@@ -732,21 +683,21 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict, db_client=N
                                 validate_local_output_file(new_filename, job_logger)
                             except Exception as output_err:
                                 job_logger.warning(f"⚠️ 部分輸出驗證失敗: {output_err}")
-                                update_job_status(r, job_id, "failed", error=error, db_client=db_client)
+                                update_job_status(r, job_id, "failed", error=error)
                                 return
                             file_url = f"/outputs/{new_filename}"
-                            update_job_status(r, job_id, "failed", error=f"{error} (partial output saved)", image_url=file_url, db_client=db_client)
+                            update_job_status(r, job_id, "failed", error=f"{error} (partial output saved)", image_url=file_url)
                             job_logger.info(f"⚠️ 任務超時但已保存部分輸出: {file_url}")
                             return
                 except Exception as partial_err:
                     job_logger.warning(f"⚠️ 獲取部分輸出失敗: {partial_err}")
             
-            update_job_status(r, job_id, "failed", error=error, db_client=db_client)
+            update_job_status(r, job_id, "failed", error=error)
             job_logger.error(f"❌ 任務失敗: {error}")
             
     except Exception as e:
         job_logger.exception("❌ 處理錯誤")
-        update_job_status(r, job_id, "failed", progress=0, error=ENGINE_EXECUTION_FAILED, db_client=db_client)
+        update_job_status(r, job_id, "failed", progress=0, error=ENGINE_EXECUTION_FAILED)
 
 
 def main():
@@ -767,10 +718,7 @@ def main():
         logger.exception("❌ Redis 連接失敗")
         sys.exit(1)
     
-    # 2. 資料庫已移除，MySQL 相關功能不再使用 (Redis 為唯一狀態來源)
-    db_client = None
-
-    # 3. 初始化 ComfyUI 客戶端
+    # 2. 初始化 ComfyUI 客戶端
     client = ComfyClient()
     warmup_controller = WarmupController(
         redis_client=r,
@@ -779,12 +727,12 @@ def main():
         queue_name=JOB_QUEUE,
     )
 
-    # 4. 啟動 Worker 心跳線程
+    # 3. 啟動 Worker 心跳線程
     logger.info("💓 啟動 Worker 心跳線程...")
     heartbeat_thread = threading.Thread(target=worker_heartbeat, args=(r,), daemon=True)
     heartbeat_thread.start()
-    
-    # 5. 檢查 ComfyUI 連接
+
+    # 4. 檢查 ComfyUI 連接
     if client.check_connection():
         logger.info("✅ ComfyUI 連接成功")
 
@@ -794,15 +742,15 @@ def main():
         logger.warning("⚠️ ComfyUI 尚未啟動，將持續等待...")
         warmup_controller.mark_unavailable()
     
-    # 6. 清理舊的暫存檔案
+    # 5. 清理舊的暫存檔案
     logger.info("🗑️ 清理過期暫存檔案...")
     cleanup_old_temp_files()
     
-    # 7. 清理超過 30 天的輸出圖片 (並同步資料庫)
+    # 6. 清理超過 30 天的輸出圖片
     logger.info("🗑️ 清理超過 30 天的輸出圖片...")
-    cleanup_old_output_files(db_client)
+    cleanup_old_output_files()
 
-    # 8. 開始處理佇列
+    # 7. 開始處理佇列
     logger.info(f"\n監聽佇列: {JOB_QUEUE}")
     logger.info(f"ComfyUI Input 目錄: {COMFYUI_INPUT_DIR}")
     logger.info(f"暖機模式: {WARMUP_MODE}")
@@ -818,7 +766,7 @@ def main():
             # 定期清理暫存檔案和輸出圖片
             if time.time() - last_cleanup_time > CLEANUP_INTERVAL:
                 cleanup_old_temp_files()
-                cleanup_old_output_files(db_client)
+                cleanup_old_output_files()
                 last_cleanup_time = time.time()
             
             # BLPOP: 阻塞式取出任務 (超時 5 秒)
@@ -834,7 +782,7 @@ def main():
                     job_data = json.loads(job_json)
                     _current_job_id = job_data.get('job_id', 'unknown')
                     warmup_controller.request_priority_handoff()
-                    process_job(r, client, job_data, db_client)
+                    process_job(r, client, job_data)
                     _current_job_id = None
                 except json.JSONDecodeError as e:
                     logger.exception("JSON 解析錯誤")

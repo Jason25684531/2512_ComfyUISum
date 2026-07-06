@@ -1,5 +1,10 @@
 # MinIO S3 策略與 TWCC COS 整合說明
 
+> ⚠️ **狀態：此策略已放棄**（`cleanup-dead-refs-and-twcc-mysql` 變更）。
+> `shared/storage_service.py` 的 `_create_storage()` 已確認永遠回傳本地儲存（`LocalStorage`），
+> `S3Storage` class 與相關 TWCC COS/S3 部署設定已一併移除。
+> 本文件僅保留歷史決策脈絡，不代表目前架構行為。
+
 > **文檔日期**: 2026-03-10  
 > **分支**: `feature/twcc-linux-migration`  
 > **目的**: 解釋為什麼引入 MinIO 本地測試環境，以及它與 TWCC COS 的關係

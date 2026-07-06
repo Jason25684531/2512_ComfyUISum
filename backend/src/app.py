@@ -971,36 +971,16 @@ def serve_output(filename):
     Current target is local filesystem output serving only.
     支援 .png, .jpg, .mp4 等格式
     防止路徑穿越攻擊
-    
-    當 STORAGE_BACKEND=s3 時，回傳 302 redirect 到 COS pre-signed URL
-    當 STORAGE_BACKEND=local 時，維持既有的 send_from_directory 行為
     """
     import mimetypes
-    from flask import abort, redirect
-    
+    from flask import abort
+
     # 強制清洗檔名，截斷路徑穿越與 Open Redirect 的污點
     safe_filename = secure_filename(filename)
     if not safe_filename:
         logger.warning(f"⚠️ 不安全的檔名: {filename}")
         return abort(400)
-    
-    # ===== S3 模式：嘗試產生 pre-signed URL 做 302 redirect =====
-    storage_backend = os.getenv('STORAGE_BACKEND', 'local').lower()
-    if False and storage_backend == 's3':
-        try:
-            from shared.storage_service import storage
-            remote_key = f"outputs/{safe_filename}"
-            if storage.file_exists(remote_key):
-                presigned_url = storage.get_presigned_url(remote_key, expires=3600)
-                if presigned_url:
-                    logger.info(f"☁️ S3 redirect: {safe_filename}")
-                    return redirect(presigned_url, code=302)
-            # S3 上找不到，降級為本地檔案系統
-            logger.warning(f"⚠️ S3 檔案不存在，嘗試本地: {safe_filename}")
-        except Exception as s3_err:
-            logger.warning(f"⚠️ S3 存取失敗，降級為本地: {s3_err}")
-    
-    # ===== 本地模式（或 S3 降級）=====
+
     # Get the absolute path to storage/outputs
     outputs_dir = os.getenv("STORAGE_OUTPUT_DIR")
     if not outputs_dir:
@@ -1109,9 +1089,9 @@ def serve_static(path):
         if os.path.exists(file_path) and os.path.isfile(file_path):
             return send_from_directory(frontend_dir, path)
         else:
-            # 文件不存在，返回 index.html（支持 SPA 路由）
-            logger.warning(f"File not found: {path}, serving index.html instead")
-            return send_from_directory(frontend_dir, 'index.html')
+            # 文件不存在，返回 dashboard.html（單使用者模式首頁，支持 SPA 路由）
+            logger.warning(f"File not found: {path}, serving dashboard.html instead")
+            return send_from_directory(frontend_dir, 'dashboard.html')
             
     except Exception as e:
         logger.exception("Error serving static file")

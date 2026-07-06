@@ -5,6 +5,8 @@ import glob
 # 取得目前腳本路徑並推算根目錄
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WORKFLOW_SRC = os.path.join(BASE_DIR, "ComfyUIworkflow")
+# 注意：worker 的路徑解析邏輯（worker/src/workflow_registry.py、worker/src/workflow/loader.py）
+# 不會讀取這個資料夾，此輸出僅供人工比對用，非執行期必要產物
 WORKFLOW_OUT = os.path.join(WORKFLOW_SRC, "linux_fixed")
 
 # 確保輸出資料夾存在
@@ -77,3 +79,4 @@ for file_path in target_files:
         print(f"❌ 錯誤於 {file_name}: {e}")
 
 print(f"\n✅ 修正完成！請查看：{WORKFLOW_OUT}")
+print("⚠️  提醒：worker 執行期不會讀取此資料夾，僅供人工比對，請勿視為必要產物")

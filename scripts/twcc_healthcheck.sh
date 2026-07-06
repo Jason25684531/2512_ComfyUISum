@@ -22,7 +22,6 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 NGINX_CONTAINER="studio-nginx"
 BACKEND_CONTAINER="studio-backend"
 REDIS_CONTAINER="studio-redis"
-MYSQL_CONTAINER="studio-mysql"
 
 # 載入環境變數
 if [ -f "$PROJECT_DIR/.env.twcc" ]; then
@@ -36,7 +35,6 @@ elif [ -f "$PROJECT_DIR/.env" ]; then
 fi
 
 REDIS_PASSWORD="${REDIS_PASSWORD:-}"
-MYSQL_ROOT_PASSWORD="${MYSQL_ROOT_PASSWORD:-}"
 
 echo "=========================================="
 echo "  Studio Core — TWCC 健康檢查"
@@ -98,8 +96,6 @@ warn_check "容器 [studio-backend] 運行中" \
     "docker ps --filter name=${BACKEND_CONTAINER} --filter status=running --format '{{.Names}}' | grep -q ${BACKEND_CONTAINER}"
 warn_check "容器 [studio-redis] 運行中" \
     "docker ps --filter name=${REDIS_CONTAINER} --filter status=running --format '{{.Names}}' | grep -q ${REDIS_CONTAINER}"
-warn_check "容器 [studio-mysql] 運行中" \
-    "docker ps --filter name=${MYSQL_CONTAINER} --filter status=running --format '{{.Names}}' | grep -q ${MYSQL_CONTAINER}"
 echo ""
 
 # ==========================================
@@ -133,26 +129,7 @@ fi
 echo ""
 
 # ==========================================
-# 3. MySQL 檢查
-# ==========================================
-echo "--- MySQL ---"
-
-MYSQL_PWD="${MYSQL_ROOT_PASSWORD}"
-if [ -n "$MYSQL_PWD" ]; then
-    check "MySQL 連線正常" \
-        "docker exec ${MYSQL_CONTAINER} mysql -u root -p'$MYSQL_PWD' -e 'SELECT 1;' > /dev/null 2>&1"
-
-    check "studio_db 資料庫存在" \
-        "docker exec ${MYSQL_CONTAINER} mysql -u root -p'$MYSQL_PWD' -e 'USE studio_db;' > /dev/null 2>&1"
-else
-    TOTAL=$((TOTAL + 1))
-    WARNED=$((WARNED + 1))
-    echo -e "$WARN MySQL 密碼未設定（MYSQL_ROOT_PASSWORD），跳過資料庫檢查"
-fi
-echo ""
-
-# ==========================================
-# 4. Nginx / HTTP 檢查
+# 3. Nginx / HTTP 檢查
 # ==========================================
 echo "--- Nginx / HTTP ---"
 
@@ -168,34 +145,7 @@ fi
 echo ""
 
 # ==========================================
-# 5. COS (S3) 檢查
-# ==========================================
-echo "--- TWCC COS (S3) ---"
-
-S3_EP="${S3_ENDPOINT:-}"
-S3_AK="${S3_ACCESS_KEY:-}"
-S3_SK="${S3_SECRET_KEY:-}"
-S3_BK="${S3_BUCKET:-studio-outputs}"
-STORAGE="${STORAGE_BACKEND:-local}"
-
-if [ "$STORAGE" = "s3" ] && [ -n "$S3_EP" ] && [ -n "$S3_AK" ] && [ -n "$S3_SK" ]; then
-    if command -v aws > /dev/null 2>&1; then
-        check "COS Bucket 可存取" \
-            "AWS_ACCESS_KEY_ID='$S3_AK' AWS_SECRET_ACCESS_KEY='$S3_SK' aws s3api head-bucket --bucket '$S3_BK' --endpoint-url '$S3_EP' 2>&1"
-    else
-        TOTAL=$((TOTAL + 1))
-        WARNED=$((WARNED + 1))
-        echo -e "$WARN aws CLI 未安裝，跳過 COS Bucket 驗證"
-    fi
-else
-    TOTAL=$((TOTAL + 1))
-    WARNED=$((WARNED + 1))
-    echo -e "$WARN S3 未啟用或變數未設定 (STORAGE_BACKEND=$STORAGE)，跳過 COS 檢查"
-fi
-echo ""
-
-# ==========================================
-# 6. Worker 心跳檢查
+# 4. Worker 心跳檢查
 # ==========================================
 echo "--- Worker 心跳 ---"
 
@@ -219,7 +169,7 @@ fi
 echo ""
 
 # ==========================================
-# 7. 磁碟空間檢查
+# 5. 磁碟空間檢查
 # ==========================================
 echo "--- 磁碟空間 ---"
 

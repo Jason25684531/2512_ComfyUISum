@@ -33,10 +33,12 @@ Backend `/api/generate` 寫入 MySQL + 推送 Redis Queue，Worker 取出後提�
 | 拓撲 | Compose 檔案 | Env 範本 | 說明 |
 |------|-------------|---------|------|
 | `local-dev` | `docker-compose.yml` | `.env.local` | Windows ComfyUI + Docker Desktop (WSL2) |
-| `twcc-base-vm` | `docker-compose.base.yml` | `.env.twcc` | 雲端 CPU VM（Nginx + API + Redis + MySQL）|
+| `twcc-base-vm` | `docker-compose.base.yml` | `.env.twcc` | 雲端 CPU VM（Nginx + API + Redis）|
 | `twcc-gpu-vm` | `scripts/twcc_gpu_setup.sh` + systemd | `.env.twcc` | 雲端 GPU VM（ComfyUI + Worker）|
 
 ## Current v2 Mainline
+
+> ⚠️ **開發狀態：目前暫停開發**。`apps/backend-fastapi/`、`apps/worker-v2/` 與 `shared/v2/` 維持現狀不變；本節描述的是暫停前的既有行為，非目前主要開發線。目前正式對外服務的是 v1（Flask + Redis，`backend/`、`worker/`）。
 
 - FastAPI v2 serves the legacy frontend entry pages at `http://localhost:8000/`, `http://localhost:8000/dashboard`, `http://localhost:8000/login.html`, and root-relative assets such as `/config.js`, `/tailwind.generated.css`, `/vendor/lucide.min.js`, `/image/*`, and `/front/*`.
 - Legacy browser compatibility stays on top of the v2 runtime through `POST /api/generate`, `GET /api/status/{job_id}`, `GET /api/me`, and `GET /api/models`.
