@@ -1934,6 +1934,48 @@
         }
 
         // ==========================================
+        // LTX ReTake V2V: 影片上傳
+        // ==========================================
+        function triggerRetakeVideoUpload() {
+            document.getElementById('file-retake_video')?.click();
+        }
+
+        function handleRetakeVideoSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const preview = document.getElementById('preview-retake_video');
+            const placeholder = document.getElementById('placeholder-retake_video');
+            const filenameEl = document.getElementById('retake_video-filename');
+            if (filenameEl) filenameEl.textContent = file.name;
+            if (preview) preview.classList.remove('hidden');
+            if (placeholder) placeholder.classList.add('hidden');
+        }
+
+        function clearRetakeVideo() {
+            const fileInput = document.getElementById('file-retake_video');
+            const preview = document.getElementById('preview-retake_video');
+            const placeholder = document.getElementById('placeholder-retake_video');
+            if (fileInput) fileInput.value = '';
+            if (preview) preview.classList.add('hidden');
+            if (placeholder) placeholder.classList.remove('hidden');
+        }
+
+        async function uploadVideoFile(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+            const response = await fetch(`${API_URL}/api/upload`, {
+                method: 'POST',
+                body: formData,
+                credentials: 'include'
+            });
+            if (!response.ok) {
+                throw new Error(getRequestErrorMessage(response.status, '請先登入後再上傳影片', '影片上傳失敗，請稍後再試'));
+            }
+            const data = await response.json();
+            return data.filename;
+        }
+
+        // ==========================================
         // Image Composition Menu Control
         // ==========================================
         function showCompositionMenu() {
@@ -2098,13 +2140,13 @@
             currentVideoTool = toolId;
             hideVideoToolMenu();
             // Update panels
-            ['veo3_long_video', 't2v_veo3', 'flf_veo3'].forEach(id => {
+            ['veo3_long_video', 't2v_veo3', 'flf_veo3', 'ltx_retake_v2v'].forEach(id => {
                 const panel = document.getElementById(`panel-${id}`);
                 if (panel) panel.classList.toggle('hidden', id !== toolId);
             });
             // Update header
-            const names = { veo3_long_video: '長片生成', t2v_veo3: '文字轉影片', flf_veo3: '首尾禎動畫' };
-            const descs = { veo3_long_video: 'Multi-Shot', t2v_veo3: 'Text to Video', flf_veo3: 'First-Last Frame' };
+            const names = { veo3_long_video: '長片生成', t2v_veo3: '文字轉影片', flf_veo3: '首尾禎動畫', ltx_retake_v2v: 'ReTake' };
+            const descs = { veo3_long_video: 'Multi-Shot', t2v_veo3: 'Text to Video', flf_veo3: 'First-Last Frame', ltx_retake_v2v: '影片重生成' };
             document.getElementById('video-tool-name').textContent = names[toolId] || '';
             document.getElementById('video-tool-desc').textContent = descs[toolId] || '';
             syncMotionPromptMode();
@@ -2455,6 +2497,32 @@
                     }
 
                     payload.mode = isMultiMode ? 'multi' : 'single';
+
+                } else if (currentVideoTool === 'ltx_retake_v2v') {
+                    workflow = 'ltx_retake_v2v';
+
+                    const videoFile = document.getElementById('file-retake_video')?.files[0];
+                    if (!videoFile) {
+                        throw new Error('請上傳要重新生成的影片');
+                    }
+                    if (!prompt) {
+                        throw new Error('請輸入提示詞');
+                    }
+
+                    const retakeStart = parseFloat(document.getElementById('retake-start-input')?.value);
+                    const retakeEnd = parseFloat(document.getElementById('retake-end-input')?.value);
+                    if (Number.isNaN(retakeStart) || Number.isNaN(retakeEnd)) {
+                        throw new Error('起始秒數與結束秒數必須為數字');
+                    }
+                    if (retakeStart < 0 || retakeEnd <= retakeStart) {
+                        throw new Error('起始秒數需 >= 0 且小於結束秒數');
+                    }
+
+                    statusEl.textContent = '正在上傳影片...';
+                    payload.video = await uploadVideoFile(videoFile);
+                    payload.retake_start = retakeStart;
+                    payload.retake_end = retakeEnd;
+                    delete payload.images;
                 }
 
                 payload.workflow = workflow;
