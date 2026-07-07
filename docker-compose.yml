@@ -58,7 +58,7 @@ services:
     working_dir: /app
     volumes:
       - ${ENV_CONTRACT_FILE:-./.env.local}:/app/.env.selected:ro
-      - ./storage/outputs:/app/storage/outputs
+      - ./storage:/app/storage
       - ./logs:/app/logs
       - ./ComfyUIworkflow:/app/ComfyUIworkflow:ro
 

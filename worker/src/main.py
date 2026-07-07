@@ -180,37 +180,81 @@ def save_base64_image(base64_data: str, job_id: str, field_name: str) -> str:
     return filename
 
 
-def copy_audio_to_comfyui(audio_filename: str, job_id: str) -> str:
+def copy_audio_to_comfyui(audio_filename: str, job_id: str, client: "ComfyClient" = None, job_logger=None) -> str:
     """
-    將音訊檔案從 storage/inputs 複製到 ComfyUI input 目錄
-    
+    將音訊檔案從 storage/inputs 複製到 ComfyUI input 目錄，
+    並透過 /upload/image API 跨機推送（Windows ComfyUI + Linux/WSL2 容器 worker 的拓樸下，
+    檔案系統複製無法跨越容器邊界，須以 HTTP 上傳為準）
+
     Args:
         audio_filename: 上傳的音訊檔名 (如 audio_1ba6e2ba-e8a.mp3)
         job_id: 任務 ID (用於生成唯一檔名)
-    
+        client: ComfyClient 實例，用於跨機 HTTP 上傳
+        job_logger: 任務專用 logger
+
     Returns:
         複製後的檔名 (不含路徑)
     """
     import shutil
-    
+
     # 來源檔案路徑
     source_path = Path(STORAGE_INPUT_DIR) / audio_filename
-    
+
     if not source_path.exists():
         raise FileNotFoundError(f"找不到音訊檔案: {source_path}")
-    
+
     # 保留原副檔名，生成新檔名
     file_ext = source_path.suffix.lower()
     new_filename = f"audio_{job_id}{file_ext}"
     dest_path = Path(COMFYUI_INPUT_DIR) / new_filename
-    
+
     # 確保目錄存在
     dest_path.parent.mkdir(parents=True, exist_ok=True)
-    
-    # 複製檔案
+
+    # 複製檔案（原生同機模式下即為最終落地位置）
     shutil.copy2(source_path, dest_path)
-    
+
     logger.info(f"🎵 已複製音訊: {audio_filename} -> {new_filename} ({source_path.stat().st_size} bytes)")
+
+    if client is not None:
+        sync_image_to_comfyui_input(client, dest_path, job_logger or logger)
+
+    return new_filename
+
+
+def copy_video_to_comfyui(video_filename: str, job_id: str, client: "ComfyClient" = None, job_logger=None) -> str:
+    """
+    將影片檔案從 storage/inputs 複製到 ComfyUI input 目錄，
+    並透過 /upload/image API 跨機推送（同 copy_audio_to_comfyui 的跨機理由）
+
+    Args:
+        video_filename: 上傳的影片檔名 (如 video_1ba6e2ba-e8a.mp4)
+        job_id: 任務 ID (用於生成唯一檔名)
+        client: ComfyClient 實例，用於跨機 HTTP 上傳
+        job_logger: 任務專用 logger
+
+    Returns:
+        複製後的檔名 (不含路徑)
+    """
+    import shutil
+
+    source_path = Path(STORAGE_INPUT_DIR) / video_filename
+
+    if not source_path.exists():
+        raise FileNotFoundError(f"找不到影片檔案: {source_path}")
+
+    file_ext = source_path.suffix.lower()
+    new_filename = f"video_{job_id}{file_ext}"
+    dest_path = Path(COMFYUI_INPUT_DIR) / new_filename
+
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source_path, dest_path)
+
+    logger.info(f"🎬 已複製影片: {video_filename} -> {new_filename} ({source_path.stat().st_size} bytes)")
+
+    if client is not None:
+        sync_image_to_comfyui_input(client, dest_path, job_logger or logger)
+
     return new_filename
 
 
@@ -469,15 +513,30 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict):
         if audio_file:
             job_logger.info(f"🎵 Audio file specified: {audio_file}")
             try:
-                comfyui_audio_file = copy_audio_to_comfyui(audio_file, job_id)
+                comfyui_audio_file = copy_audio_to_comfyui(audio_file, job_id, client, job_logger)
                 job_logger.info("audio save complete: filename=%s", comfyui_audio_file)
             except Exception as e:
                 job_logger.warning(f"⚠️ 複製音訊檔案失敗: {e}")
                 comfyui_audio_file = ""
-        
-        # 4. 解析 workflow (包含圖片與音訊注入)
+
+        # 3.6 處理影片參數 (LTX ReTake V2V 新增)
+        # 需要將影片從 storage/inputs 複製到 ComfyUI/input
+        video_file = job_data.get("video", "")
+        retake_start = job_data.get("retake_start")
+        retake_end = job_data.get("retake_end")
+        comfyui_video_file = ""
+        if video_file:
+            job_logger.info(f"🎬 Video file specified: {video_file}")
+            try:
+                comfyui_video_file = copy_video_to_comfyui(video_file, job_id, client, job_logger)
+                job_logger.info("video save complete: filename=%s", comfyui_video_file)
+            except Exception as e:
+                job_logger.warning(f"⚠️ 複製影片檔案失敗: {e}")
+                comfyui_video_file = ""
+
+        # 4. 解析 workflow (包含圖片、音訊與影片注入)
         update_job_status(r, job_id, "processing", progress=20)
-        
+
         job_logger.info("parse start")
         workflow = parse_workflow(
             workflow_name=workflow_name,
@@ -488,6 +547,9 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict):
             batch_size=batch_size,
             image_files=image_files,      # 傳入圖片檔名映射
             audio_file=comfyui_audio_file, # 傳入複製後的音訊檔名 (Phase 7)
+            video_file=comfyui_video_file, # 傳入複製後的影片檔名 (LTX ReTake V2V)
+            retake_start=retake_start,     # ReTake 起始秒數
+            retake_end=retake_end,         # ReTake 結束秒數
             prompts=prompts               # Veo3 Long Video: 傳入多段 prompts
         )
         job_logger.info("parse end")

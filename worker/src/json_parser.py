@@ -94,6 +94,9 @@ def parse_workflow(
     batch_size: int = 1,
     image_files: dict = None,
     audio_file: str = None,
+    video_file: str = None,
+    retake_start: float = None,
+    retake_end: float = None,
     **kwargs,
 ) -> dict:
     """Build a ComfyUI API workflow payload from a configured workflow template."""
@@ -132,6 +135,9 @@ def parse_workflow(
         batch_size=batch_size,
         image_files=image_files,
         audio_file=audio_file,
+        video_file=video_file,
+        retake_start=retake_start,
+        retake_end=retake_end,
         trim_veo3_workflow=trim_veo3_workflow,
     )
 

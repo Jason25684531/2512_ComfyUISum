@@ -42,6 +42,9 @@ def build_job_data(
         "batch_size": data.get("batch_size", 1),
         "images": data.get("images", {}),
         "audio": data.get("audio", ""),
+        "video": data.get("video", ""),
+        "retake_start": data.get("retake_start", 0),
+        "retake_end": data.get("retake_end", 0),
         "created_at": created_at.isoformat(),
     }
     return resolution, job_data

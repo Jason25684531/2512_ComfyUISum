@@ -25,6 +25,10 @@ if (typeof window.currentVideoWorkflow === 'undefined') {
 if (typeof window.flfImages === 'undefined') {
     window.flfImages = { first_frame: null, last_frame: null };
 }
+// 新增: ReTake V2V 影片儲存 (已上傳後端回傳的檔名)
+if (typeof window.retakeVideoFilename === 'undefined') {
+    window.retakeVideoFilename = null;
+}
 
 // ==========================================
 // Video Workflow Tab 切換
@@ -73,7 +77,8 @@ function selectVideoTool(workflowType) {
     var toolConfig = {
         'veo3_long_video': { name: '長片生成', desc: 'Multi-Shot', icon: 'film', color: 'amber' },
         't2v_veo3': { name: '文字轉影片', desc: 'Text to Video', icon: 'type', color: 'blue' },
-        'flf_veo3': { name: '首尾禎動畫', desc: 'First-Last Frame', icon: 'image', color: 'purple' }
+        'flf_veo3': { name: '首尾禎動畫', desc: 'First-Last Frame', icon: 'image', color: 'purple' },
+        'ltx_retake_v2v': { name: '影片重生成', desc: 'ReTake V2V', icon: 'redo-2', color: 'orange' }
     };
 
     var config = toolConfig[workflowType] || toolConfig['veo3_long_video'];
@@ -86,7 +91,7 @@ function selectVideoTool(workflowType) {
     if (toolDesc) toolDesc.textContent = config.desc;
 
     // 更新面板顯示
-    var panels = ['panel-veo3_long_video', 'panel-t2v_veo3', 'panel-flf_veo3'];
+    var panels = ['panel-veo3_long_video', 'panel-t2v_veo3', 'panel-flf_veo3', 'panel-ltx_retake_v2v'];
     panels.forEach(function (panelId) {
         var panel = document.getElementById(panelId);
         if (panel) {
@@ -212,6 +217,73 @@ function handleFLFDrop(event, frameType) {
 
 function clearFLFImage(frameType) {
     clearImageUpload(frameType, window.flfImages, 'purple');
+}
+
+// ==========================================
+// ReTake V2V 影片上傳處理函式
+// ==========================================
+
+function triggerRetakeVideoUpload() {
+    var fileInput = document.getElementById('file-retake_video');
+    if (fileInput) fileInput.click();
+}
+
+function handleRetakeVideoSelect(event) {
+    var file = event.target.files[0];
+    if (!file) return;
+
+    var validTypes = ['video/mp4', 'video/quicktime'];
+    var validExt = /\.(mp4|mov)$/i.test(file.name);
+    if (validTypes.indexOf(file.type) === -1 && !validExt) {
+        showMotionStatus('僅支援 mp4 / mov 格式', 'error');
+        return;
+    }
+
+    var filenameEl = document.getElementById('retake_video-filename');
+    if (filenameEl) filenameEl.textContent = file.name + ' (上傳中...)';
+    document.getElementById('preview-retake_video').classList.remove('hidden');
+    document.getElementById('placeholder-retake_video').classList.add('hidden');
+
+    var formData = new FormData();
+    formData.append('file', file);
+
+    var apiBase = (typeof window.API_BASE_URL !== 'undefined') ? window.API_BASE_URL : (window.location.origin + '/api');
+
+    fetch(apiBase + '/upload', {
+        method: 'POST',
+        body: formData
+    })
+        .then(function (response) {
+            if (!response.ok) {
+                return response.json().then(function (data) {
+                    throw new Error(data.error || 'Upload failed');
+                });
+            }
+            return response.json();
+        })
+        .then(function (data) {
+            window.retakeVideoFilename = data.filename;
+            if (filenameEl) filenameEl.textContent = file.name;
+            console.log('[Motion] ReTake 影片上傳完成:', data.filename);
+        })
+        .catch(function (error) {
+            console.error('[Motion] 影片上傳失敗:', error);
+            showMotionStatus('影片上傳失敗: ' + error.message, 'error');
+            clearRetakeVideo();
+        });
+}
+
+function clearRetakeVideo() {
+    window.retakeVideoFilename = null;
+    var preview = document.getElementById('preview-retake_video');
+    var placeholder = document.getElementById('placeholder-retake_video');
+    var fileInput = document.getElementById('file-retake_video');
+
+    if (preview) preview.classList.add('hidden');
+    if (placeholder) placeholder.classList.remove('hidden');
+    if (fileInput) fileInput.value = '';
+
+    console.log('[Motion] ReTake 影片已清除');
 }
 
 /**
@@ -498,6 +570,35 @@ function handleMotionGenerate() {
             last_frame: window.flfImages.last_frame
         };
         console.log('[Motion] FLF mode, prompt:', prompt, 'images:', Object.keys(payload.images));
+
+    } else if (window.currentVideoWorkflow === 'ltx_retake_v2v') {
+        // ==========================================
+        // 影片重生成工作流 (LTX ReTake V2V)
+        // ==========================================
+        if (!window.retakeVideoFilename) {
+            showMotionStatus('請上傳要重生成的影片', 'error');
+            return;
+        }
+        if (!prompt) {
+            showMotionStatus('請輸入重生成描述', 'error');
+            return;
+        }
+        var retakeStartEl = document.getElementById('retake-start-input');
+        var retakeEndEl = document.getElementById('retake-end-input');
+        var retakeStart = retakeStartEl ? parseFloat(retakeStartEl.value) : NaN;
+        var retakeEnd = retakeEndEl ? parseFloat(retakeEndEl.value) : NaN;
+        if (isNaN(retakeStart) || isNaN(retakeEnd) || retakeStart < 0 || retakeEnd <= retakeStart) {
+            showMotionStatus('起始秒數須 ≥ 0 且小於結束秒數', 'error');
+            return;
+        }
+
+        payload.workflow = 'ltx_retake_v2v';
+        payload.prompt = prompt;
+        payload.prompts = [];
+        payload.video = window.retakeVideoFilename;
+        payload.retake_start = retakeStart;
+        payload.retake_end = retakeEnd;
+        console.log('[Motion] ReTake V2V mode, prompt:', prompt, 'video:', payload.video, 'range:', retakeStart, '-', retakeEnd);
 
     } else {
         showMotionStatus('未知的工作流類型', 'error');

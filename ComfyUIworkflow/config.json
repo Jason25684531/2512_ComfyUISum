@@ -287,5 +287,48 @@
         "last_frame"
       ]
     }
+  },
+  "ltx_retake_v2v": {
+    "id": "ltx_retake_v2v",
+    "aliases": [],
+    "file": "LTX2.3_ReTake_V2V.json",
+    "description": "LTX-2 影片重生成 (ReTake)",
+    "category": "video",
+    "mapping": {
+      "output_node_id": "578",
+      "video_node_id": "644",
+      "seed_node_ids": [
+        "115",
+        "243"
+      ],
+      "param_map": {
+        "retake_start": {
+          "node_id": "661",
+          "input_key": "value"
+        },
+        "retake_end": {
+          "node_id": "662",
+          "input_key": "value"
+        }
+      }
+    },
+    "model_overrides": {
+      "windows": []
+    },
+    "prompt_map": {
+      "main": {
+        "node_id": "487",
+        "input_key": "value"
+      }
+    },
+    "frontend": {
+      "title": "影片重生成 ReTake",
+      "description": "上傳影片並重新生成指定時間區段",
+      "icon": "redo-2",
+      "color": "orange",
+      "inputs": [
+        "video"
+      ]
+    }
   }
 }

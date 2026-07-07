@@ -44,6 +44,7 @@ from runtime_diagnostics import build_runtime_config_payload, build_runtime_diag
 # ============================================
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
+app.config['MAX_CONTENT_LENGTH'] = int(os.getenv('MAX_UPLOAD_SIZE_MB', '200')) * 1024 * 1024
 
 FLASK_DEBUG_MODE = get_flask_debug_mode()
 DEFAULT_ALLOWED_CORS_ORIGINS = {
@@ -260,9 +261,11 @@ except Exception as e:
     redis_client = None
 
 # ============================================
-# 音訊上傳設定
+# 音訊/影片上傳設定
 # ============================================
 ALLOWED_AUDIO_EXTENSIONS = {'.wav', '.mp3'}
+ALLOWED_VIDEO_EXTENSIONS = {'.mp4', '.mov'}
+ALLOWED_UPLOAD_EXTENSIONS = ALLOWED_AUDIO_EXTENSIONS | ALLOWED_VIDEO_EXTENSIONS
 UPLOAD_FOLDER = Path(__file__).parent.parent.parent / 'storage' / 'inputs'
 UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
 
@@ -270,6 +273,12 @@ UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
 # ============================================
 # API Endpoints
 # ============================================
+
+
+@app.errorhandler(413)
+def handle_upload_too_large(_error):
+    max_mb = app.config['MAX_CONTENT_LENGTH'] // (1024 * 1024)
+    return jsonify({'error': f'File too large. Maximum allowed size is {max_mb}MB'}), 413
 
 
 # ============================================
@@ -281,10 +290,10 @@ UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
 def upload_audio():
     """
     POST /api/upload
-    上傳音訊檔案 (支援 .wav, .mp3)
-    
+    上傳音訊或影片檔案 (支援 .wav, .mp3, .mp4, .mov)
+
     Request: multipart/form-data, Key: 'file'
-    
+
     Response:
     {
         "filename": "audio_550e8400-e29b.wav",
@@ -296,26 +305,27 @@ def upload_audio():
         if 'file' not in request.files:
             logger.warning("上傳請求缺少 'file' 欄位")
             return jsonify({'error': 'No file provided'}), 400
-        
+
         file = request.files['file']
-        
+
         if file.filename == '':
             logger.warning("上傳的檔案名稱為空")
             return jsonify({'error': 'No file selected'}), 400
-        
+
         # 2. 驗證檔案類型
         original_filename = secure_filename(file.filename)
         file_ext = os.path.splitext(original_filename)[1].lower()
-        
-        if file_ext not in ALLOWED_AUDIO_EXTENSIONS:
-            logger.warning(f"不支援的音訊格式: {file_ext}")
+
+        if file_ext not in ALLOWED_UPLOAD_EXTENSIONS:
+            logger.warning(f"不支援的檔案格式: {file_ext}")
             return jsonify({
-                'error': f'Unsupported file type. Allowed: {", ".join(ALLOWED_AUDIO_EXTENSIONS)}'
+                'error': f'Unsupported file type. Allowed: {", ".join(sorted(ALLOWED_UPLOAD_EXTENSIONS))}'
             }), 400
-        
+
         # 3. 生成唯一檔名 (保留原副檔名)
         unique_id = str(uuid.uuid4())[:12]
-        new_filename = f"audio_{unique_id}{file_ext}"
+        file_prefix = 'video' if file_ext in ALLOWED_VIDEO_EXTENSIONS else 'audio'
+        new_filename = f"{file_prefix}_{unique_id}{file_ext}"
         
         # 4. 確保安全的檔名
         safe_filename = secure_filename(new_filename)
@@ -406,6 +416,26 @@ def generate():
         if workflow == 'text_to_image' and not prompt:
             logger.warning("text_to_image 的 prompt 参数为空")
             return jsonify({'error': 'prompt is required for text_to_image'}), 400
+
+        # ltx_retake_v2v: 影片重生成，驗證影片、prompt 與起訖秒數
+        retake_start_val = data.get('retake_start', 0)
+        retake_end_val = data.get('retake_end', 0)
+        video_filename = data.get('video', '')
+        if workflow == 'ltx_retake_v2v':
+            if not video_filename:
+                return jsonify({'error': 'video is required for ltx_retake_v2v'}), 400
+            video_path = UPLOAD_FOLDER / secure_filename(str(video_filename))
+            if not video_path.exists():
+                return jsonify({'error': 'uploaded video not found, please re-upload'}), 400
+            if not prompt:
+                return jsonify({'error': 'prompt is required for ltx_retake_v2v'}), 400
+            try:
+                retake_start_val = float(retake_start_val)
+                retake_end_val = float(retake_end_val)
+            except (TypeError, ValueError):
+                return jsonify({'error': 'retake_start/retake_end must be numbers'}), 400
+            if retake_start_val < 0 or retake_end_val <= retake_start_val:
+                return jsonify({'error': 'retake_start must be >= 0 and less than retake_end'}), 400
         # =====================================================
         # 這裡會檢查 data['audio'] 是否為 Base64 字串
         # 如果是，就轉存成檔案，並把 data['audio'] 替換成檔名
@@ -460,6 +490,9 @@ def generate():
             'batch_size': data.get('batch_size', 1),
             'images': data.get('images', {}),  # Base64 圖片字典
             'audio': data.get('audio', ''),  # 音訊檔名 (virtual_human 工作流使用)
+            'video': video_filename,  # 影片檔名 (ltx_retake_v2v 工作流使用)
+            'retake_start': retake_start_val,
+            'retake_end': retake_end_val,
             'created_at': datetime.now().isoformat()
         }
         

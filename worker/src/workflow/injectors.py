@@ -145,6 +145,9 @@ def apply_workflow_injections(
     batch_size: int,
     image_files: dict,
     audio_file: str,
+    video_file: str = None,
+    retake_start: float = None,
+    retake_end: float = None,
     trim_veo3_workflow: Callable[[dict, dict], dict],
 ) -> dict:
     config_data = registry._config
@@ -375,5 +378,27 @@ def apply_workflow_injections(
                 print(f"[Parser] Warning: audio target node missing: {node_id}")
         elif audio_config and not audio_file:
             print(f"[Parser] Info: workflow {workflow_name} supports audio injection but no audio file was provided")
+
+    video_node_id = workflow_config.get("mapping", {}).get("video_node_id")
+    if video_node_id and video_file:
+        if set_node_input_value(workflow, video_node_id, "video", video_file, "Config video 注入"):
+            print(f"[Parser] Config video injected into Node {video_node_id}")
+    elif video_node_id and not video_file:
+        print(f"[Parser] Info: workflow {workflow_name} supports video injection but no video file was provided")
+
+    param_map = workflow_config.get("mapping", {}).get("param_map", {})
+    param_values = {"retake_start": retake_start, "retake_end": retake_end}
+    for param_name, target in param_map.items():
+        param_value = param_values.get(param_name)
+        if param_value is None or not target:
+            continue
+        node_id = target.get("node_id")
+        input_key = target.get("input_key", "value")
+        if node_id:
+            set_node_input_value(workflow, node_id, input_key, float(param_value), f"Config param_map[{param_name}] 注入")
+
+    seed_node_ids = workflow_config.get("mapping", {}).get("seed_node_ids", [])
+    for seed_node_id in seed_node_ids:
+        set_node_input_value(workflow, seed_node_id, "noise_seed", seed, "Config seed_node_ids 注入")
 
     return workflow
