@@ -372,9 +372,7 @@ ComfyUISum/
 │   ├── src/
 │   │   ├── app.py             # 主應用：API 路由、Rate Limit、靜態服務、健康檢查
 │   │   ├── config.py          # Backend 配置（繼承 shared.config_base）
-│   │   ├── frontend_compat.py # 前端相容層（頁面路由 / 靜態資源）
-│   │   ├── generation_service.py  # 任務生成服務（驗證 + 入隊）
-│   │   └── runtime_diagnostics.py # 部署診斷（拓撲偵測 / 端點檢查）
+│   │   └── frontend_compat.py # 前端相容層（頁面路由 / 靜態資源）
 │   └── Dockerfile
 │
 ├── worker/                     # 任務處理器（v1 production）

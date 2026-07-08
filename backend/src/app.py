@@ -36,8 +36,12 @@ from shared.security import (
 )
 load_env()
 from frontend_compat import resolve_legacy_redirect, resolve_root_document
-from generation_service import build_job_data, resolve_workflow_request
-from runtime_diagnostics import build_runtime_config_payload, build_runtime_diagnostics
+from shared.runtime_services import (
+    build_job_data,
+    build_runtime_config_payload,
+    build_runtime_diagnostics,
+    resolve_workflow_request,
+)
 
 # ============================================
 # Configuration & Logging Setup

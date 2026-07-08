@@ -52,37 +52,6 @@ def build_job_data(
     return resolution, job_data
 
 
-def normalize_history_jobs(project_root: Path, jobs: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    catalog = _get_catalog(project_root)
-    normalized_jobs: list[dict[str, Any]] = []
-    for job in jobs:
-        item = dict(job)
-        workflow_name = item.get("workflow")
-        if workflow_name:
-            try:
-                item["workflow"] = catalog.resolve(str(workflow_name)).workflow_id
-            except KeyError:
-                item["workflow"] = str(workflow_name)
-
-        output_path = item.get("output_path")
-        if output_path:
-            formatted_paths: list[str] = []
-            for raw_path in str(output_path).split(","):
-                candidate = raw_path.strip()
-                if not candidate:
-                    continue
-                formatted_paths.append(f"/outputs/{Path(candidate).name}")
-            item["output_path"] = ",".join(formatted_paths)
-
-        normalized_jobs.append(item)
-    return normalized_jobs
-
-
-def build_runtime_contract(project_root: Path) -> dict[str, Any]:
-    contract = RuntimeContractLoader(project_root=project_root).load()
-    return contract.to_public_dict()
-
-
 def build_runtime_diagnostics(
     *,
     project_root: Path,
@@ -133,8 +102,6 @@ def build_runtime_config_payload(project_root: Path) -> dict[str, Any]:
 __all__ = [
     "build_job_data",
     "build_runtime_config_payload",
-    "build_runtime_contract",
     "build_runtime_diagnostics",
-    "normalize_history_jobs",
     "resolve_workflow_request",
 ]
