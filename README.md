@@ -210,7 +210,8 @@ shared/config_base.py        # 共用：Redis、Storage、ComfyUI 端點、get_e
 
 對外連線與儲存必須走抽象基類，新後端只需新增子類，不改業務邏輯：
 
-- `shared/storage_service.py`：`LocalStorage` / `S3Storage`（TWCC COS）共同介面
+- `shared/runtime_settings.py`：legacy / v2 共用的 runtime settings、env/path/endpoint 組裝層
+- `shared/runtime_services.py`：workflow lookup、job request build 與 runtime diagnostics 的共享 service façade
 - `apps/worker-v2/worker/engines/`：`base` → `comfyui_engine` / `mock_engine`（引擎可插拔範式）
 
 ### 3. 多型（Polymorphism）—— 環境適配
@@ -384,7 +385,6 @@ ComfyUISum/
 │   │   ├── json_parser.py     # Workflow JSON 解析
 │   │   ├── config.py          # Worker 配置（繼承 shared.config_base）
 │   │   ├── warmup.py          # GPU VRAM 暖機機制
-│   │   ├── check_comfy_connection.py  # 連線檢查工具
 │   │   ├── workflow_registry.py       # Workflow 註冊器
 │   │   └── workflow/          # Workflow 子模組
 │   │       ├── injectors.py   # 參數注入器（prompt / seed / 圖片 / 音訊）

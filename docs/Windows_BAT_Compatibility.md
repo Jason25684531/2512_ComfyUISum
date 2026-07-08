@@ -103,7 +103,7 @@ TWCC 專用（不在你電腦上執行）：
 docker-compose.base.yml              ← Base VM 用
 docker-compose.dev-s3.yml            ← MinIO 測試用（本地選用）
 nginx/nginx.twcc.conf                ← Base VM Nginx 用
-shared/storage_service.py            ← backend + worker 共用（沒問題）
+shared/runtime_settings.py           ← backend + worker 共用設定組裝層
 scripts/twcc_*.sh                    ← TWCC 運維腳本用（你電腦不執行）
 worker/comfyui.service.template      ← TWCC systemd 用
 worker/worker.service.template       ← TWCC systemd 用
@@ -116,7 +116,7 @@ docs/TWCC_Deployment_Guide.md        ← 說明文件
 |------------|------------|---------|------|------|
 | **backend/src/app.py** | 執行，Flask 啟動 | 執行，Docker 容器 | ❌ 無 | 程式碼相同，只是運行環境不同 |
 | **worker/src/main.py** | 執行，讀 Redis | 執行，讀 Redis | ❌ 無 | 程式碼相同，Redis 地址由 env 決定 |
-| **shared/storage_service.py** | 使用 LocalStorage | 使用 S3Storage | ❌ 無 | 由 STORAGE_BACKEND env 決定 |
+| **shared/runtime_settings.py** | 組裝 legacy runtime 設定 | 組裝共用 runtime 設定 | ❌ 無 | 由 env/path/endpoint 共用規則決定 |
 | **ComfyUI** | Windows 版，C:\ComfyUI | Linux 版，/opt/comfyui | ❌ 無 | 完全不同機器 |
 | **Redis** | localhost:6379（你的） | Base VM:6379（雲端） | ❌ 無 | env 區隔：REDIS_HOST |
 | **MySQL** | localhost（你可選） | Base VM mysql（雲端） | ❌ 無 | env 區隔：DB_HOST |

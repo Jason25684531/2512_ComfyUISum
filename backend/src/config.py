@@ -2,7 +2,6 @@
 Backend Configuration
 =====================
 統一管理 Backend API 的配置參數。
-繼承共用配置，並擴展 Backend 專用設定。
 """
 
 import sys
@@ -11,29 +10,23 @@ from pathlib import Path
 # 添加 shared 模組到 Python 路徑
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-# ==========================================
-# 繼承共用配置
-# ==========================================
-from shared.config_base import (
-    PROJECT_ROOT,
-    REDIS_HOST,
-    REDIS_PORT,
-    REDIS_PASSWORD,
-    JOB_QUEUE,
-    STORAGE_DIR,
-    STORAGE_INPUT_DIR,
-    STORAGE_OUTPUT_DIR,
-    JOB_STATUS_EXPIRE_SECONDS,
-    COMFYUI_ROOT,
-    COMFYUI_MODELS_DIR,
-    get_env_bool,
-    get_env_int,
-    get_env_str,
-)
+from shared.config_base import get_env_bool, get_env_int, get_env_str
+from shared.runtime_settings import build_shared_runtime_settings
 
-# ==========================================
-# Backend 專用配置
-# ==========================================
+
+_SHARED_SETTINGS = build_shared_runtime_settings()
+
+PROJECT_ROOT = _SHARED_SETTINGS.project_root
+REDIS_HOST = _SHARED_SETTINGS.redis_host
+REDIS_PORT = _SHARED_SETTINGS.redis_port
+REDIS_PASSWORD = _SHARED_SETTINGS.redis_password
+JOB_QUEUE = _SHARED_SETTINGS.job_queue
+STORAGE_DIR = _SHARED_SETTINGS.storage_dir
+STORAGE_INPUT_DIR = _SHARED_SETTINGS.storage_input_dir
+STORAGE_OUTPUT_DIR = _SHARED_SETTINGS.storage_output_dir
+JOB_STATUS_EXPIRE_SECONDS = _SHARED_SETTINGS.job_status_expire_seconds
+COMFYUI_ROOT = _SHARED_SETTINGS.comfyui_root
+COMFYUI_MODELS_DIR = _SHARED_SETTINGS.comfyui_models_dir
 
 # Flask 配置
 FLASK_DEBUG = get_env_bool("FLASK_DEBUG", False)
@@ -44,29 +37,23 @@ FLASK_PORT = get_env_int("FLASK_PORT", 5001)
 COMFYUI_CHECKPOINTS_DIR = COMFYUI_MODELS_DIR / "checkpoints"
 COMFYUI_UNET_DIR = COMFYUI_MODELS_DIR / "unet"
 
-# ==========================================
-# [TEMP] Veo3 測試模式 (Veo3 Test Mode)
-# ==========================================
-# 當啟用時，veo3_long_video 工作流只要上傳圖片就直接返回測試視頻
+# [TEMP] Veo3 測試模式
 VEO3_TEST_MODE = get_env_bool("VEO3_TEST_MODE", False)
 VEO3_TEST_VIDEO_PATH = get_env_str("VEO3_TEST_VIDEO_PATH", "tests/IU_Final/IU_Combine.mp4")
 
-# ==========================================
-# 除錯輸出
-# ==========================================
-def print_config():
+
+def print_config() -> None:
     """輸出目前配置 (用於除錯)"""
     print("=" * 50)
     print("[Config] Backend 配置")
     print("=" * 50)
-    print(f"  PROJECT_ROOT: {PROJECT_ROOT}")
-    print(f"  REDIS: {REDIS_HOST}:{REDIS_PORT}")
-    print(f"  FLASK: {FLASK_HOST}:{FLASK_PORT}")
-    print(f"  STORAGE_OUTPUT_DIR: {STORAGE_OUTPUT_DIR}")
-    print(f"  COMFYUI_ROOT: {COMFYUI_ROOT}")
-    print(f"  COMFYUI_CHECKPOINTS_DIR: {COMFYUI_CHECKPOINTS_DIR}")
-    print("=" * 50)
-
-
-if __name__ == "__main__":
-    print_config()
+    print(f"PROJECT_ROOT: {PROJECT_ROOT}")
+    print(f"REDIS_HOST: {REDIS_HOST}")
+    print(f"REDIS_PORT: {REDIS_PORT}")
+    print(f"JOB_QUEUE: {JOB_QUEUE}")
+    print(f"STORAGE_DIR: {STORAGE_DIR}")
+    print(f"COMFYUI_MODELS_DIR: {COMFYUI_MODELS_DIR}")
+    print(f"FLASK_DEBUG: {FLASK_DEBUG}")
+    print(f"FLASK_HOST: {FLASK_HOST}")
+    print(f"FLASK_PORT: {FLASK_PORT}")
+    print(f"VEO3_TEST_MODE: {VEO3_TEST_MODE}")

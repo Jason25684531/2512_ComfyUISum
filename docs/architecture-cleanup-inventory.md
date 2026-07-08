@@ -2,6 +2,42 @@
 
 This document is the authoritative map for the `map-and-consolidate-duplicate-runtime-paths` change. It records ownership, overlap, risk, and review status before any future archive or delete work is considered.
 
+## 2026-07 OpenSpec Runtime Cleanup Pass
+
+This section records the first implementation pass for `refactor-command-args-and-oop-cleanup`.
+
+### Entrypoints and Shared Modules
+
+| Area | Current owner | Notes |
+| --- | --- | --- |
+| `backend/src/app.py` + `backend/src/config.py` | legacy-owned | Backend keeps legacy import surface, but runtime settings now delegate to `shared/runtime_settings.py`. |
+| `worker/src/main.py` + `worker/src/config.py` | legacy-owned | Worker keeps legacy import surface, while Comfy endpoint/path/workflow assembly is now centralized in `shared/runtime_settings.py`. |
+| `apps/backend-fastapi/app/main.py` + `apps/backend-fastapi/app/config.py` | v2-owned | v2 backend `Settings` is now a thin adapter over `shared.runtime_settings.V2RuntimeSettings`. |
+| `apps/worker-v2/worker/main.py` + `apps/worker-v2/worker/config.py` | v2-owned | v2 worker `WorkerSettings` now shares the same validator/default layer as the v2 backend. |
+| `shared/runtime_services.py` | shared-owned | Shared boundary for workflow lookup, job request assembly, runtime contract payloads, and diagnostics payloads. |
+| `shared/workflow_catalog.py` + `shared/runtime_contract.py` | shared-owned | Remain the domain sources of truth; backend/worker façades consume them instead of duplicating business rules. |
+
+### Duplicate / Adapter / Deletion Classification
+
+| Item | Classification | Evidence |
+| --- | --- | --- |
+| `backend/src/config.py` | adapter | Re-export surface retained for legacy backend callers, but common assembly is delegated to `shared/runtime_settings.py`. |
+| `worker/src/config.py` | adapter | Re-export surface retained for worker imports from `main.py`, `warmup.py`, and `comfy_client.py`, but common assembly is delegated to `shared/runtime_settings.py`. |
+| `apps/backend-fastapi/app/config.py` | adapter | Thin subclass of `V2RuntimeSettings`; duplicated validator/default logic removed. |
+| `apps/worker-v2/worker/config.py` | adapter | Thin subclass of `V2RuntimeSettings`; duplicated validator/default logic removed. |
+| `backend/src/generation_service.py` | facade | Backend import path retained, but workflow/job assembly now lives in `shared/runtime_services.py`. |
+| `backend/src/runtime_diagnostics.py` | facade | Backend import path retained, but diagnostics payload building now lives in `shared/runtime_services.py`. |
+| `shared/storage_service.py` | deletion candidate -> removed | `git grep` found no active Python imports; remaining references were documentation-only. |
+| `worker/src/check_comfy_connection.py` | deletion candidate -> removed | `git grep` found no runtime/script imports; remaining reference was the README tree only. |
+
+### Guardrails and Verification Commands
+
+- Existing pytest guardrail stays unchanged in `pytest.ini`.
+- Existing config smoke check stays unchanged in `backend/test_config.py`.
+- Existing startup smoke script stays unchanged in `scripts/dev/linux/smoke-test.sh`.
+- Manual regression targets for this pass are the four entrypoints: `backend/src/app.py`, `worker/src/main.py`, `apps/backend-fastapi/app/main.py`, and `apps/worker-v2/worker/main.py`.
+- Cleanup verification must continue to use the current test entrypoints rather than introducing a new framework.
+
 ## Runtime Components
 
 | Surface | Current Owner | Notes |

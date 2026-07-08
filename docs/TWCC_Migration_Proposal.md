@@ -73,7 +73,7 @@ TWCC Load Balancer (HTTPS:443)
 | `.env.twcc` | TWCC 環境變數範本（含所有必填欄位說明） |
 | `.env.dev-s3` | MinIO 測試環境變數 |
 | `nginx/nginx.twcc.conf` | Nginx 反向代理配置（LB proxy headers、路由規則） |
-| `shared/storage_service.py` | 統一儲存抽象層（LocalStorage / S3Storage） |
+| `shared/runtime_settings.py` | 統一 runtime settings、路徑與 endpoint 組裝層 |
 | `worker/comfyui.service.template` | ComfyUI systemd 服務範本 |
 | `worker/worker.service.template` | Worker systemd 服務範本 |
 | `scripts/twcc_start_gpu.sh` | GPU VM 開機腳本（呼叫 TWCC CLI） |
@@ -125,7 +125,7 @@ TWCC Load Balancer (HTTPS:443)
 
 ### Phase 2：S3 儲存層
 
-**新增：** `shared/storage_service.py`
+**新增：** `shared/runtime_settings.py`
 
 ```python
 class LocalStorage:   # 本地檔案系統（Windows 開發用）
