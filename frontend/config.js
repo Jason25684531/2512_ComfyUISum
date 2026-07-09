@@ -22,7 +22,8 @@ const _fallbackWorkflowCatalog = [
     { id: "image_to_video", aliases: [], category: "video", frontend: { title: "Image to Video", description: "圖生影片", icon: "clapperboard", color: "sky", inputs: ["shot_0"] } },
     { id: "t2v_veo3", aliases: ["T2V"], category: "video", frontend: { title: "T2V", description: "文字轉影片", icon: "sparkles", color: "indigo", inputs: [] } },
     { id: "flf_veo3", aliases: ["FLF"], category: "video", frontend: { title: "FLF", description: "首尾幀動畫", icon: "film", color: "rose", inputs: ["first_frame", "last_frame"] } },
-    { id: "ltx_retake_v2v", aliases: [], category: "video", frontend: { title: "影片重生成 ReTake", description: "上傳影片並重新生成指定時間區段", icon: "redo-2", color: "orange", inputs: ["video"] } }
+    { id: "ltx_retake_v2v", aliases: [], category: "video", frontend: { title: "影片重生成 ReTake", description: "上傳影片並重新生成指定時間區段", icon: "redo-2", color: "orange", inputs: ["video"] } },
+    { id: "ideogram4_regional_t2i", aliases: [], category: "image", frontend: { title: "區域提示詞 Regional Prompt", description: "以 BBox 畫布指定各區域內容並生成圖片", icon: "layout-grid", color: "cyan", inputs: [] } }
 ];
 
 window.API_URL = _defaultApiOrigin;

@@ -61,6 +61,7 @@ services:
       - ./storage:/app/storage
       - ./logs:/app/logs
       - ./ComfyUIworkflow:/app/ComfyUIworkflow:ro
+      - ./ComfyUIworkflow_api:/app/ComfyUIworkflow_api:ro
       - ./frontend:/app/frontend:ro
 
   # =========================================

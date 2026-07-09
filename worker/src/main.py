@@ -524,6 +524,7 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict):
         video_file = job_data.get("video", "")
         retake_start = job_data.get("retake_start")
         retake_end = job_data.get("retake_end")
+        extra_params = job_data.get("extra_params") or {}
         comfyui_video_file = ""
         if video_file:
             job_logger.info(f"🎬 Video file specified: {video_file}")
@@ -550,6 +551,7 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict):
             video_file=comfyui_video_file, # 傳入複製後的影片檔名 (LTX ReTake V2V)
             retake_start=retake_start,     # ReTake 起始秒數
             retake_end=retake_end,         # ReTake 結束秒數
+            extra_params=extra_params,     # 通用具名參數（如 Ideogram4 elements_data）
             prompts=prompts               # Veo3 Long Video: 傳入多段 prompts
         )
         job_logger.info("parse end")

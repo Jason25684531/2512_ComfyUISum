@@ -42,6 +42,7 @@ from shared.runtime_services import (
     build_runtime_diagnostics,
     resolve_workflow_request,
 )
+from shared.elements_data_validator import ElementsDataValidator
 
 # ============================================
 # Configuration & Logging Setup
@@ -440,6 +441,39 @@ def generate():
                 return jsonify({'error': 'retake_start/retake_end must be numbers'}), 400
             if retake_start_val < 0 or retake_end_val <= retake_start_val:
                 return jsonify({'error': 'retake_start must be >= 0 and less than retake_end'}), 400
+
+        # ideogram4_regional_t2i: 區域提示詞文生圖，於信任邊界驗證 elements_data 與風格欄位
+        ideogram4_extra_params = {}
+        if workflow == 'ideogram4_regional_t2i':
+            if not prompt:
+                return jsonify({'error': 'prompt is required for ideogram4_regional_t2i'}), 400
+            try:
+                canonical_elements_data = ElementsDataValidator.validate(data.get('elements_data') or '[]')
+            except ValueError:
+                return jsonify({'error': 'invalid elements_data'}), 400
+
+            width_val = data.get('width', 1080)
+            height_val = data.get('height', 1920)
+            try:
+                width_val = int(width_val)
+                height_val = int(height_val)
+            except (TypeError, ValueError):
+                return jsonify({'error': 'width and height must be integers'}), 400
+            if not (256 <= width_val <= 4096) or not (256 <= height_val <= 4096):
+                return jsonify({'error': 'width and height must be between 256 and 4096'}), 400
+
+            ideogram4_extra_params = {
+                'elements_data': canonical_elements_data,
+                'width': width_val,
+                'height': height_val,
+            }
+            for field_name in ('background', 'style', 'aesthetics', 'lighting', 'medium', 'style_palette_data'):
+                field_value = data.get(field_name)
+                if field_value is None:
+                    continue
+                if not isinstance(field_value, str) or len(field_value) > 2000:
+                    return jsonify({'error': f'{field_name} must be a string up to 2000 characters'}), 400
+                ideogram4_extra_params[field_name] = field_value
         # =====================================================
         # 這裡會檢查 data['audio'] 是否為 Base64 字串
         # 如果是，就轉存成檔案，並把 data['audio'] 替換成檔名
@@ -497,6 +531,11 @@ def generate():
             'video': video_filename,  # 影片檔名 (ltx_retake_v2v 工作流使用)
             'retake_start': retake_start_val,
             'retake_end': retake_end_val,
+            'extra_params': (
+                {'retake_start': retake_start_val, 'retake_end': retake_end_val}
+                if workflow == 'ltx_retake_v2v'
+                else ideogram4_extra_params
+            ),
             'created_at': datetime.now().isoformat()
         }
         

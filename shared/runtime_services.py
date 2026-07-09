@@ -47,6 +47,7 @@ def build_job_data(
         "video": data.get("video", ""),
         "retake_start": data.get("retake_start", 0),
         "retake_end": data.get("retake_end", 0),
+        "extra_params": data.get("extra_params", {}),
         "created_at": created_at.isoformat(),
     }
     return resolution, job_data

@@ -11,6 +11,8 @@
     <script src="vendor/lucide.min.js"></script>
     <!-- API Configuration -->
     <script src="config.js"></script>
+    <!-- Ideogram4 Regional Prompt BBox Canvas -->
+    <script src="regional-canvas.js"></script>
 
     <style>
         /* Hide Scrollbar */
@@ -703,6 +705,18 @@
                                         style="font-family: 'TT Norms Pro Normal', sans-serif;">Edit</h3>
                                     <p class="text-xl text-gray-500">單圖編輯</p>
                                 </button>
+
+                                <!-- Ideogram4 Regional Prompt -->
+                                <button onclick="selectTool('ideogram4_regional_t2i')"
+                                    class="tool-card glass-card rounded-[32px] p-10 w-64 h-64 flex flex-col flex-shrink-0 items-center justify-center text-center cursor-pointer hover:border-cyan-500/50 group">
+                                    <div
+                                        class="w-24 h-24 flex items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-300 mx-auto mb-4 group-hover:bg-cyan-500/20 group-hover:scale-110 transition-all border border-cyan-500/20">
+                                        <i data-lucide="layout-grid" class="w-12 h-12"></i>
+                                    </div>
+                                    <h3 class="text-xl font-bold text-white mb-1"
+                                        style="font-family: 'TT Norms Pro Normal', sans-serif;">Regional Prompt</h3>
+                                    <p class="text-xl text-gray-500">區域提示詞</p>
+                                </button>
                             </div>
 
                             <p class="text-center text-base text-gray-500 mt-10">按 ESC 或點擊外部區域關閉</p>
@@ -751,11 +765,32 @@
                                     <div id="results-grid" class="grid gap-4 w-full h-full place-items-center">
                                     </div>
                                 </div>
+
+                                <!-- Ideogram4 Regional Prompt: BBox canvas mount point -->
+                                <div id="regional-canvas-mount" class="hidden w-full h-full flex items-center justify-center"></div>
                             </div>
 
                             <!-- Bottom Control Panel -->
                             <div id="workspace-controls" class="glass-panel p-6 relative">
                                 <div class="max-w-4xl mx-auto flex flex-col gap-4">
+                                    <!-- Ideogram4 Regional Prompt: style/size fields -->
+                                    <div id="regional-fields" class="hidden grid grid-cols-4 gap-3">
+                                        <input id="regional-background" type="text" placeholder="Background 背景"
+                                            class="col-span-2 bg-black/20 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-500/50">
+                                        <input id="regional-aesthetics" type="text" placeholder="Aesthetics 美學風格"
+                                            class="col-span-2 bg-black/20 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-500/50">
+                                        <input id="regional-lighting" type="text" placeholder="Lighting 光線"
+                                            class="col-span-2 bg-black/20 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-500/50">
+                                        <input id="regional-medium" type="text" placeholder="Medium 媒材" value="Photograph"
+                                            class="col-span-2 bg-black/20 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-500/50">
+                                        <input id="regional-width" type="number" placeholder="Width" value="1080" min="256" max="4096"
+                                            oninput="window.regionalCanvasEditor && window.regionalCanvasEditor.setAspect(parseInt(this.value) || 1080, parseInt(document.getElementById('regional-height').value) || 1920)"
+                                            class="bg-black/20 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-500/50">
+                                        <input id="regional-height" type="number" placeholder="Height" value="1920" min="256" max="4096"
+                                            oninput="window.regionalCanvasEditor && window.regionalCanvasEditor.setAspect(parseInt(document.getElementById('regional-width').value) || 1080, parseInt(this.value) || 1920)"
+                                            class="bg-black/20 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-500/50">
+                                    </div>
+
                                     <!-- Upload Zones -->
                                     <div id="upload-zones" class="flex gap-4 h-28"></div>
 
@@ -1730,6 +1765,20 @@
                 window.toolStates[toolName].canvasHidden = canvasResults ? canvasResults.classList.contains('hidden') : true;
             }
 
+            // Ideogram4 Regional Prompt: 保存 bbox 與風格欄位
+            if (toolName === 'ideogram4_regional_t2i') {
+                window.toolStates[toolName].elementsData = window.regionalCanvasEditor
+                    ? window.regionalCanvasEditor.getElementsData() : '[]';
+                window.toolStates[toolName].regionalFields = {
+                    background: document.getElementById('regional-background')?.value || '',
+                    aesthetics: document.getElementById('regional-aesthetics')?.value || '',
+                    lighting: document.getElementById('regional-lighting')?.value || '',
+                    medium: document.getElementById('regional-medium')?.value || 'Photograph',
+                    width: document.getElementById('regional-width')?.value || '1080',
+                    height: document.getElementById('regional-height')?.value || '1920',
+                };
+            }
+
             console.log(`[State] 已保存 ${toolName} 的狀態`, window.toolStates[toolName]);
         }
 
@@ -1784,6 +1833,21 @@
                 }
 
                 lucide.createIcons();
+            }
+
+            // Ideogram4 Regional Prompt: 恢復 bbox 與風格欄位
+            if (toolName === 'ideogram4_regional_t2i') {
+                const rf = state.regionalFields || {};
+                if (document.getElementById('regional-background')) document.getElementById('regional-background').value = rf.background || '';
+                if (document.getElementById('regional-aesthetics')) document.getElementById('regional-aesthetics').value = rf.aesthetics || '';
+                if (document.getElementById('regional-lighting')) document.getElementById('regional-lighting').value = rf.lighting || '';
+                if (document.getElementById('regional-medium')) document.getElementById('regional-medium').value = rf.medium || 'Photograph';
+                if (document.getElementById('regional-width')) document.getElementById('regional-width').value = rf.width || '1080';
+                if (document.getElementById('regional-height')) document.getElementById('regional-height').value = rf.height || '1920';
+                if (window.regionalCanvasEditor) {
+                    window.regionalCanvasEditor.setAspect(parseInt(rf.width) || 1080, parseInt(rf.height) || 1920);
+                    window.regionalCanvasEditor.setElementsData(state.elementsData || '[]');
+                }
             }
 
             // 恢復按鈕狀態
@@ -1869,6 +1933,24 @@
 
             // 重置畫布到 placeholder 狀態
             resetCanvas();
+
+            // Ideogram4 Regional Prompt: 切換為 BBox 畫布模式
+            const regionalFields = document.getElementById('regional-fields');
+            const regionalMount = document.getElementById('regional-canvas-mount');
+            const canvasPlaceholder = document.getElementById('canvas-placeholder');
+            const isRegional = currentTool === 'ideogram4_regional_t2i';
+            if (regionalFields) regionalFields.classList.toggle('hidden', !isRegional);
+            if (regionalMount) regionalMount.classList.toggle('hidden', !isRegional);
+            uploadZones.classList.toggle('hidden', isRegional);
+            if (canvasPlaceholder) canvasPlaceholder.classList.toggle('hidden', isRegional);
+            if (isRegional && regionalMount) {
+                if (!window.regionalCanvasEditor) {
+                    window.regionalCanvasEditor = new RegionalCanvasEditor(regionalMount);
+                }
+                const w = parseInt(document.getElementById('regional-width').value) || 1080;
+                const h = parseInt(document.getElementById('regional-height').value) || 1920;
+                window.regionalCanvasEditor.setAspect(w, h);
+            }
 
             lucide.createIcons();
         }
@@ -2989,6 +3071,22 @@
                 }
             }
 
+            // Ideogram4 Regional Prompt: 驗證主 prompt 與 bbox 內容
+            if (currentTool === 'ideogram4_regional_t2i') {
+                if (!prompt) {
+                    showStatus('⚠️ Please enter a prompt', 'warning');
+                    return Promise.reject('No prompt');
+                }
+                if (window.regionalCanvasEditor) {
+                    const bboxCheck = window.regionalCanvasEditor.validate();
+                    if (!bboxCheck.valid) {
+                        showStatus(`⚠️ ${bboxCheck.message}`, 'warning');
+                        window.regionalCanvasEditor.selectIndex(bboxCheck.index);
+                        return Promise.reject('Invalid bbox');
+                    }
+                }
+            }
+
             // 禁用按鈕並顯示載入狀態
             const originalHTML = btn.innerHTML;
             btn.disabled = true;
@@ -3019,6 +3117,19 @@
                     batch_size: currentBatchSize,
                     images: uploadedImages
                 };
+
+                // Ideogram4 Regional Prompt: 附加寬高、bbox 與風格欄位
+                if (currentTool === 'ideogram4_regional_t2i') {
+                    const widthInput = document.getElementById('regional-width');
+                    const heightInput = document.getElementById('regional-height');
+                    payload.width = widthInput ? (parseInt(widthInput.value) || 1080) : 1080;
+                    payload.height = heightInput ? (parseInt(heightInput.value) || 1920) : 1920;
+                    payload.elements_data = window.regionalCanvasEditor ? window.regionalCanvasEditor.getElementsData() : '[]';
+                    payload.background = document.getElementById('regional-background').value;
+                    payload.aesthetics = document.getElementById('regional-aesthetics').value;
+                    payload.lighting = document.getElementById('regional-lighting').value;
+                    payload.medium = document.getElementById('regional-medium').value;
+                }
 
                 // 發送 API 請求
                 const response = await fetch(`${API_BASE}/api/generate`, {

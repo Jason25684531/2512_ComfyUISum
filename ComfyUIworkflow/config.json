@@ -330,5 +330,43 @@
         "video"
       ]
     }
+  },
+  "ideogram4_regional_t2i": {
+    "id": "ideogram4_regional_t2i",
+    "aliases": [],
+    "file": "Ideogram4_T2I_Regional_Prompt.json",
+    "description": "Ideogram 4 區域提示詞文生圖（BBox 畫布）",
+    "category": "image",
+    "mapping": {
+      "output_node_id": "158",
+      "seed_node_ids": ["98:18"],
+      "param_map": {
+        "elements_data": { "node_id": "178", "input_key": "elements_data" },
+        "width": { "node_id": "178", "input_key": "width" },
+        "height": { "node_id": "178", "input_key": "height" },
+        "background": { "node_id": "178", "input_key": "background" },
+        "style": { "node_id": "178", "input_key": "style" },
+        "aesthetics": { "node_id": "178", "input_key": "aesthetics" },
+        "lighting": { "node_id": "178", "input_key": "lighting" },
+        "medium": { "node_id": "178", "input_key": "medium" },
+        "style_palette_data": { "node_id": "178", "input_key": "style_palette_data" }
+      }
+    },
+    "model_overrides": {
+      "windows": []
+    },
+    "prompt_map": {
+      "main": {
+        "node_id": "178",
+        "input_key": "high_level_description"
+      }
+    },
+    "frontend": {
+      "title": "區域提示詞 Regional Prompt",
+      "description": "以 BBox 畫布指定各區域內容並生成圖片",
+      "icon": "layout-grid",
+      "color": "cyan",
+      "inputs": []
+    }
   }
 }

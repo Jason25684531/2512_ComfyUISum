@@ -173,6 +173,32 @@ class WorkflowCatalog:
                         f"{entry.workflow_id}: audio_map.{field_name} cannot inject {node_id}.{input_key}"
                     )
 
+            mapping = entry.mapping or {}
+
+            output_node_id = mapping.get("output_node_id")
+            if output_node_id and find_workflow_node(workflow, output_node_id) is None:
+                errors.append(f"{entry.workflow_id}: mapping.output_node_id missing node {output_node_id}")
+
+            for seed_node_id in mapping.get("seed_node_ids", []):
+                node = find_workflow_node(workflow, seed_node_id)
+                if node is None:
+                    errors.append(f"{entry.workflow_id}: mapping.seed_node_ids missing node {seed_node_id}")
+                elif not has_input_key(node, "noise_seed"):
+                    errors.append(
+                        f"{entry.workflow_id}: mapping.seed_node_ids cannot inject {seed_node_id}.noise_seed"
+                    )
+
+            for param_name, target in mapping.get("param_map", {}).items():
+                node_id = target.get("node_id")
+                input_key = target.get("input_key", "value")
+                node = find_workflow_node(workflow, node_id)
+                if node is None:
+                    errors.append(f"{entry.workflow_id}: mapping.param_map.{param_name} missing node {node_id}")
+                elif not has_input_key(node, input_key):
+                    errors.append(
+                        f"{entry.workflow_id}: mapping.param_map.{param_name} cannot inject {node_id}.{input_key}"
+                    )
+
         return errors
 
     def _build_entries(self, raw_config: dict[str, Any]) -> dict[str, WorkflowCatalogEntry]:

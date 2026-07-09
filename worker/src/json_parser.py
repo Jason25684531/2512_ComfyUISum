@@ -97,6 +97,7 @@ def parse_workflow(
     video_file: str = None,
     retake_start: float = None,
     retake_end: float = None,
+    extra_params: dict = None,
     **kwargs,
 ) -> dict:
     """Build a ComfyUI API workflow payload from a configured workflow template."""
@@ -119,6 +120,14 @@ def parse_workflow(
 
     workflow = copy.deepcopy(load_workflow(workflow_name))
 
+    merged_extra_params = {}
+    if retake_start is not None:
+        merged_extra_params["retake_start"] = retake_start
+    if retake_end is not None:
+        merged_extra_params["retake_end"] = retake_end
+    if extra_params:
+        merged_extra_params.update(extra_params)
+
     return apply_workflow_injections(
         workflow=workflow,
         workflow_name=workflow_name,
@@ -136,8 +145,7 @@ def parse_workflow(
         image_files=image_files,
         audio_file=audio_file,
         video_file=video_file,
-        retake_start=retake_start,
-        retake_end=retake_end,
+        extra_params=merged_extra_params,
         trim_veo3_workflow=trim_veo3_workflow,
     )
 
