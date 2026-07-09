@@ -30,6 +30,8 @@ function makeFakeElement(tag) {
         get innerHTML() { return ""; },
         set textContent(v) { this._text = v; },
         get textContent() { return this._text || ""; },
+        focusCount: 0,
+        focus() { this.focusCount += 1; global.document.activeElement = this; },
     };
     return el;
 }
@@ -98,5 +100,27 @@ console.log("[OK] setBackgroundImage strips quote characters from the URL");
 editor.setBackgroundImage(null);
 assert.strictEqual(editor.stage.style.backgroundImage, "");
 console.log("[OK] setBackgroundImage(null) clears the background");
+
+// Regression test for the props-panel interaction bug: window-level pointerup
+// (fired on every click anywhere on the page, e.g. clicking into a textarea)
+// must NOT rebuild the props panel unless a drag was actually in progress.
+editor.selectIndex(0);
+const descNodeBefore = editor.propsEl.children[1];
+descNodeBefore.focus();
+assert.strictEqual(global.document.activeElement, descNodeBefore);
+assert.strictEqual(editor._drag, null);
+editor._onPointerUp();
+assert.strictEqual(editor.propsEl.children[1], descNodeBefore, "props panel must not be rebuilt on a plain click (no active drag)");
+assert.strictEqual(global.document.activeElement, descNodeBefore, "focus must survive a plain click's pointerup");
+console.log("[OK] _onPointerUp() without an active drag does not rebuild the props panel or steal focus");
+
+// A real drag (create-box) must still render on pointerup as before.
+const elementsBefore = editor.elements.length;
+editor._onStagePointerDown({ target: editor.stage, clientX: 10, clientY: 10 });
+editor._onPointerMove({ clientX: 100, clientY: 150 });
+editor._onPointerUp();
+assert.strictEqual(editor.elements.length, elementsBefore + 1, "a completed create-drag must still add a new element");
+assert.strictEqual(editor.selectedIndex, editor.elements.length - 1);
+console.log("[OK] _onPointerUp() after a create-drag still commits the new bbox and re-renders");
 
 console.log("All RegionalCanvasEditor fake-DOM smoke tests passed.");

@@ -213,7 +213,8 @@ class RegionalCanvasEditor {
     }
 
     _onPointerUp() {
-        if (this._drag && this._drag.mode === "create" && this._drag.preview) {
+        if (!this._drag) return; // 一般點擊（未拖曳）不應觸發整個編輯器重繪，否則會打斷輸入框 focus
+        if (this._drag.mode === "create" && this._drag.preview) {
             const { x, y, w, h } = this._drag.preview;
             if (w > MIN_SIZE && h > MIN_SIZE) {
                 const palette = [DEFAULT_PALETTE[this.elements.length % DEFAULT_PALETTE.length]];
