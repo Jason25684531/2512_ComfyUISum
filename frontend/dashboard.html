@@ -3289,6 +3289,11 @@
             if (canvasPlaceholder) canvasPlaceholder.classList.add('hidden');
             if (canvasResults) canvasResults.classList.remove('hidden');
 
+            // Ideogram4 Regional Prompt: 將生成結果以半透明背景疊回 bbox 畫布，方便比對落點
+            if (currentTool === 'ideogram4_regional_t2i' && window.regionalCanvasEditor) {
+                window.regionalCanvasEditor.setBackgroundImage(imageUrl);
+            }
+
             lucide.createIcons();
         }
 

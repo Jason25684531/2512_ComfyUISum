@@ -87,4 +87,16 @@ editor.selectIndex(0);
 assert.strictEqual(editor.selectedIndex, 0);
 console.log("[OK] selectIndex updates selection");
 
+editor.setBackgroundImage("/outputs/abc123.png");
+assert.ok(editor.stage.style.backgroundImage.includes('url("/outputs/abc123.png")'));
+console.log("[OK] setBackgroundImage sets stage CSS background");
+
+editor.setBackgroundImage('/outputs/"evil.png');
+assert.ok(!editor.stage.style.backgroundImage.includes('"evil'));
+console.log("[OK] setBackgroundImage strips quote characters from the URL");
+
+editor.setBackgroundImage(null);
+assert.strictEqual(editor.stage.style.backgroundImage, "");
+console.log("[OK] setBackgroundImage(null) clears the background");
+
 console.log("All RegionalCanvasEditor fake-DOM smoke tests passed.");

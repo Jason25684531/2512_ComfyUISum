@@ -117,6 +117,18 @@ class RegionalCanvasEditor {
         this._applyAspect();
     }
 
+    // 將上一次生成結果以半透明方式疊在畫布底層，方便比對 bbox 落點；不影響 bbox 互動層
+    setBackgroundImage(url) {
+        if (!url) {
+            this.stage.style.backgroundImage = "";
+            return;
+        }
+        const safeUrl = String(url).replace(/["'\\]/g, "");
+        this.stage.style.backgroundImage = `linear-gradient(rgba(17,24,39,0.55), rgba(17,24,39,0.55)), url("${safeUrl}")`;
+        this.stage.style.backgroundSize = "cover";
+        this.stage.style.backgroundPosition = "center";
+    }
+
     getElementsData() {
         return JSON.stringify(this.elements.map(canonicalizeElement));
     }
