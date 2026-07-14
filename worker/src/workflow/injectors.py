@@ -121,7 +121,7 @@ def _read_workflow_config(config_path: Path, workflow_entry, workflow_name: str)
             config_data = json.load(f)
 
     if isinstance(config_data, dict):
-        workflow_config = config_data.get(workflow_entry.name, {})
+        workflow_config = config_data.get(workflow_entry.workflow_id, {})
         if not workflow_config:
             workflow_config = config_data.get(workflow_name, {})
 
@@ -150,7 +150,7 @@ def apply_workflow_injections(
     trim_veo3_workflow: Callable[[dict, dict], dict],
 ) -> dict:
     config_data = registry._config
-    workflow_config = config_data.get(workflow_entry.name, {})
+    workflow_config = config_data.get(workflow_entry.workflow_id, {})
     image_map_config = workflow_entry.image_map
 
     try:

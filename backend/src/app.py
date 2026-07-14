@@ -1192,7 +1192,7 @@ if __name__ == '__main__':
         logger.info("ℹ️  Veo3 測試模式未啟用")
     
     is_windows = sys.platform.startswith('win')
-    is_debug = os.getenv('FLASK_DEBUG', 'False').lower() == 'true'
+    is_debug = FLASK_DEBUG_MODE
     
     try:
         if is_windows:

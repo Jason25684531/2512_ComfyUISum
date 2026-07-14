@@ -1,7 +1,6 @@
 import os
 import platform
 import sys
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -33,19 +32,6 @@ def _default_workflow_paths() -> tuple[Path, Path]:
     return Path(WORKFLOW_CONFIG_PATH), Path(WORKFLOW_DIR)
 
 
-@dataclass(frozen=True)
-class WorkflowEntry:
-    name: str
-    file: str
-    path: Path
-    mapping: dict[str, Any]
-    prompt_map: dict[str, Any]
-    image_map: dict[str, Any]
-    audio_map: dict[str, Any]
-    model_overrides: dict[str, Any]
-    aliases: tuple[str, ...]
-
-
 class WorkflowRegistry:
     def __init__(self, config_path: Path = None, workflow_dir: Path = None):
         default_config_path, default_workflow_dir = _default_workflow_paths()
@@ -61,24 +47,13 @@ class WorkflowRegistry:
             # 未知 workflow：維持原樣回傳，由下游 get() 觸發既有的錯誤處理路徑。
             return workflow_name
 
-    def get(self, workflow_name: str) -> WorkflowEntry:
+    def get(self, workflow_name: str):
         try:
             resolution = self._catalog.resolve(workflow_name)
         except KeyError:
             resolution = self._catalog.resolve(self.resolve_name(workflow_name))
 
-        entry = resolution.entry
-        return WorkflowEntry(
-            name=entry.workflow_id,
-            file=entry.file,
-            path=entry.path,
-            mapping=entry.mapping,
-            prompt_map=entry.prompt_map,
-            image_map=entry.image_map,
-            audio_map=entry.audio_map,
-            model_overrides=entry.model_overrides,
-            aliases=entry.aliases,
-        )
+        return resolution.entry
 
     def resolve_runtime_profile(self) -> str:
         configured_profile = os.getenv("COMFYUI_RUNTIME_PROFILE", "").strip()

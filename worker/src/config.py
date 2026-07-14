@@ -11,6 +11,18 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from shared.config_base import (
+    COMFYUI_ROOT,
+    JOB_QUEUE,
+    JOB_STATUS_EXPIRE_SECONDS,
+    PROJECT_ROOT,
+    REDIS_HOST,
+    REDIS_PASSWORD,
+    REDIS_PORT,
+    STORAGE_DIR,
+    STORAGE_INPUT_DIR,
+    STORAGE_OUTPUT_DIR,
+    WORKFLOW_CONFIG_PATH,
+    WORKFLOW_DIR,
     get_env_bool,
     get_env_float,
     get_env_int,
@@ -20,25 +32,10 @@ from shared.config_base import (
 )
 from shared.runtime_settings import (
     build_legacy_comfy_runtime_settings,
-    build_shared_runtime_settings,
 )
 
 
-_SHARED_SETTINGS = build_shared_runtime_settings()
-_COMFY_RUNTIME = build_legacy_comfy_runtime_settings(_SHARED_SETTINGS)
-
-PROJECT_ROOT = _SHARED_SETTINGS.project_root
-REDIS_HOST = _SHARED_SETTINGS.redis_host
-REDIS_PORT = _SHARED_SETTINGS.redis_port
-REDIS_PASSWORD = _SHARED_SETTINGS.redis_password
-JOB_QUEUE = _SHARED_SETTINGS.job_queue
-STORAGE_DIR = _SHARED_SETTINGS.storage_dir
-STORAGE_INPUT_DIR = _SHARED_SETTINGS.storage_input_dir
-STORAGE_OUTPUT_DIR = _SHARED_SETTINGS.storage_output_dir
-WORKFLOW_DIR = _SHARED_SETTINGS.workflow_dir
-WORKFLOW_CONFIG_PATH = _SHARED_SETTINGS.workflow_config_path
-JOB_STATUS_EXPIRE_SECONDS = _SHARED_SETTINGS.job_status_expire_seconds
-COMFYUI_ROOT = _SHARED_SETTINGS.comfyui_root
+_COMFY_RUNTIME = build_legacy_comfy_runtime_settings()
 
 DEFAULT_UNET_MODEL = get_env_str(
     "DEFAULT_UNET_MODEL",

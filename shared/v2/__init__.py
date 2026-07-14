@@ -30,7 +30,14 @@ from .path_utils import (
     validate_linux_first_path,
     validate_relative_storage_path,
 )
-from .runtime_config import resolve_repo_relative_path
+
+
+def __getattr__(name: str):
+    if name == "resolve_repo_relative_path":
+        from shared.runtime_settings import resolve_repo_relative_path
+
+        return resolve_repo_relative_path
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 from .status import LEGACY_STATUS_BY_V2_STATUS, map_v2_status_to_legacy
 
 __all__ = [

@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from pathlib import PurePosixPath
 from typing import ClassVar, Literal
 
 from pydantic import AliasChoices, Field, field_validator
@@ -27,30 +26,8 @@ from shared.config_base import (
     resolve_path_setting,
     resolve_service_endpoint,
 )
-
-
-V2_JOB_QUEUE_KEY = "studio:v2:jobs"
-
-
-class InvalidStoragePathError(ValueError):
-    """Raised when a storage path violates the repo's linux-first contract."""
-
-
-@dataclass(frozen=True)
-class SharedRuntimeSettings:
-    project_root: Path
-    redis_host: str
-    redis_port: int
-    redis_password: str | None
-    job_queue: str
-    storage_dir: Path
-    storage_input_dir: Path
-    storage_output_dir: Path
-    workflow_dir: Path
-    workflow_config_path: Path
-    job_status_expire_seconds: int
-    comfyui_root: Path
-    comfyui_models_dir: Path
+from shared.v2.constants import V2_JOB_QUEUE_KEY
+from shared.v2.path_utils import InvalidStoragePathError, validate_linux_first_path, validate_relative_storage_path
 
 
 @dataclass(frozen=True)
@@ -59,28 +36,6 @@ class LegacyComfyRuntimeSettings:
     input_dir: Path
     output_dir: Path
     models_dir: Path
-
-
-def validate_linux_first_path(value: str, *, key: str) -> str:
-    if "\x00" in value:
-        raise InvalidStoragePathError(f"{key} contains a null byte.")
-
-    cleaned = value.strip()
-    if not cleaned:
-        raise InvalidStoragePathError(f"{key} must not be empty.")
-    if "\\" in cleaned:
-        raise InvalidStoragePathError(f"{key} must use '/' path separators.")
-    return cleaned
-
-
-def validate_relative_storage_path(value: str) -> str:
-    cleaned = validate_linux_first_path(value, key="Storage path")
-    parsed = PurePosixPath(cleaned)
-    if parsed.is_absolute():
-        raise InvalidStoragePathError("Persisted storage paths must remain relative to STORAGE_ROOT.")
-    if any(part in {"..", ""} for part in parsed.parts):
-        raise InvalidStoragePathError("Persisted storage paths must not escape STORAGE_ROOT.")
-    return parsed.as_posix()
 
 
 def resolve_repo_relative_path(raw_value: str, *, repo_root: str | Path) -> str:
@@ -142,25 +97,7 @@ def resolve_v2_redis_url(value: str | None = None) -> str:
     return f"redis://{auth}{REDIS_HOST}:{REDIS_PORT}/0"
 
 
-def build_shared_runtime_settings() -> SharedRuntimeSettings:
-    return SharedRuntimeSettings(
-        project_root=PROJECT_ROOT,
-        redis_host=REDIS_HOST,
-        redis_port=REDIS_PORT,
-        redis_password=REDIS_PASSWORD,
-        job_queue=JOB_QUEUE,
-        storage_dir=STORAGE_DIR,
-        storage_input_dir=STORAGE_INPUT_DIR,
-        storage_output_dir=STORAGE_OUTPUT_DIR,
-        workflow_dir=WORKFLOW_DIR,
-        workflow_config_path=WORKFLOW_CONFIG_PATH,
-        job_status_expire_seconds=JOB_STATUS_EXPIRE_SECONDS,
-        comfyui_root=COMFYUI_ROOT,
-        comfyui_models_dir=COMFYUI_MODELS_DIR,
-    )
-
-
-def build_legacy_comfy_runtime_settings(shared_settings: SharedRuntimeSettings) -> LegacyComfyRuntimeSettings:
+def build_legacy_comfy_runtime_settings() -> LegacyComfyRuntimeSettings:
     endpoint = resolve_service_endpoint(
         "COMFYUI_SERVER_URL",
         "COMFY_HOST",
@@ -170,18 +107,18 @@ def build_legacy_comfy_runtime_settings(shared_settings: SharedRuntimeSettings) 
     )
     input_dir = resolve_path_setting(
         "COMFYUI_INPUT_DIR",
-        shared_settings.comfyui_root / "input",
-        shared_settings.project_root,
+        COMFYUI_ROOT / "input",
+        PROJECT_ROOT,
     )
     output_dir = resolve_path_setting(
         "COMFYUI_OUTPUT_DIR",
-        shared_settings.comfyui_root / "output",
-        shared_settings.project_root,
+        COMFYUI_ROOT / "output",
+        PROJECT_ROOT,
     )
     models_dir = resolve_path_setting(
         "STORAGE_MODELS_DIR",
-        shared_settings.storage_dir / "models",
-        shared_settings.project_root,
+        STORAGE_DIR / "models",
+        PROJECT_ROOT,
     )
     input_dir.mkdir(parents=True, exist_ok=True)
     models_dir.mkdir(parents=True, exist_ok=True)
@@ -257,10 +194,8 @@ class V2RuntimeSettings(BaseSettings):
 
 __all__ = [
     "LegacyComfyRuntimeSettings",
-    "SharedRuntimeSettings",
     "V2RuntimeSettings",
     "build_legacy_comfy_runtime_settings",
-    "build_shared_runtime_settings",
     "resolve_repo_relative_path",
     "resolve_v2_comfyui_base_url",
     "resolve_v2_database_url",

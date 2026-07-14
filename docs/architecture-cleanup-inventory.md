@@ -38,6 +38,13 @@ This section records the first implementation pass for `refactor-command-args-an
 - Manual regression targets for this pass are the four entrypoints: `backend/src/app.py`, `worker/src/main.py`, `apps/backend-fastapi/app/main.py`, and `apps/worker-v2/worker/main.py`.
 - Cleanup verification must continue to use the current test entrypoints rather than introducing a new framework.
 
+## 2026-07 Architecture Cleanup
+
+- Commit A removed 6,115 lines of duplicate workflows, tracked SQLite state, obsolete reports, and a zero-caller config test; `apps/*/storage/` is now ignored.
+- Commit B removes the duplicate runtime path validators, queue-key definition, runtime-config re-export module, settings data bag, workflow-entry copy, and unused parser facade exports. It retains the config module import surface.
+- `frontend/motion-workspace.js` and `frontend/image-utils.js` remain: `apps/backend-fastapi` still serves their public static URLs, verified as HTTP 200 in compose.
+- Net implementation reduction across the two commits is 6,288 lines (documentation excluded).
+
 ## Runtime Components
 
 | Surface | Current Owner | Notes |
