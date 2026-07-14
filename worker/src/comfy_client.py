@@ -26,6 +26,7 @@ from config import (
     OUTPUT_COPY_RETRY_DELAY_SECONDS, OUTPUT_COPY_WAIT_SECONDS,
 )
 from shared.security import get_public_error_message
+from regional_prompt import NODE_CLASS, SAFE_ERROR, verify_regional_caption_contract
 
 # 為了向後相容，保留模組級別的別名
 COMFY_OUTPUT_DIR = COMFYUI_OUTPUT_DIR
@@ -149,6 +150,16 @@ class ComfyClient:
         except Exception as e:
             print(f"[ComfyClient] 提交錯誤: {e}")
             return None
+
+    def verify_regional_caption_contract(self, workflow: dict) -> dict:
+        """Verify the deployed custom node before a regional workflow is submitted."""
+        try:
+            response = requests.get(f"{self.http_url}/object_info/{NODE_CLASS}", timeout=COMFY_HTTP_TIMEOUT)
+            if response.status_code != 200:
+                raise RuntimeError(SAFE_ERROR)
+            return verify_regional_caption_contract(workflow, response.json())
+        except (requests.RequestException, ValueError, RuntimeError) as exc:
+            raise RuntimeError(SAFE_ERROR) from exc
     
     def wait_for_completion(
         self, 

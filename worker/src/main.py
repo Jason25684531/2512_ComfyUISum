@@ -566,6 +566,9 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict):
         update_job_status(r, job_id, "processing", progress=30)
         if not client.check_connection():
             raise RuntimeError(COMFYUI_UNAVAILABLE)
+
+        if workflow_name == "ideogram4_regional_t2i":
+            client.verify_regional_caption_contract(workflow)
         
         job_logger.info("ComfyUI submit start")
         prompt_id = client.queue_prompt(workflow)
