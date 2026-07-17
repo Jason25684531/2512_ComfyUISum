@@ -1,12 +1,12 @@
 # ============================================
 # TWCC Base VM 專用 - 常駐基礎服務
 # ============================================
-# 用途：TWCC v2.super 常駐 VM，僅包含 nginx + API + Redis
+# 用途：TWCC Base VM，包含 nginx、Flask API、Redis 與 MySQL
 # 不包含 Worker、ComfyUI、Ngrok（Worker 在 GPU VM 上直接運行）
 #
 # 使用方式：
 #   docker compose -f docker-compose.base.yml --env-file .env.twcc up -d
-# Repo 級 TWCC 邊界請搭配 docker-compose.unified.yml、nginx/ 與 docs/TWCC_HFS_COS_Mount_Guide.md 一併理解
+# 此檔即為 TWCC Base VM 的 canonical compose entry；nginx 轉送至 Flask API。
 #
 # ============================================
 
@@ -26,7 +26,6 @@ services:
         max-file: "3"
     volumes:
       - ./nginx/nginx.twcc.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./frontend:/usr/share/nginx/html:ro
     depends_on:
       backend:
         condition: service_healthy
@@ -166,8 +165,7 @@ services:
       timeout: 5s
       retries: 12
 
-  # 註：舊版 mysql 服務與 ${MYSQL_DATA_PATH:-./mysql_data} 磁碟區已移除（單一使用者模式不再需要 MySQL）。
-  # 若 TWCC VM 上仍存在 mysql_data/ 目錄，屬於過期資料，可安全手動刪除。
+  # MySQL is an active TWCC Base VM service; MYSQL_DATA_PATH persists its database state.
 
 networks:
   studio-net:

@@ -432,7 +432,6 @@ ComfyUISum/
 ├── scripts/                    # 工具腳本
 │   ├── validate_deployment_matrix.py  # 部署矩陣驗證（preflight 必跑）
 │   ├── validate_local_startup.py      # 本地啟動驗證（ComfyUI + Redis + Backend）
-│   ├── validate_environment_boundary.py # 環境邊界驗證
 │   ├── twcc_*.sh              # TWCC 管理（setup / start / stop / cron / healthcheck）
 │   ├── start_ngrok.bat / update_ngrok_config.ps1  # Ngrok 公網存取
 │   └── maintenance.sh / maintenance_lib.py        # 維運自動化
@@ -440,7 +439,6 @@ ComfyUISum/
 ├── docs/                       # 文檔（部署矩陣 / Runtime Contract / TWCC 指南）
 ├── openspec/                   # OpenSpec 規格驅動開發（config.yaml + specs + changes）
 ├── deployment_matrix.yaml     # ★ 部署拓撲宣告（環境契約唯一事實來源）
-├── environment_boundary_manifest.json  # 環境邊界清單
 ├── docker-compose.yml         # 本地 canonical compose（local-dev）
 ├── docker-compose.base.yml    # 雲端 Base VM compose（twcc-base-vm）
 ├── .env.local.example         # 本地 env 範本

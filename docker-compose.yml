@@ -48,8 +48,7 @@ services:
       timeout: 5s
       retries: 12
 
-  # 註：舊版 mysql 服務與 ./mysql_data 磁碟區已移除（單一使用者模式不再需要 MySQL）。
-  # 若本機仍存在 mysql_data/ 目錄，屬於過期資料，可安全手動刪除。
+  # MySQL is an active local service; ./mysql_data persists its database state.
 
   # =========================================
   # 2. Backend API 服務

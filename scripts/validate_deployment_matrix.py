@@ -154,6 +154,40 @@ def parse_env_keys(env_path: Path) -> set[str]:
     return keys
 
 
+def validate_forbidden_literals(repo_root: Path, checked_paths: set[str], violations: list[dict[str, Any]]) -> None:
+    forbidden_literals = ("202.5.255.9", "10.10.1.18")
+    excluded_parts = {
+        ".git", "docs", "openspec", "__pycache__", ".pytest_cache", "node_modules",
+        "ComfyUI", "storage", "logs", "venv", ".venv", "redis_data", "mysql_data",
+    }
+    text_suffixes = {".py", ".sh", ".yml", ".yaml", ".json", ".md", ".conf", ".example"}
+    for path in repo_root.rglob("*"):
+        relative_path = path.relative_to(repo_root).as_posix()
+        if path == Path(__file__).resolve():
+            continue
+        if (
+            path.suffix not in text_suffixes
+            or excluded_parts.intersection(path.relative_to(repo_root).parts)
+        ):
+            continue
+        if path.name.startswith(".env") and not path.name.endswith(".example"):
+            continue
+        try:
+            content = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        checked_paths.add(relative_path)
+        for literal in forbidden_literals:
+            if literal in content:
+                add_violation(
+                    violations,
+                    "forbidden-literal",
+                    f"Found forbidden literal '{literal}'.",
+                    file_path=relative_path,
+                    matched_literal=literal,
+                )
+
+
 def validate_deployment_matrix(repo_root: Path) -> dict[str, Any]:
     repo_root = repo_root.resolve()
     violations: list[dict[str, Any]] = []
@@ -360,17 +394,7 @@ def validate_deployment_matrix(repo_root: Path) -> dict[str, Any]:
                 file_path=canonical_path,
             )
 
-    script_path = repo_root / "scripts" / "start_unified_linux.sh"
-    if script_path.is_file():
-        checked_paths.add("scripts/start_unified_linux.sh")
-        script_content = script_path.read_text(encoding="utf-8")
-        if "infra-only profile" in script_content:
-            add_violation(
-                violations,
-                "script-profile-drift",
-                "Linux launcher must describe infra-only as a mode, not a profile.",
-                file_path="scripts/start_unified_linux.sh",
-            )
+    validate_forbidden_literals(repo_root, checked_paths, violations)
 
     return {
         "compliant": not violations,
