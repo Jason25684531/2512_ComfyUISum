@@ -235,7 +235,6 @@ local-dev 與 TWCC 的差異由「設定注入 + 實作類別切換」決定
 - **boto3 1.34+** - S3 相容物件儲存（TWCC COS / MinIO）
 - **Docker / Docker Compose** - 容器化部署
 - **Nginx** - 反向代理（TWCC 生產環境）
-- **FastAPI**（v2，`apps/backend-fastapi/`，⏸️ 暫停開發）
 
 ### 前端
 - **HTML5 / CSS3 / Tailwind CSS** - 結構與樣式
@@ -397,17 +396,9 @@ ComfyUISum/
 │   ├── worker.service.template    # [TWCC] Worker systemd 範本
 │   └── Dockerfile
 │
-├── apps/                       # v2 應用（⏸️ 暫停開發，維持現狀）
-│   ├── backend-fastapi/       # FastAPI 後端（routes / models / services）
-│   └── worker-v2/             # v2 Worker（engines: base / comfyui / mock）
-│
-├── packages/workflow_registry/ # 可重用 Workflow 註冊套件
-│
 ├── frontend/                   # Web 前端（單一使用者模式）
 │   ├── dashboard.html         # 主入口（多工作區：圖像 + Video Studio）
 │   ├── profile.html           # 會員中心（保留頁）
-│   ├── motion-workspace.js    # Video Studio 邏輯
-│   ├── image-utils.js         # 統一圖片處理模組
 │   ├── config.js              # API 配置（runtime catalog 驅動）
 │   ├── style.css / tailwind.* # 樣式（Tailwind 產出）
 │   ├── front/ image/ vendor/  # 頁面資源與第三方庫
@@ -743,12 +734,9 @@ TWCC 環境：`bash scripts/twcc_healthcheck.sh`（Base VM）、
 - **Workflow Catalog**（`shared/workflow_catalog.py` + `ComfyUIworkflow/config.json`）：
   canonical ID / alias 集中解析，前端經 `GET /api/runtime-config` 取得，避免前後端清單漂移。
 
-### v2 Mainline（⏸️ 暫停開發）
+### v2 Mainline
 
-`apps/backend-fastapi/`、`apps/worker-v2/`、`shared/v2/` 維持現狀不變。
-v2 曾驗證：FastAPI 路由、`ENGINE_MODE=mock/comfyui` 可插拔引擎、相對路徑產出管理。
-目前正式對外服務為 **v1（Flask + Redis：`backend/` + `worker/`）**；
-v2 的引擎抽象模式（`engines/base`）為 Phase 2 多後端擴展的參考範式。
+v2 開發堆疊已移除；需要歷史實作時可透過 git 歷史還原。正式服務為 **Flask + Redis：`backend/` + `worker/`**。
 
 ### 更新日誌（摘要）
 

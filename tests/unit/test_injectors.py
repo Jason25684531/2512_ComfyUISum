@@ -10,7 +10,7 @@ import hashlib
 import sys
 from pathlib import Path
 
-WORKER_SRC = Path(__file__).resolve().parent / "src"
+WORKER_SRC = Path(__file__).resolve().parents[2] / "worker" / "src"
 sys.path.insert(0, str(WORKER_SRC.parent.parent))
 sys.path.insert(0, str(WORKER_SRC))
 

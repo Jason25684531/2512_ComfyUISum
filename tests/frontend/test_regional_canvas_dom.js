@@ -49,8 +49,8 @@ global.window = {
 const { RegionalCanvasEditor } = (() => {
     // regional-canvas.js assigns to window/module.exports but also declares
     // the class at module scope - re-require after stubbing document/window.
-    delete require.cache[require.resolve("./regional-canvas.js")];
-    const mod = require("./regional-canvas.js");
+    delete require.cache[require.resolve("../../frontend/regional-canvas.js")];
+    const mod = require("../../frontend/regional-canvas.js");
     return { RegionalCanvasEditor: global.window.RegionalCanvasEditor, mod };
 })();
 

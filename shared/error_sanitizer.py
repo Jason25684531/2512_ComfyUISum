@@ -4,6 +4,10 @@ from __future__ import annotations
 import re
 
 MAX_ERROR_MESSAGE_LENGTH = 1000
+COMFYUI_OUTPUT_MISSING = "ComfyUI completed but no image output was found."
+COMFYUI_TIMEOUT = "ComfyUI history polling timed out."
+COMFYUI_UNAVAILABLE = "ComfyUI is temporarily unavailable."
+ENGINE_EXECUTION_FAILED = "Job execution failed."
 _SECRET = re.compile(r"(?i)(password|token|secret|api[_-]?key)\s*[=:]\s*[^\s,;]+")
 _PATH = re.compile(r"(?:(?:[A-Za-z]:)?[\\/][^\s:]+)+")
 _URL_QUERY = re.compile(r"https?://[^\s?]+\?[^\s]+")

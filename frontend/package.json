@@ -2,6 +2,7 @@
   "name": "studiocore-frontend",
   "private": true,
   "scripts": {
+    "test": "node ../tests/frontend/test_regional_canvas.js && node ../tests/frontend/test_regional_canvas_dom.js",
     "build:css": "tailwindcss -c tailwind.config.js -i tailwind.input.css -o tailwind.generated.css --minify",
     "build:icons": "node build-icons.js"
   },

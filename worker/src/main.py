@@ -71,7 +71,7 @@ from config import (
     DEFAULT_UNET_MODEL, DEFAULT_CLIP_MODEL,
     DEFAULT_VAE_MODEL, WARMUP_MODE,
 )
-from shared.v2.errors import (
+from shared.error_sanitizer import (
     COMFYUI_OUTPUT_MISSING,
     COMFYUI_TIMEOUT,
     COMFYUI_UNAVAILABLE,

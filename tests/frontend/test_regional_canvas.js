@@ -1,7 +1,7 @@
 // [TEMP] Node self-check for RegionalCanvasEditor's pure logic (no DOM required).
 // Run: node frontend/test_regional_canvas.js
 const assert = require("assert");
-const { clamp01, computeResize, canonicalizeElement, validateElements, sanitizeColor } = require("./regional-canvas.js");
+const { clamp01, computeResize, canonicalizeElement, validateElements, sanitizeColor } = require("../../frontend/regional-canvas.js");
 
 assert.strictEqual(clamp01(-0.5), 0);
 assert.strictEqual(clamp01(1.5), 1);

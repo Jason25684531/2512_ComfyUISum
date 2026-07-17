@@ -5,7 +5,7 @@ import json
 import sys
 from pathlib import Path
 
-WORKER_SRC = Path(__file__).resolve().parent / "src"
+WORKER_SRC = Path(__file__).resolve().parents[2] / "worker" / "src"
 sys.path[:0] = [str(WORKER_SRC.parent.parent), str(WORKER_SRC)]
 
 from comfy_client import ComfyClient  # noqa: E402

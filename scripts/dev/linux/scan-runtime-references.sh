@@ -24,8 +24,8 @@ run_git_grep() {
   printf "Generated from: scripts/dev/linux/scan-runtime-references.sh\n\n"
 
   printf "## Python runtime path references\n"
-  printf "Pattern: backend/src/app.py | worker/src/main.py | apps/backend-fastapi | apps/worker-v2\n"
-  run_git_grep "backend/src/app.py|worker/src/main.py|apps/backend-fastapi|apps/worker-v2"
+  printf "Pattern: backend/src/app.py | worker/src/main.py\n"
+  run_git_grep "backend/src/app.py|worker/src/main.py"
   printf "\n"
 
   printf "## Workflow folder references\n"
