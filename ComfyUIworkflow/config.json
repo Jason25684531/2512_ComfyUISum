@@ -5,6 +5,9 @@
     "file": "text_to_image_z_image_turbo_fp8_1222.json",
     "description": "Z-Image Turbo 文字生圖",
     "category": "image",
+    "version": "1.0.0",
+    "enabled": true,
+    "observability": {"model_source": {"node_id": "33:16", "input": "unet_name"}, "important_nodes": [{"node_id": "34", "stage": "output_save"}], "output": {"strategy": "node_output", "node_ids": ["34"]}, "timeout_seconds": 3600, "sensitive_fields": ["prompt", "negative_prompt", "images"], "custom_dimensions": {}},
     "mapping": {
       "prompt_text_node_id": "33:6",
       "seed_node_id": "33:3",
@@ -45,6 +48,9 @@
     "file": "InfiniteTalk_IndexTTS_2.json",
     "description": "InfiniteTalk 數位人像說話",
     "category": "avatar",
+    "version": "1.0.0",
+    "enabled": true,
+    "observability": {"model_source": {"fallback": "unknown"}, "important_nodes": [{"node_id": "131", "stage": "output_save"}], "output": {"strategy": "node_output", "node_ids": ["131"]}, "timeout_seconds": 3600, "sensitive_fields": ["prompt", "images", "audio"], "custom_dimensions": {}},
     "mapping": {
       "text_node_id": "312",
       "seed_node_id": "312",
@@ -73,6 +79,9 @@
     "file": "single_image_edit_qwen_2509_gguf_1222.json",
     "description": "Qwen 單圖編輯",
     "category": "image",
+    "version": "1.0.0",
+    "enabled": true,
+    "observability": {"model_source": {"fallback": "unknown"}, "important_nodes": [{"node_id": "119", "stage": "output_save"}], "output": {"strategy": "node_output", "node_ids": ["119"]}, "timeout_seconds": 3600, "sensitive_fields": ["prompt", "negative_prompt", "images"], "custom_dimensions": {}},
     "mapping": {
       "input_image_node_id": "120",
       "prompt_text_node_id": "123:111",
@@ -98,6 +107,9 @@
     "file": "face_swap_qwen_2509_gguf_1222.json",
     "description": "Qwen 換臉",
     "category": "image",
+    "version": "1.0.0",
+    "enabled": true,
+    "observability": {"model_source": {"fallback": "unknown"}, "important_nodes": [{"node_id": "503", "stage": "output_save"}], "output": {"strategy": "node_output", "node_ids": ["503"]}, "timeout_seconds": 3600, "sensitive_fields": ["prompt", "images"], "custom_dimensions": {}},
     "mapping": {
       "input_image_face_node_id": "501",
       "input_image_body_node_id": "502",
@@ -128,6 +140,9 @@
     "file": "sketch_to_image_qwen_2509_gguf_1222.json",
     "description": "Qwen 草圖轉圖像",
     "category": "image",
+    "version": "1.0.0",
+    "enabled": true,
+    "observability": {"model_source": {"fallback": "unknown"}, "important_nodes": [{"node_id": "119", "stage": "output_save"}], "output": {"strategy": "node_output", "node_ids": ["119"]}, "timeout_seconds": 3600, "sensitive_fields": ["prompt", "images"], "custom_dimensions": {}},
     "mapping": {
       "input_image_node_id": "120",
       "prompt_text_node_id": "124:111",
@@ -155,6 +170,9 @@
     "file": "multi_image_blend_qwen_2509_gguf_1222.json",
     "description": "Qwen 多圖融合",
     "category": "image",
+    "version": "1.0.0",
+    "enabled": true,
+    "observability": {"model_source": {"fallback": "unknown"}, "important_nodes": [{"node_id": "60", "stage": "output_save"}], "output": {"strategy": "node_output", "node_ids": ["60"]}, "timeout_seconds": 3600, "sensitive_fields": ["prompt", "images"], "custom_dimensions": {}},
     "mapping": {
       "input_image_1_node_id": "78",
       "input_image_2_node_id": "436",
@@ -192,6 +210,9 @@
     "file": "Veo3_VideoConnection.json",
     "description": "Veo3 多鏡頭長影片",
     "category": "video",
+    "version": "1.0.0",
+    "enabled": true,
+    "observability": {"model_source": {"fallback": "unknown"}, "important_nodes": [{"node_id": "110", "stage": "output_save"}], "output": {"strategy": "node_output", "node_ids": ["110"]}, "timeout_seconds": 3600, "sensitive_fields": ["prompts", "images"], "custom_dimensions": {}},
     "mapping": {
       "output_node_id": "110",
       "prompt_segments": {
@@ -222,6 +243,9 @@
     "file": "Veo3_VideoConnection.json",
     "description": "Veo3 圖生影片",
     "category": "video",
+    "version": "1.0.0",
+    "enabled": true,
+    "observability": {"model_source": {"fallback": "unknown"}, "important_nodes": [{"node_id": "110", "stage": "output_save"}], "output": {"strategy": "node_output", "node_ids": ["110"]}, "timeout_seconds": 3600, "sensitive_fields": ["prompts", "images"], "custom_dimensions": {}},
     "mapping": {
       "output_node_id": "110",
       "prompt_segments": {
@@ -249,6 +273,9 @@
     "file": "T2V.json",
     "description": "Veo3 文字轉影片",
     "category": "video",
+    "version": "1.0.0",
+    "enabled": true,
+    "observability": {"model_source": {"fallback": "unknown"}, "important_nodes": [{"node_id": "110", "stage": "output_save"}], "output": {"strategy": "node_output", "node_ids": ["110"]}, "timeout_seconds": 3600, "sensitive_fields": ["prompt", "images"], "custom_dimensions": {}},
     "mapping": {
       "prompt_node_id": "10",
       "output_node_id": "110"
@@ -269,6 +296,9 @@
     "file": "FLF.json",
     "description": "Veo3 首尾幀動畫",
     "category": "video",
+    "version": "1.0.0",
+    "enabled": true,
+    "observability": {"model_source": {"fallback": "unknown"}, "important_nodes": [{"node_id": "110", "stage": "output_save"}], "output": {"strategy": "node_output", "node_ids": ["110"]}, "timeout_seconds": 3600, "sensitive_fields": ["prompt", "images"], "custom_dimensions": {}},
     "mapping": {
       "prompt_node_id": "111",
       "output_node_id": "110"
@@ -294,6 +324,9 @@
     "file": "LTX2.3_ReTake_V2V.json",
     "description": "LTX-2 影片重生成 (ReTake)",
     "category": "video",
+    "version": "1.0.0",
+    "enabled": true,
+    "observability": {"model_source": {"fallback": "unknown"}, "important_nodes": [{"node_id": "578", "stage": "output_save"}], "output": {"strategy": "node_output", "node_ids": ["578"]}, "timeout_seconds": 3600, "sensitive_fields": ["prompt", "video"], "custom_dimensions": {}},
     "mapping": {
       "output_node_id": "578",
       "video_node_id": "644",
@@ -337,6 +370,9 @@
     "file": "Ideogram4_T2I_Regional_Prompt.json",
     "description": "Ideogram 4 區域提示詞文生圖（BBox 畫布）",
     "category": "image",
+    "version": "1.0.0",
+    "enabled": true,
+    "observability": {"model_source": {"fallback": "unknown"}, "important_nodes": [{"node_id": "158", "stage": "output_save"}], "output": {"strategy": "node_output", "node_ids": ["158"]}, "timeout_seconds": 3600, "sensitive_fields": ["prompt", "elements_data"], "custom_dimensions": {}},
     "mapping": {
       "output_node_id": "158",
       "seed_node_ids": ["98:18"],
@@ -345,7 +381,7 @@
         "width": { "node_id": "178", "input_key": "width" },
         "height": { "node_id": "178", "input_key": "height" },
         "background": { "node_id": "178", "input_key": "background" },
-        "style": { "node_id": "178", "input_key": "style" },
+        "style": { "node_id": "178", "input_key": "style.photo" },
         "aesthetics": { "node_id": "178", "input_key": "aesthetics" },
         "lighting": { "node_id": "178", "input_key": "lighting" },
         "medium": { "node_id": "178", "input_key": "medium" },

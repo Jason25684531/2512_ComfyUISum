@@ -104,16 +104,20 @@ class JSONFormatter(logging.Formatter):
     將日誌記錄轉換為 JSON 格式，方便後續解析與分析
     """
     def format(self, record: logging.LogRecord) -> str:
+        timestamp = datetime.utcnow().isoformat() + "Z"
         log_data = {
             "ts": datetime.utcnow().isoformat() + "Z",  # ISO8601 UTC 時間
             "lvl": record.levelname,
             "svc": record.name,
+            "timestamp": timestamp,
+            "level": record.levelname,
+            "service": record.name,
             "msg": record.getMessage(),
             "module": record.module
         }
         
         # 注入 job_id (如果存在)
-        for field in ("job_id", "workflow", "user_id", "user_label"):
+        for field in ("event_type", "job_id", "request_id", "worker_id", "comfyui_prompt_id", "workflow_id", "workflow", "error_code", "user_id", "user_label"):
             if hasattr(record, field):
                 log_data[field] = getattr(record, field)
         
@@ -143,7 +147,7 @@ class JobLogAdapter(logging.LoggerAdapter):
         # 將 job_id 注入到 extra，供 JSON 格式化器使用
         if 'extra' not in kwargs:
             kwargs['extra'] = {}
-        for field in ("job_id", "workflow", "user_id", "user_label"):
+        for field in ("event_type", "job_id", "request_id", "worker_id", "comfyui_prompt_id", "workflow_id", "workflow", "error_code", "user_id", "user_label"):
             if field in self.extra and self.extra[field] is not None:
                 kwargs['extra'][field] = self.extra[field]
         

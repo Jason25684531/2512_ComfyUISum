@@ -6,6 +6,7 @@ topologies:
     env_file: .env.local
     services:
       - redis
+      - mysql
       - backend
       - worker
     external_dependencies: []
@@ -14,6 +15,8 @@ topologies:
       - DEPLOYMENT_TOPOLOGY
       - ENV_CONTRACT_FILE
       - REDIS_PASSWORD
+      - DB_PASSWORD
+      - MYSQL_ROOT_PASSWORD
       - SECRET_KEY
       - COMFYUI_SERVER_URL
       - COMFY_HOST
@@ -44,6 +47,7 @@ topologies:
       - nginx
       - backend
       - redis
+      - mysql
     external_dependencies:
       - twcc-load-balancer
       - twcc-gpu-vm
@@ -54,6 +58,8 @@ topologies:
       - DEPLOYMENT_TOPOLOGY
       - ENV_CONTRACT_FILE
       - REDIS_PASSWORD
+      - DB_PASSWORD
+      - MYSQL_ROOT_PASSWORD
       - SECRET_KEY
       - LB_DOMAIN
       - TWCC_API_KEY
@@ -157,6 +163,8 @@ common_optional_env:
   - DB_NAME
   - DB_PORT
   - DB_USER
+  - DB_PASSWORD
+  - MYSQL_ROOT_PASSWORD
   - FLASK_DEBUG
   - FLASK_ENV
   - LOG_DIR
@@ -168,11 +176,19 @@ common_optional_env:
   - REDIS_PORT
   - RESTART_POLICY
   - SESSION_COOKIE_SECURE
+  - SKIP_WARMUP
   - STORAGE_BACKEND
   - STORAGE_DIR
   - STORAGE_OUTPUT_DIR
   - STUDIO_ENV
   - WORKER_TIMEOUT
+  - WORKER_ID
+  - WORKER_HEARTBEAT_SECONDS
+  - WORKER_HEARTBEAT_TTL_SECONDS
+  - JOB_PROGRESS_DB_STEP
+  - JOB_RECONCILE_SECONDS
+  - JOB_STALE_GRACE_SECONDS
+  - WORKFLOW_MANIFEST_POLICY
   - WORKFLOW_DIR
 
 legacy_entries:

@@ -37,7 +37,7 @@ class ComfyClient:
     ComfyUI API 客戶端
     """
     
-    def __init__(self, host: str = COMFY_HOST, port: int = COMFY_PORT):
+    def __init__(self, host: str = COMFY_HOST, port: int = COMFY_PORT, logger=None):
         self.host = host
         self.port = port
         parsed_http_url = urlparse(COMFY_HTTP_URL)
@@ -52,9 +52,16 @@ class ComfyClient:
             self.http_url = f"{http_scheme}://{host}:{port}"
             self.ws_url = f"{ws_scheme}://{host}:{port}/ws"
         self.client_id = str(uuid.uuid4())
+        self.logger = logger
         
         # 確保輸出目錄存在
         STORAGE_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    def _log(self, level: str, message: str, *args) -> None:
+        if self.logger:
+            getattr(self.logger, level)(message, *args)
+        else:
+            print(message % args if args else message)
     
     def check_connection(self, retry: int = None, initial_delay: float = 5.0,
                          max_delay: float = 120.0) -> bool:
@@ -141,14 +148,14 @@ class ComfyClient:
             if response.status_code == 200:
                 result = response.json()
                 prompt_id = result.get("prompt_id")
-                print(f"[ComfyClient] 任務已提交，prompt_id: {prompt_id}")
+                self._log("info", "ComfyUI prompt accepted: %s", prompt_id)
                 return prompt_id
             else:
-                print(f"[ComfyClient] 提交失敗: {response.status_code} - {response.text}")
+                self._log("error", "ComfyUI prompt rejected: status=%s", response.status_code)
                 return None
                 
         except Exception as e:
-            print(f"[ComfyClient] 提交錯誤: {e}")
+            self._log("error", "ComfyUI prompt submit error: %s", e)
             return None
 
     def verify_regional_caption_contract(self, workflow: dict) -> dict:
@@ -166,6 +173,7 @@ class ComfyClient:
         prompt_id: str, 
         timeout: int = None,  # Phase 9: 改為 None，使用 config 預設值
         on_progress: Optional[Callable] = None,
+        on_event: Optional[Callable[[str, dict], None]] = None,
         should_abort: Optional[Callable[[], Optional[str]]] = None,
         on_abort: Optional[Callable[[], None]] = None,
     ) -> dict:
@@ -206,8 +214,18 @@ class ComfyClient:
         all_gifs = []    # 收集所有輸出 GIF
         
         try:
-            ws = websocket.create_connection(ws_url, timeout=COMFY_POLLING_INTERVAL)
-            print(f"[ComfyClient] WebSocket 已連接，等待任務完成（超時: {timeout}s）...")
+            # Host-network WebSocket handshakes can exceed the short polling interval.
+            ws = None
+            for attempt in range(2):
+                try:
+                    ws = websocket.create_connection(ws_url, timeout=max(5.0, COMFY_POLLING_INTERVAL))
+                    break
+                except Exception:
+                    if attempt:
+                        raise
+                    time.sleep(0.5)
+            ws.settimeout(COMFY_POLLING_INTERVAL)
+            self._log("info", "ComfyUI WebSocket connected; timeout=%ss", timeout)
             
             start_time = time.time()
             last_heartbeat = start_time  # Phase 9: 記錄上次心跳時間
@@ -226,26 +244,27 @@ class ComfyClient:
                     result["gifs"] = history_outputs.get("gifs", [])
                     if result["images"] or result["videos"] or result["gifs"]:
                         result["partial_outputs_recovered"] = True
-                    print(f"[ComfyClient] ❌ 任務超時: {prompt_id} ({int(elapsed)}s)")
+                    self._log("warning", "ComfyUI prompt timed out: %s after %ss", prompt_id, int(elapsed))
                     break
 
                 if should_abort:
                     abort_reason = should_abort()
-                    if abort_reason:
+                    if abort_reason and not result["aborted"]:
                         result["aborted"] = True
                         result["abort_reason"] = str(abort_reason)
-                        result["error"] = "執行已中止"
+                        # /interrupt is instance-wide in the deployed ComfyUI.
+                        # Record the request but keep observing this prompt until
+                        # ComfyUI confirms an interruption or another terminal event.
                         if on_abort:
                             try:
                                 on_abort()
                             except Exception as abort_error:
-                                print(f"[ComfyClient] ⚠️ 中止回呼失敗: {abort_error}")
-                        print(f"[ComfyClient] ⚠️ 任務中止: {prompt_id} ({abort_reason})")
-                        break
+                                self._log("warning", "cancel callback failed: %s", abort_error)
+                        self._log("info", "cancellation requested for prompt %s: %s", prompt_id, abort_reason)
                 
                 # Phase 9: 每 60 秒輸出一次心跳日誌（保持連接存活，證明沒有卡死）
                 if elapsed - last_heartbeat >= 60:
-                    print(f"[ComfyClient] 💓 任務 {prompt_id} 仍在處理中... （已等待: {int(elapsed)}s / {timeout}s）")
+                    self._log("debug", "ComfyUI prompt %s still running: %ss/%ss", prompt_id, int(elapsed), timeout)
                     last_heartbeat = elapsed
                 
                 try:
@@ -278,7 +297,7 @@ class ComfyClient:
                         value = msg_data.get("value", 0)
                         max_value = msg_data.get("max", 100)
                         progress = int((value / max_value) * 100)
-                        print(f"[ComfyClient] 進度: {progress}%")
+                        self._log("debug", "ComfyUI progress=%s", progress)
                         
                         # 透過回調函數通知進度更新
                         if on_progress:
@@ -288,10 +307,12 @@ class ComfyClient:
                     elif msg_type == "executing":
                         node = msg_data.get("node")
                         if node:
-                            print(f"[ComfyClient] 執行節點: {node}")
+                            if on_event and msg_data.get("prompt_id") == prompt_id:
+                                on_event("node_started", msg_data)
+                            self._log("debug", "ComfyUI node started: %s", node)
                         elif msg_data.get("prompt_id") == prompt_id:
                             # node 為 None 表示執行完成
-                            print(f"[ComfyClient] 任務執行完成")
+                            self._log("info", "ComfyUI prompt execution completed")
                             result["success"] = True
                             # 使用收集到的所有輸出
                             result["images"] = all_images
@@ -313,6 +334,8 @@ class ComfyClient:
                     # 執行完成 (獲取輸出)
                     elif msg_type == "executed":
                         if msg_data.get("prompt_id") == prompt_id:
+                            if on_event:
+                                on_event("node_completed", msg_data)
                             output = msg_data.get("output", {})
                             # 確保 output 是字典類型（防止 ComfyUI 返回 None）
                             if output is None or not isinstance(output, dict):
@@ -340,10 +363,17 @@ class ComfyClient:
                     # 執行錯誤
                     elif msg_type == "execution_error":
                         if msg_data.get("prompt_id") == prompt_id:
+                            if on_event:
+                                on_event("execution_error", msg_data)
                             error_msg = msg_data.get("exception_message", "未知錯誤")
                             result["error"] = get_public_error_message(error_msg)
-                            print(f"[ComfyClient] 執行錯誤: {error_msg}")
+                            self._log("error", "ComfyUI execution error: %s", error_msg)
                             break
+                    elif msg_type == "execution_interrupted" and msg_data.get("prompt_id") == prompt_id:
+                        if on_event:
+                            on_event("execution_interrupted", msg_data)
+                        result["error"] = "ComfyUI execution interrupted"
+                        result["interrupted"] = True
                             
                 except websocket.WebSocketTimeoutException:
                     continue
@@ -351,8 +381,13 @@ class ComfyClient:
             ws.close()
             
         except Exception as e:
-            result["error"] = get_public_error_message(str(e))
-            print(f"[ComfyClient] WebSocket 錯誤: {e}")
+            history_outputs = self.get_outputs_from_history(prompt_id)
+            if any(history_outputs.values()):
+                result.update(success=True, **history_outputs)
+                result["recovered_from_history"] = True
+            else:
+                result["error"] = get_public_error_message(str(e))
+            self._log("error", "ComfyUI WebSocket error: %s", e)
         
         return result
     

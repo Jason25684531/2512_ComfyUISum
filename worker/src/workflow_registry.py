@@ -55,6 +55,19 @@ class WorkflowRegistry:
 
         return resolution.entry
 
+    def get_observability(self, workflow_name: str) -> dict[str, Any]:
+        entry = self.get(workflow_name)
+        if not entry.enabled:
+            raise ValueError(f"workflow disabled: {entry.workflow_id}")
+        return entry.observability
+
+    def get_adapter(self, workflow_name: str):
+        try:
+            from .workflow.observability import WorkflowAdapter
+        except ImportError:
+            from workflow.observability import WorkflowAdapter
+        return WorkflowAdapter(self.get(workflow_name))
+
     def resolve_runtime_profile(self) -> str:
         configured_profile = os.getenv("COMFYUI_RUNTIME_PROFILE", "").strip()
         if configured_profile:
@@ -78,4 +91,10 @@ class WorkflowRegistry:
             yield self.get(workflow_id)
 
     def validate_configured_workflows(self) -> list[str]:
-        return self._catalog.validate()
+        errors = self._catalog.validate()
+        for entry in self._catalog.entries.values():
+            if not entry.version:
+                errors.append(f"{entry.workflow_id}: version is required")
+            if not isinstance(entry.observability.get("output"), dict):
+                errors.append(f"{entry.workflow_id}: observability.output is required")
+        return errors

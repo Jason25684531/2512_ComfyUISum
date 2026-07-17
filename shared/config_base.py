@@ -200,6 +200,22 @@ REDIS_HOST, REDIS_PORT = _resolve_redis_endpoint()
 REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
 JOB_QUEUE = os.getenv("JOB_QUEUE", "job_queue")
 
+# Durable observability store. MySQL is private/internal; no HTTP port is added.
+DB_HOST = get_env_str("DB_HOST", "localhost") or "localhost"
+DB_PORT = get_env_int("DB_PORT", 3306)
+DB_NAME = get_env_str("DB_NAME", "studio") or "studio"
+DB_USER = get_env_str("DB_USER", "studio") or "studio"
+DB_PASSWORD = get_env_str("DB_PASSWORD", "")
+WORKER_ID = get_env_str("WORKER_ID", "")
+WORKER_HEARTBEAT_SECONDS = get_env_int("WORKER_HEARTBEAT_SECONDS", 10)
+WORKER_HEARTBEAT_TTL_SECONDS = get_env_int("WORKER_HEARTBEAT_TTL_SECONDS", 30)
+JOB_PROGRESS_DB_STEP = get_env_int("JOB_PROGRESS_DB_STEP", 10)
+ADMIN_MAX_PAGE_SIZE = get_env_int("ADMIN_MAX_PAGE_SIZE", 200)
+JOB_OBSERVABILITY_ENABLED = get_env_bool("JOB_OBSERVABILITY_ENABLED", False)
+JOB_RECONCILE_SECONDS = get_env_int("JOB_RECONCILE_SECONDS", 60)
+JOB_STALE_GRACE_SECONDS = get_env_int("JOB_STALE_GRACE_SECONDS", 60)
+WORKFLOW_MANIFEST_POLICY = get_env_str("WORKFLOW_MANIFEST_POLICY", "permissive").lower() or "permissive"
+
 # ==========================================
 # 本地儲存配置 (共用)
 # ==========================================

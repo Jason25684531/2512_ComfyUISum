@@ -43,11 +43,17 @@ from shared.runtime_services import (
     resolve_workflow_request,
 )
 from shared.elements_data_validator import ElementsDataValidator
+from shared.config_base import JOB_OBSERVABILITY_ENABLED
+from shared.job_contracts import JobStatus, iso_utc
+from shared.job_tracker import JobTracker
+from shared.observability_runtime import job_repository, new_request_id
+from admin_routes import admin_bp
 
 # ============================================
 # Configuration & Logging Setup
 # ============================================
 app = Flask(__name__)
+app.register_blueprint(admin_bp)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
 app.config['MAX_CONTENT_LENGTH'] = int(os.getenv('MAX_UPLOAD_SIZE_MB', '200')) * 1024 * 1024
 
@@ -197,6 +203,11 @@ def before_request_handler():
         ip_address = request.remote_addr or 'unknown'
 
     g.user_id = f"IP#{ip_address}"
+    g.request_id = new_request_id(request.headers.get('X-Request-ID'))
+    global _outbox_last_run
+    if time.monotonic() - _outbox_last_run > 5:
+        _outbox_last_run = time.monotonic()
+        dispatch_pending_jobs()
 
     # 記錄請求開始
     logger.debug(f"📨 {request.method} {request.path} - IP: {ip_address}")
@@ -214,6 +225,8 @@ def after_request(response):
     response = _sanitize_json_response(response)
     response = _apply_cors_headers(response)
     response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+    if hasattr(g, 'request_id'):
+        response.headers['X-Request-ID'] = g.request_id
     response.headers.setdefault('X-Frame-Options', 'DENY')
     response.headers.setdefault('Referrer-Policy', 'same-origin')
     response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
@@ -273,6 +286,33 @@ ALLOWED_VIDEO_EXTENSIONS = {'.mp4', '.mov'}
 ALLOWED_UPLOAD_EXTENSIONS = ALLOWED_AUDIO_EXTENSIONS | ALLOWED_VIDEO_EXTENSIONS
 UPLOAD_FOLDER = Path(__file__).parent.parent.parent / 'storage' / 'inputs'
 UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
+
+_outbox_lock = threading.Lock()
+_outbox_last_run = 0.0
+
+
+def dispatch_pending_jobs():
+    """Replay committed dispatch intents; duplicate delivery is stopped by worker CAS."""
+    if not redis_client or not _outbox_lock.acquire(blocking=False):
+        return
+    try:
+        repo, tracker = job_repository(), JobTracker(job_repository())
+        for dispatch in repo.pending_dispatches(20):
+            try:
+                job = repo.get_job(dispatch['job_id']) or {}
+                if job.get('status') == JobStatus.CREATED.value:
+                    if not tracker.transition(dispatch['job_id'], JobStatus.CREATED, JobStatus.QUEUED):
+                        continue
+                elif job.get('status') != JobStatus.QUEUED.value:
+                    repo.mark_dispatched(dispatch['job_id'], iso_utc())
+                    continue
+                tracker.event(dispatch['job_id'], 'job_queued', resulting_status='queued')
+                redis_client.rpush(JOB_QUEUE, json.dumps(dispatch['payload'], ensure_ascii=False))
+                repo.mark_dispatched(dispatch['job_id'], iso_utc())
+            except Exception as exc:
+                repo.mark_dispatched(dispatch['job_id'], iso_utc(), str(exc)[:500])
+    finally:
+        _outbox_lock.release()
 
 
 # ============================================
@@ -515,6 +555,8 @@ def generate():
         # 3. 构造任务数据 (包含所有前端傳來的參數)
         job_data = {
             'job_id': job_id,
+            'request_id': g.request_id,
+            'schema_version': 2,
             'prompt': prompt,
             'prompts': prompts,  # Veo3 Long Video: 新增 prompts 列表
             'seed': data.get('seed', -1),  # -1 表示随机
@@ -536,8 +578,28 @@ def generate():
                 if workflow == 'ltx_retake_v2v'
                 else ideogram4_extra_params
             ),
-            'created_at': datetime.now().isoformat()
+            'created_at': iso_utc(),
+            'submitted_at': iso_utc(),
+            'workflow_version': workflow_resolution.entry.version,
+            'workflow_category': workflow_resolution.entry.category,
         }
+        tracker = None
+        if JOB_OBSERVABILITY_ENABLED:
+            try:
+                tracker = JobTracker(job_repository())
+                tracker.create(
+                    job_id,
+                    g.request_id,
+                    workflow_id=workflow,
+                    workflow_version=workflow_resolution.entry.version,
+                    workflow_category=workflow_resolution.entry.category,
+                    model_name=str(job_data['model']),
+                    dispatch_payload=job_data,
+                )
+                tracker.event(job_id, 'validation_passed', resulting_status='created')
+            except Exception:
+                logger.exception('job observability create failed', extra={'job_id': job_id, 'request_id': g.request_id})
+                return jsonify({'error': 'Job persistence unavailable'}), 503
         
         # ==========================================
         # [TEMP] Veo3 測試模式: Veo3 Long Video 攔截
@@ -597,6 +659,8 @@ def generate():
         # 4. 檢查 Redis 可用性
         if redis_client is None:
             logger.error("Redis 客户端未初始化")
+            if tracker:
+                tracker.fail(job_id, JobStatus.CREATED, stage='redis_enqueue', code='QUEUE_WRITE_ERROR', message='Queue unavailable')
             return jsonify({'error': 'Redis service unavailable'}), 503
 
         trace_extra = {
@@ -607,7 +671,13 @@ def generate():
 
         try:
             # 5. 推送到 Redis 佇列
+            if tracker and not tracker.transition(job_id, JobStatus.CREATED, JobStatus.QUEUED):
+                raise RedisError('durable job enqueue transition failed')
+            if tracker:
+                tracker.event(job_id, 'job_queued', resulting_status='queued')
             redis_client.rpush(REDIS_QUEUE_NAME, json.dumps(job_data))
+            if tracker:
+                tracker.repository.mark_dispatched(job_id, iso_utc())
             logger.info("job enqueued to redis", extra=trace_extra)
             logger.info(f"✓ Job {job_id} 已推送至 Redis")
 
@@ -632,6 +702,10 @@ def generate():
             }), 200
 
         except RedisError:
+            if tracker:
+                current = (tracker.repository.get_job(job_id) or {}).get('status')
+                tracker.fail(job_id, JobStatus(current) if current in {JobStatus.CREATED.value, JobStatus.QUEUED.value} else JobStatus.CREATED,
+                             stage='redis_enqueue', code='QUEUE_WRITE_ERROR', message='Queue write failed')
             logger.exception("❌ Redis Push 失敗")
             return jsonify({
                 'error': OPERATION_FAILED_MESSAGE
@@ -680,13 +754,15 @@ def status(job_id):
                     'source': 'redis'  # 標記數據來源
                 }), 200
 
-        # 2. Redis 中沒找到（不存在或已過期），返回 404
-        logger.warning(f"任務不存在: job_id={job_id} (Redis 未找到，可能已過期)")
-        return jsonify({
-            'error': 'Job not found',
-            'job_id': job_id,
-            'message': '任務不存在或已過期'
-        }), 404
+        # Redis TTL is ephemeral; MySQL is the durable status fallback.
+        job = job_repository().get_job(job_id)
+        if job:
+            legacy = {'created': 'queued', 'queued': 'queued', 'running': 'processing',
+                      'completed': 'finished', 'failed': 'failed', 'cancelled': 'cancelled'}
+            return jsonify({'job_id': job_id, 'status': legacy.get(job['status'], 'unknown'),
+                            'progress': job.get('progress') or 0, 'image_url': '',
+                            'error': job.get('sanitized_error_message') or '', 'source': 'mysql'}), 200
+        return jsonify({'error': 'Job not found', 'job_id': job_id}), 404
     
     except Exception as e:
         logger.error(f"✗ status 接口异常: {e}", exc_info=True)
@@ -706,6 +782,24 @@ def cancel_job(job_id):
     }
     """
     try:
+        job = job_repository().get_job(job_id)
+        if not job:
+            return jsonify({'error': 'Job not found'}), 404
+        current = job['status']
+        if current in ('completed', 'failed', 'cancelled'):
+            return jsonify({'success': False, 'message': 'Job cannot be cancelled in its current state'}), 400
+        tracker = JobTracker(job_repository())
+        state = JobStatus.QUEUED if current == 'queued' else JobStatus.RUNNING
+        if not tracker.request_cancel(job_id, state):
+            return jsonify({'success': False, 'message': 'Job state changed'}), 409
+        if redis_client is not None:
+            key = f"job:status:{job_id}"
+            if state is JobStatus.QUEUED:
+                redis_client.hset(key, mapping={'status': 'cancelled', 'canonical_status': 'cancelled', 'error': 'Task cancelled by user'})
+            else:
+                redis_client.hset(key, 'cancel_requested', 'true')
+        return jsonify({'success': True, 'message': 'Task cancelled' if state is JobStatus.QUEUED else 'Cancellation requested'}), (200 if state is JobStatus.QUEUED else 202)
+
         if redis_client is None:
             logger.error("Redis 客户端未初始化")
             return jsonify({'error': 'Redis service unavailable'}), 503
@@ -809,9 +903,14 @@ def health():
         except Exception as exc:
             logger.warning(f"讀取 Worker 心跳失敗: {exc.__class__.__name__}")
 
-    mysql_status = 'n/a'
+    try:
+        with job_repository().transaction() as cursor:
+            cursor.execute('SELECT 1')
+        mysql_status = 'healthy'
+    except Exception:
+        mysql_status = 'unavailable'
 
-    overall_status = 'ok' if redis_status == 'healthy' else 'degraded'
+    overall_status = 'ok' if redis_status == 'healthy' and mysql_status == 'healthy' else 'degraded'
 
     if worker_status == 'offline':
         warnings.append('Worker heartbeat unavailable')

@@ -29,6 +29,25 @@ services:
     networks:
       - studio-net
 
+  mysql:
+    image: mysql:8.4
+    container_name: studio-mysql
+    environment:
+      MYSQL_DATABASE: ${DB_NAME:-studio}
+      MYSQL_USER: ${DB_USER:-studio}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    volumes:
+      - ./mysql_data:/var/lib/mysql
+    restart: always
+    networks:
+      - studio-net
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -p$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
   # 註：舊版 mysql 服務與 ./mysql_data 磁碟區已移除（單一使用者模式不再需要 MySQL）。
   # 若本機仍存在 mysql_data/ 目錄，屬於過期資料，可安全手動刪除。
 
@@ -49,9 +68,19 @@ services:
       - STUDIO_ENV_FILE=.env.selected
       - FLASK_HOST=0.0.0.0
       - FLASK_PORT=5000
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_NAME=${DB_NAME:-studio}
+      - DB_USER=${DB_USER:-studio}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - JOB_OBSERVABILITY_ENABLED=true
+      # Set a stable value per Worker instance in production; hostname is the local fallback.
+      - WORKER_ID=${WORKER_ID:-}
     depends_on:
       redis:
         condition: service_started
+      mysql:
+        condition: service_healthy
     restart: always
     networks:
       - studio-net
@@ -80,6 +109,14 @@ services:
       - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - STUDIO_ENV_FILE=.env.selected
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_NAME=${DB_NAME:-studio}
+      - DB_USER=${DB_USER:-studio}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - JOB_OBSERVABILITY_ENABLED=true
+      # Keep this stable per Worker instance; do not use a process-random ID.
+      - WORKER_ID=${WORKER_ID:-}
 
       # ComfyUI 在 Windows 原生執行，容器內必須固定使用 host.docker.internal
       # 不讀取 .env 變數，避免 .env 中的 127.0.0.1 覆蓋 Docker 正確路由

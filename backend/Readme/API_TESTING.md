@@ -163,3 +163,22 @@ A: 可以修改 `app.py` 中的端口号，或关闭占用该端口的程序。
 1. 提交任务
 2. 轮询状态直到 `status` 变为 `finished`
 3. 通过 `image_url` 获取生成的图片
+
+---
+
+## Job Observability Dashboard API
+
+These endpoints share Flask `http://localhost:5000`; there is no FastAPI, second backend, or additional public port.
+
+```http
+GET /api/admin/metrics/summary
+GET /api/admin/metrics/timeseries
+GET /api/admin/jobs?page_size=50&status=running
+GET /api/admin/jobs/{job_id}
+GET /api/admin/errors
+GET /api/admin/workflows
+GET /api/admin/workers
+GET /api/admin/system/health
+```
+
+Supported filters are `from`, `to`, `status`, `workflow_id`, `workflow_version`, `model`, `worker_id`, `error_stage`, `error_code`, `page`, and `page_size`. Default range is 24 hours, max range 31 days, and max `page_size` 200. Responses use `output_encoded=false`; the dashboard never returns a full prompt, base64 input, or traceback. This unauthenticated admin surface must stay on a trusted network.

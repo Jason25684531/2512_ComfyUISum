@@ -51,3 +51,4 @@ apps/*/storage/
 docs/
 
 LTX_Web.png
+.tokensave/*

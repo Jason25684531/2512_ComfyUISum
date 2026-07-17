@@ -43,6 +43,9 @@ class WorkflowCatalogEntry:
     image_map: dict[str, Any]
     audio_map: dict[str, Any]
     model_overrides: dict[str, Any]
+    version: str
+    enabled: bool
+    observability: dict[str, Any]
     frontend: WorkflowFrontendMetadata
 
     def to_public_dict(self) -> dict[str, Any]:
@@ -52,6 +55,8 @@ class WorkflowCatalogEntry:
             "category": self.category,
             "description": self.description,
             "file": self.file,
+            "version": self.version,
+            "enabled": self.enabled,
             "frontend": self.frontend.to_dict(),
         }
 
@@ -214,6 +219,20 @@ class WorkflowCatalog:
                 inputs=_tuple_of_strings(frontend_config.get("inputs", [])),
             )
             mapping = config.get("mapping", {})
+            observability = config.get("observability", {})
+            if not isinstance(observability, dict):
+                observability = {}
+            mapping_for_observability = config.get("mapping", {}) if isinstance(config.get("mapping", {}), dict) else {}
+            output_node = mapping_for_observability.get("output_node_id")
+            observability = {
+                "model_source": observability.get("model_source", {}),
+                "important_nodes": observability.get("important_nodes", []),
+                "output": observability.get("output", {"strategy": "node_output", "node_ids": [str(output_node)] if output_node else []}),
+                "timeout_seconds": observability.get("timeout_seconds", 3600),
+                "sensitive_fields": observability.get("sensitive_fields", ["prompt", "prompts", "images"]),
+                "custom_dimensions": observability.get("custom_dimensions", {}),
+                **observability,
+            }
             audio_map = config.get("audio_map", {})
             if not audio_map and mapping.get("audio_node_id"):
                 audio_map = {
@@ -237,6 +256,9 @@ class WorkflowCatalog:
                 model_overrides=config.get("model_overrides", {})
                 if isinstance(config.get("model_overrides", {}), dict)
                 else {},
+                version=str(config.get("version", "1.0.0")),
+                enabled=bool(config.get("enabled", True)),
+                observability=observability,
                 frontend=frontend,
             )
         return entries

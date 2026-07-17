@@ -14,6 +14,7 @@ import uuid
 import signal
 import logging
 import threading
+import socket
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from datetime import datetime, timedelta
@@ -76,6 +77,10 @@ from shared.v2.errors import (
     COMFYUI_UNAVAILABLE,
     ENGINE_EXECUTION_FAILED,
 )
+from shared.config_base import JOB_OBSERVABILITY_ENABLED, WORKER_HEARTBEAT_SECONDS, WORKER_HEARTBEAT_TTL_SECONDS, WORKER_ID, WORKFLOW_MANIFEST_POLICY, JOB_RECONCILE_SECONDS, JOB_STALE_GRACE_SECONDS, STORAGE_OUTPUT_DIR
+from shared.job_contracts import JobStatus, validate_job_payload
+from shared.job_tracker import JobTracker
+from shared.observability_runtime import job_repository
 
 # Keep existing call sites compatible while using the operation-specific render wait timeout.
 WORKER_TIMEOUT = COMFY_WS_WAIT_TIMEOUT_SECONDS
@@ -352,7 +357,60 @@ def cleanup_old_output_files():
         logger.info(f"🗑️ 已清理 {deleted_count} 個超過 30 天的輸出圖片 (釋放 {size_mb:.2f} MB)")
 
 
-def worker_heartbeat(redis_client):
+def reconcile_stale_running(redis_client, client: ComfyClient) -> int:
+    """Finalize a recovered output or time out an abandoned running job.
+
+    This intentionally never requeues GPU work.  A stale worker may have
+    submitted a prompt already, so only ComfyUI history/output persistence can
+    complete it; all other expired jobs become a durable timeout.
+    """
+    if not JOB_OBSERVABILITY_ENABLED:
+        return 0
+    repository = job_repository()
+    tracker = JobTracker(repository)
+    resolved = tracker.replay_output_receipts(Path(STORAGE_OUTPUT_DIR))
+    now = datetime.utcnow()
+    registry = WorkflowRegistry()
+    for job in repository.list_running_jobs():
+        started = job.get("started_at") or job.get("updated_at")
+        if not started:
+            continue
+        if getattr(started, "tzinfo", None):
+            started = started.replace(tzinfo=None)
+        try:
+            timeout = registry.get(job.get("workflow_id") or "").observability.get("timeout_seconds", WORKER_TIMEOUT)
+            expired = now >= started + timedelta(seconds=int(timeout) + JOB_STALE_GRACE_SECONDS)
+        except Exception:
+            expired = now >= started + timedelta(seconds=WORKER_TIMEOUT + JOB_STALE_GRACE_SECONDS)
+        if not expired:
+            continue
+        heartbeat_key = f"worker:heartbeat:{job.get('worker_id') or ''}"
+        heartbeat_state = "alive" if job.get("worker_id") and redis_client.exists(heartbeat_key) else "stale"
+        prompt_id = job.get("comfyui_prompt_id")
+        outputs = client.get_outputs_from_history(prompt_id) if prompt_id else {}
+        candidates = [("video", item) for item in outputs.get("videos", []) + outputs.get("gifs", [])]
+        candidates += [("image", item) for item in outputs.get("images", [])]
+        if candidates:
+            output_type, item = candidates[-1]
+            filename = client.copy_output_file(item.get("filename", ""), item.get("subfolder", ""), item.get("type", "output"), job["job_id"])
+            if filename:
+                try:
+                    path, _ = validate_local_output_file(filename, logger)
+                    if tracker.complete_with_output(job["job_id"], path=path, storage_uri=f"/outputs/{filename}", filename=filename,
+                                                    output_type=output_type, source_node_id=item.get("node_id"), metadata={"recovered_from": "history"}):
+                        update_job_status(redis_client, job["job_id"], "finished", progress=100, image_url=f"/outputs/{filename}")
+                        resolved += 1
+                        continue
+                except Exception:
+                    logger.exception("stale job output recovery failed: %s", job["job_id"])
+        if tracker.fail(job["job_id"], JobStatus.RUNNING, stage="timeout", code="JOB_TIMEOUT", message=f"worker heartbeat={heartbeat_state}; workflow execution timed out"):
+            tracker.event(job["job_id"], "job_timed_out", resulting_status="failed", stage="timeout", error_code="JOB_TIMEOUT", metadata={"heartbeat": heartbeat_state})
+            update_job_status(redis_client, job["job_id"], "failed", error="Job timed out", public_error=True)
+            resolved += 1
+    return resolved
+
+
+def worker_heartbeat(redis_client, comfy_client=None):
     """
     Worker 心跳線程 - 每 10 秒向 Redis 發送心跳信號
     Backend 可通過檢查 'worker:heartbeat' 鍵來判斷 Worker 是否在線
@@ -363,12 +421,26 @@ def worker_heartbeat(redis_client):
     while True:
         try:
             # 設置心跳鍵，30 秒過期
-            redis_client.setex('worker:heartbeat', 30, 'alive')
+            worker_id = WORKER_ID or socket.gethostname()
+            current = _current_job_id or ''
+            key = f'worker:heartbeat:{worker_id}'
+            redis_client.hset(key, mapping={'worker_id': worker_id, 'status': 'busy' if current else 'idle', 'current_job_id': current, 'last_seen_at': datetime.utcnow().isoformat() + 'Z', 'build': os.getenv('BUILD_ID', '')})
+            redis_client.expire(key, WORKER_HEARTBEAT_TTL_SECONDS)
+            redis_client.sadd('worker:heartbeat:index', worker_id)
+            # ponytail: bounded cleanup; a dedicated registry is only needed for very large worker fleets.
+            for stale_id in list(redis_client.sscan_iter('worker:heartbeat:index', count=100))[:100]:
+                if not redis_client.exists(f'worker:heartbeat:{stale_id}'):
+                    redis_client.srem('worker:heartbeat:index', stale_id)
+            redis_client.setex('worker:heartbeat', WORKER_HEARTBEAT_TTL_SECONDS, 'alive')
+            if comfy_client:
+                reachable = comfy_client.check_connection(retry=0, initial_delay=0)
+                redis_client.hset('comfyui:health', mapping={'status': 'healthy' if reachable else 'unavailable', 'last_checked_at': datetime.utcnow().isoformat() + 'Z'})
+                redis_client.expire('comfyui:health', WORKER_HEARTBEAT_TTL_SECONDS * 2)
             logger.debug("💓 Worker 心跳發送成功")
-            time.sleep(10)  # 每 10 秒發送一次
+            time.sleep(WORKER_HEARTBEAT_SECONDS)
         except Exception as e:
             logger.error(f"❌ Worker 心跳發送失敗: {e}")
-            time.sleep(10)
+            time.sleep(WORKER_HEARTBEAT_SECONDS)
 
 
 def update_job_status(
@@ -379,6 +451,7 @@ def update_job_status(
     image_url: str = None,
     error: str = None,
     public_error: bool = False,
+    **extra,
 ):
     """
     更新任務狀態到 Redis
@@ -394,13 +467,16 @@ def update_job_status(
     status_key = f"job:status:{job_id}"
     data = {
         "status": status,
-        "progress": progress
+        "progress": progress,
+        "canonical_status": {"queued": "queued", "processing": "running", "finished": "completed"}.get(status, status),
+        "worker_id": WORKER_ID or socket.gethostname(),
     }
 
     if image_url:
         data["image_url"] = image_url
     if error:
         data["error"] = error if public_error else get_public_error_message(error)
+    data.update({key: value for key, value in extra.items() if value is not None})
 
     r.hset(status_key, mapping=data)
     r.expire(status_key, JOB_STATUS_EXPIRE_SECONDS)
@@ -426,12 +502,40 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict):
         }
     }
     """
-    job_id = job_data.get("job_id", "unknown")
+    valid_payload, payload_error = validate_job_payload(job_data)
+    if not valid_payload:
+        logger.error("refusing payload: %s", payload_error)
+        r.rpush(f"{JOB_QUEUE}:dead", json.dumps({"error": payload_error, "payload": {"job_id": job_data.get("job_id") if isinstance(job_data, dict) else None}}))
+        return
+    job_id = job_data["job_id"]
+    tracker = None
+    if JOB_OBSERVABILITY_ENABLED:
+        try:
+            tracker = JobTracker(job_repository())
+            if not tracker.transition(job_id, JobStatus.QUEUED, JobStatus.RUNNING, worker_id=WORKER_ID or socket.gethostname()):
+                logger.warning("job claim rejected: %s", job_id)
+                return
+            tracker.event(job_id, 'worker_claimed', resulting_status='running')
+        except Exception:
+            logger.exception("durable worker claim failed: %s", job_id)
+            return
     requested_workflow = job_data.get("workflow", "text_to_image")
-    workflow_registry = WorkflowRegistry()
-    workflow_name = workflow_registry.resolve_name(requested_workflow)
+    try:
+        workflow_registry = WorkflowRegistry()
+        workflow_name = workflow_registry.resolve_name(requested_workflow)
+        workflow_entry = workflow_registry.get(workflow_name)
+        if not workflow_entry.enabled:
+            raise ValueError(f"workflow disabled: {workflow_name}")
+        workflow_adapter = workflow_registry.get_adapter(workflow_name)
+    except Exception as exc:
+        if tracker:
+            tracker.fail(job_id, JobStatus.RUNNING, stage="workflow_resolve", code="UNSUPPORTED_WORKFLOW", message=exc)
+        update_job_status(r, job_id, "failed", error="Unsupported workflow")
+        return
     job_data["workflow"] = workflow_name
     job_data.setdefault("workflow_requested", requested_workflow)
+    if tracker:
+        tracker.event(job_id, "workflow_resolved", resulting_status="running", metadata={"workflow_id": workflow_entry.workflow_id, "version": workflow_entry.version})
     user_id = job_data.get("user_id")
     user_label = job_data.get("user_label") or ("anonymous" if not user_id else f"user:{user_id}")
     
@@ -557,6 +661,8 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict):
         job_logger.info("parse end")
         
         job_logger.info("Workflow 解析完成")
+        if tracker:
+            tracker.event(job_id, "workflow_loaded", resulting_status="running")
         
         # 5. 檢查 ComfyUI 連接
         if not client.check_connection():
@@ -574,32 +680,86 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict):
         prompt_id = client.queue_prompt(workflow)
         if not prompt_id:
             raise RuntimeError(ENGINE_EXECUTION_FAILED)
+        if tracker:
+            tracker.set_prompt_id(job_id, prompt_id)
+            tracker.event(job_id, "comfyui_submitted", resulting_status="running")
+        update_job_status(r, job_id, "processing", progress=30, comfyui_prompt_id=prompt_id)
         if not prompt_id:
             raise Exception("任務提交失敗")
         
         job_logger.info(f"任務已提交，prompt_id: {prompt_id}")
         
         # 7. 定義進度更新回調函數
+        last_db_progress = -10
         def on_progress(progress):
+            nonlocal last_db_progress
             # 檢查任務是否被取消
             status_key = f"job:status:{job_id}"
             current_status = r.hget(status_key, "status")
-            if current_status == "cancelled":
+            # /interrupt is instance-wide in the deployed ComfyUI.  A running
+            # cancellation remains a request until a prompt-specific terminal
+            # event is observed, so this legacy branch must never execute.
+            if False:
                 job_logger.warning("🛑 任務已被取消，發送中斷指令...")
-                client.interrupt()
+                # Intentionally no global ComfyUI interrupt here.
                 raise Exception("Task cancelled by user")
             
             # 將進度從 30% 開始映射到 30-95%
             mapped_progress = 30 + int(progress * 0.65)
             update_job_status(r, job_id, "processing", progress=mapped_progress)
+            if tracker and mapped_progress - last_db_progress >= 10:
+                last_db_progress = mapped_progress
+                tracker.progress(job_id, mapped_progress)
             job_logger.info("progress heartbeat: progress=%s mapped_progress=%s", progress, mapped_progress)
 
         # 8. 等待 ComfyUI 執行完成
+        comfy_started = False
+        def on_event(event_type, event):
+            nonlocal comfy_started
+            if not tracker:
+                return
+            node_info = workflow_adapter.node(workflow, event.get("node"))
+            node_id = node_info["node_id"]
+            node_type = node_info["node_type"]
+            if event_type == "node_started":
+                if not comfy_started:
+                    comfy_started = True
+                    tracker.event(job_id, "comfyui_started", resulting_status="running")
+                tracker.update_node(job_id, node_id=node_id, node_type=node_type)
+                tracker.event(job_id, "node_started", resulting_status="running", stage=node_info["stage"], node_id=node_id, node_type=node_type)
+            elif event_type == "node_completed":
+                tracker.update_node(job_id, node_id=node_id, node_type=node_type, completed=True)
+                tracker.event(job_id, "node_completed", resulting_status="running", stage=node_info["stage"], node_id=node_id, node_type=node_type)
+            elif event_type == "execution_error":
+                tracker.event(job_id, "job_failed", resulting_status="running", stage="comfyui_execution", error_code="COMFYUI_NODE_ERROR", message=event.get("exception_message"))
+            elif event_type == "execution_interrupted":
+                current = tracker.repository.get_job(job_id) or {}
+                if current.get("cancel_requested_at"):
+                    if tracker.transition(job_id, JobStatus.RUNNING, JobStatus.CANCELLED,
+                                          error_stage="cancellation", error_code="CANCELLED_BY_CLIENT"):
+                        tracker.event(job_id, "job_cancelled", resulting_status="cancelled", stage="cancellation", error_code="CANCELLED_BY_CLIENT")
+
+        def should_abort():
+            current = tracker.repository.get_job(job_id) if tracker else None
+            return "client_cancel_requested" if current and current.get("cancel_requested_at") else None
+
+        def on_abort():
+            job_logger.info("cancellation request observed; waiting for prompt-specific ComfyUI terminal event")
+
         result = client.wait_for_completion(
             prompt_id=prompt_id,
             timeout=WORKER_TIMEOUT,  # 使用配置值 (預設 2400 秒 = 40 分鐘)
-            on_progress=on_progress
+            on_progress=on_progress,
+            on_event=on_event,
+            should_abort=should_abort,
+            on_abort=on_abort,
         )
+
+        if result.get("interrupted"):
+            current = tracker.repository.get_job(job_id) if tracker else None
+            if current and current.get("status") == JobStatus.CANCELLED.value:
+                update_job_status(r, job_id, "cancelled", error="Task cancelled by user", public_error=True)
+                return
 
         # 9. 根據執行結果處理輸出
         if result.get("success"):
@@ -706,6 +866,8 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict):
                     try:
                         local_output_path, file_size = validate_local_output_file(new_filename, job_logger)
                     except Exception as output_err:
+                        if tracker:
+                            tracker.fail(job_id, JobStatus.RUNNING, stage="output_storage", code="OUTPUT_PERSIST_ERROR", message=output_err)
                         update_job_status(
                             r,
                             job_id,
@@ -718,17 +880,22 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict):
 
                     # 無論是圖片還是影片，都通過 image_url 欄位回傳 (前端會根據副檔名判斷)
                     file_url = f"/outputs/{new_filename}"
+                    if tracker:
+                        if not tracker.complete_with_output(
+                            job_id, path=local_output_path, storage_uri=file_url, filename=new_filename,
+                            output_type=output_type, source_node_id=str(selected_file.get("node_id") or "") or (workflow_adapter.expected_output_nodes() or (None,))[0],
+                            metadata={"source_type": file_type},
+                        ):
+                            raise RuntimeError("durable output finalize rejected")
                     update_job_status(r, job_id, "finished", progress=100, image_url=file_url)
                     job_logger.info(
                         f"✅ 任務完成，輸出 ({output_type}): {file_url} "
                         f"-> {local_output_path.name} ({file_size} bytes)"
                     )
                 else:
-                    update_job_status(r, job_id, "finished", progress=100)
-                    job_logger.warning("⚠️ 任務完成，但所有輸出檔案都無法複製")
+                    raise RuntimeError("output persistence failed")
             else:
-                update_job_status(r, job_id, "finished", progress=100)
-                job_logger.info("✅ 任務完成，但沒有輸出檔案")
+                raise RuntimeError("expected output not found")
         else:
             error = result.get("error", "未知錯誤")
             
@@ -760,11 +927,15 @@ def process_job(r: redis.Redis, client: ComfyClient, job_data: dict):
                     job_logger.warning(f"⚠️ 獲取部分輸出失敗: {partial_err}")
             
             update_job_status(r, job_id, "failed", error=error)
+            if tracker:
+                tracker.fail(job_id, JobStatus.RUNNING, stage="comfyui_execution", code="UNKNOWN_ERROR", message=error)
             job_logger.error(f"❌ 任務失敗: {error}")
             
     except Exception as e:
         job_logger.exception("❌ 處理錯誤")
         update_job_status(r, job_id, "failed", progress=0, error=ENGINE_EXECUTION_FAILED)
+        if tracker:
+            tracker.fail(job_id, JobStatus.RUNNING, stage="comfyui_submit", code="COMFYUI_SUBMIT_ERROR", message=e)
 
 
 def main():
@@ -786,7 +957,18 @@ def main():
         sys.exit(1)
     
     # 2. 初始化 ComfyUI 客戶端
-    client = ComfyClient()
+    client = ComfyClient(logger=logger)
+    manifest_errors = WorkflowRegistry().validate_configured_workflows()
+    if manifest_errors:
+        logger.warning("workflow observability validation: %s", "; ".join(manifest_errors))
+        if WORKFLOW_MANIFEST_POLICY == "strict":
+            sys.exit(1)
+    try:
+        replayed = JobTracker(job_repository()).replay_output_receipts(Path(COMFYUI_OUTPUT_DIR))
+        if replayed:
+            logger.info("replayed %s durable output receipts", replayed)
+    except Exception:
+        logger.exception("output receipt reconciliation failed")
     warmup_controller = WarmupController(
         redis_client=r,
         comfy_client=client,
@@ -796,7 +978,7 @@ def main():
 
     # 3. 啟動 Worker 心跳線程
     logger.info("💓 啟動 Worker 心跳線程...")
-    heartbeat_thread = threading.Thread(target=worker_heartbeat, args=(r,), daemon=True)
+    heartbeat_thread = threading.Thread(target=worker_heartbeat, args=(r, client), daemon=True)
     heartbeat_thread.start()
 
     # 4. 檢查 ComfyUI 連接
@@ -823,7 +1005,14 @@ def main():
     logger.info(f"暖機模式: {WARMUP_MODE}")
     logger.info("等待任務中...\n")
     
+    processing_queue = f"{JOB_QUEUE}:processing"
+    stranded = r.lrange(processing_queue, 0, -1)
+    if stranded:
+        r.delete(processing_queue)
+        r.rpush(JOB_QUEUE, *stranded)
+        logger.warning("requeued %s unacknowledged jobs", len(stranded))
     last_cleanup_time = time.time()
+    last_reconcile_time = 0.0
     CLEANUP_INTERVAL = 3600  # 每小時清理一次
     redis_retry_delay = 2.0  # Redis 重連指數退避初始值
     REDIS_RETRY_MAX_DELAY = 60.0
@@ -835,16 +1024,18 @@ def main():
                 cleanup_old_temp_files()
                 cleanup_old_output_files()
                 last_cleanup_time = time.time()
+
+            if time.time() - last_reconcile_time >= JOB_RECONCILE_SECONDS:
+                last_reconcile_time = time.time()
+                reconcile_stale_running(r, client)
             
             # BLPOP: 阻塞式取出任務 (超時 5 秒)
-            result = r.blpop(JOB_QUEUE, timeout=5)
+            job_json = r.blmove(JOB_QUEUE, processing_queue, 5, src='LEFT', dest='RIGHT')
             
             # 連接成功，重置退避延遲
             redis_retry_delay = 2.0
             
-            if result:
-                queue_name, job_json = result
-                
+            if job_json:
                 try:
                     job_data = json.loads(job_json)
                     _current_job_id = job_data.get('job_id', 'unknown')
@@ -854,6 +1045,8 @@ def main():
                 except json.JSONDecodeError as e:
                     logger.exception("JSON 解析錯誤")
                     _current_job_id = None
+                finally:
+                    r.lrem(processing_queue, 1, job_json)
             
         except redis.ConnectionError as e:
             logger.exception(f"Redis 連接中斷，{redis_retry_delay:.0f}s 後重試")

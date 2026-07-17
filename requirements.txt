@@ -23,6 +23,8 @@ requests==2.31.0              # HTTP Client
 # 資料庫與快取
 # ============================================
 redis==5.0.1                  # Redis 客戶端 + Rate Limiter Storage
+PyMySQL==1.1.1                # Durable job observability (MySQL DB-API)
+cryptography>=42,<45          # MySQL 8 caching_sha2_password support
 
 # ============================================
 # 設定管理 (shared/runtime_settings.py)

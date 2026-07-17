@@ -763,3 +763,7 @@ v2 的引擎抽象模式（`engines/base`）為 Phase 2 多後端擴展的參考
 | 2026-01 | Phase 7 壓力測試（50+ 並發）、系統監控、安全加固 |
 
 詳細歷史見 `openspec/changes/archive/` 與 git log。
+
+## Job Observability Dashboard
+
+The existing Flask service on port 5000 serves `/admin`, `/admin/jobs`, and `/admin/jobs/<job_id>`, plus the bounded `/api/admin/*` metrics, jobs, errors, workflows, workers, and health endpoints. It does not add FastAPI, a second backend, or a public port. Dashboard data is sanitized job/event/output metadata only: it never returns a full prompt, base64 input, or traceback. The default query range is 24 hours, maximum 31 days, and `page_size` maximum is 200. Running cancellation is request-only because the current ComfyUI `/interrupt` is instance-wide.

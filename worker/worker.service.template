@@ -36,6 +36,7 @@ Environment=REDIS_HOST=${GPU_VM_REDIS_HOST}
 Environment=REDIS_PORT=6379
 Environment=DB_HOST=${GPU_VM_REDIS_HOST}
 Environment=DB_PORT=3306
+Environment=WORKER_ID=studio-worker-gpu-01
 
 # Python 與 Worker 環境
 Environment=PYTHONUNBUFFERED=1
