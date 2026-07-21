@@ -91,10 +91,6 @@ REVERSE_PATH_REPLACEMENTS = (
         "Qwen_Edit/Lightning/Qwen-Image-Lightning-4steps-V1.0.safetensors",
         "Qwen_Image_Edit" + BACKSLASH + "Qwen-Image-Edit-2509-Lightning-4steps-V1.0-bf16.safetensors",
     ),
-    (
-        "bfs_head_v3_qwen_image_edit_2509.safetensors",
-        "Qwen_Image_Edit" + BACKSLASH + "bfs_head_v3_qwen_image_edit_2509.safetensors",
-    ),
     ("Wan2.2/", "Wan2.2" + BACKSLASH),
     ("Wan2.1/", "Wan2.1" + BACKSLASH),
     ("InfiniteTalk/", "InfiniTetalk" + BACKSLASH),
