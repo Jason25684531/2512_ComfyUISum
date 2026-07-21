@@ -2,7 +2,7 @@
   "text_to_image": {
     "id": "text_to_image",
     "aliases": [],
-    "file": "text_to_image_z_image_turbo_fp8_1222.json",
+    "file": "text_to_image_z_image_turbo_fp8_260720_api.json",
     "description": "Z-Image Turbo 文字生圖",
     "category": "image",
     "version": "1.0.0",
@@ -76,7 +76,7 @@
       "single_image_edit",
       "single_edit"
     ],
-    "file": "single_image_edit_qwen_2509_gguf_1222.json",
+    "file": "single_image_edit_qwen_2509_260720_api.json",
     "description": "Qwen 單圖編輯",
     "category": "image",
     "version": "1.0.0",
@@ -91,6 +91,10 @@
     "image_map": {
       "input": "120"
     },
+    "model_overrides": {
+      "windows": [],
+      "linux": []
+    },
     "frontend": {
       "title": "Image Edit",
       "description": "單圖編輯",
@@ -104,7 +108,7 @@
   "face_swap": {
     "id": "face_swap",
     "aliases": [],
-    "file": "face_swap_qwen_2509_gguf_1222.json",
+    "file": "face_swap_qwen_2509_260720_api.json",
     "description": "Qwen 換臉",
     "category": "image",
     "version": "1.0.0",
@@ -120,6 +124,10 @@
     "image_map": {
       "source": "501",
       "target": "502"
+    },
+    "model_overrides": {
+      "windows": [],
+      "linux": []
     },
     "frontend": {
       "title": "Face Swap",
@@ -137,7 +145,7 @@
     "aliases": [
       "sketch"
     ],
-    "file": "sketch_to_image_qwen_2509_gguf_1222.json",
+    "file": "sketch_to_image_qwen_2509_260720_api.json",
     "description": "Qwen 草圖轉圖像",
     "category": "image",
     "version": "1.0.0",
@@ -151,6 +159,10 @@
     },
     "image_map": {
       "input": "120"
+    },
+    "model_overrides": {
+      "windows": [],
+      "linux": []
     },
     "frontend": {
       "title": "Sketch to Image",
@@ -167,7 +179,7 @@
     "aliases": [
       "multi_blend"
     ],
-    "file": "multi_image_blend_qwen_2509_gguf_1222.json",
+    "file": "multi_image_blend_qwen_2509_260720_api.json",
     "description": "Qwen 多圖融合",
     "category": "image",
     "version": "1.0.0",
@@ -191,6 +203,10 @@
       "source": "78",
       "target": "436",
       "extra": "437"
+    },
+    "model_overrides": {
+      "windows": [],
+      "linux": []
     },
     "frontend": {
       "title": "Multi-Blend",

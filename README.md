@@ -388,7 +388,7 @@ ComfyUISum/
 │   │   ├── workflow_registry.py       # Workflow 註冊器
 │   │   └── workflow/          # Workflow 子模組
 │   │       ├── injectors.py   # 參數注入器（prompt / seed / 圖片 / 音訊）
-│   │       ├── loader.py      # Workflow 載入器（UI 格式 → API fallback）
+│   │       ├── loader.py      # Workflow 載入器（API 格式主檔；保留舊 UI fallback 相容）
 │   │       ├── node_utils.py  # 節點工具
 │   │       ├── legacy_maps.py # 舊版對照表
 │   │       └── video_trim.py  # 影片裁切邏輯
@@ -404,11 +404,10 @@ ComfyUISum/
 │   ├── front/ image/ vendor/  # 頁面資源與第三方庫
 │   └── package.json           # Tailwind build 依賴
 │
-├── ComfyUIworkflow/           # Workflow 模板（UI 匯出格式，Windows 路徑）
+├── ComfyUIworkflow/           # Workflow API 格式主檔（Windows 路徑）
 │   ├── config.json            # Workflow catalog（canonical ID / alias / 檔案映射）
 │   └── linux_fixed/           # Linux 路徑格式副本
-├── ComfyUIworkflow_api/       # API 格式 Workflow（worker 直接提交 /prompt 用）
-│   # Worker 偵測到 UI 匯出格式時，自動改用此處對應的 API fallback 檔
+├── ComfyUIworkflow_api/       # 保留舊 UI→API fallback 的空目錄（Docker COPY / mount 相容）
 │
 ├── tests/                      # 測試套件（契約測試不需 ComfyUI 運行）
 │   ├── test_backend_contract.py       # Backend API 契約
@@ -587,8 +586,8 @@ Get-Content logs\worker.log  -Tail 50 -Wait   # Worker
 
 ### 添加新 Workflow
 
-1. **匯出 Workflow JSON**：UI 格式放 `ComfyUIworkflow/`，API 格式放 `ComfyUIworkflow_api/`
-   （Worker 偵測到 UI 格式會自動載入同名 API fallback）
+1. **匯出 Workflow JSON**：可直接提交的 API 格式主檔放 `ComfyUIworkflow/`
+   （舊 UI 格式仍由 loader 的 fallback 機制相容處理）
 2. **登錄 catalog**：在 `ComfyUIworkflow/config.json` 加入 canonical ID / alias / 檔案映射
 3. **參數注入**：於 `worker/src/workflow/injectors.py` 實作對應注入器（遵循既有注入器類別模式）
 4. **前端 UI**：`frontend/dashboard.html` 加入工作區入口（catalog 由 `/api/runtime-config` 驅動）

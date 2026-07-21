@@ -41,7 +41,7 @@
   },
   "433:37": {
     "inputs": {
-      "unet_name": "Qwen/qwen_image_edit_2511_bf16.safetensors",
+      "unet_name": "Qwen\\qwen_image_edit_2509_fp8_e4m3fn.safetensors",
       "weight_dtype": "default"
     },
     "class_type": "UNETLoader",
@@ -51,7 +51,7 @@
   },
   "433:38": {
     "inputs": {
-      "clip_name": "Qwen_Image_Edit/split_files/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors",
+      "clip_name": "Qwen\\qwen_2.5_vl_7b_fp8_scaled.safetensors",
       "type": "qwen_image",
       "device": "default"
     },
@@ -62,7 +62,7 @@
   },
   "433:39": {
     "inputs": {
-      "vae_name": "Qwen_Image_Edit/split_files/vae/qwen_image_vae.safetensors"
+      "vae_name": "qwen_image_edit_2511\\qwen_image_vae.safetensors"
     },
     "class_type": "VAELoader",
     "_meta": {
@@ -83,7 +83,7 @@
   },
   "433:89": {
     "inputs": {
-      "lora_name": "Qwen_Edit/Lightning/Qwen-Image-Lightning-4steps-V1.0.safetensors",
+      "lora_name": "Qwen_Edit\\Lightning\\Qwen-Image-Edit-2509-Lightning-4steps-V1.0-bf16.safetensors",
       "strength_model": 1,
       "model": [
         "433:37",
@@ -185,6 +185,7 @@
   "433:75": {
     "inputs": {
       "strength": 1,
+      "pre_cfg": false,
       "model": [
         "433:66",
         0
@@ -197,7 +198,7 @@
   },
   "433:3": {
     "inputs": {
-      "seed": 188483365009075,
+      "seed": 373734289817945,
       "steps": 4,
       "cfg": 1,
       "sampler_name": "euler",

@@ -22,11 +22,11 @@ MODEL_MAP = {
 }
 
 WORKFLOW_MAP = {
-    "text_to_image": "text_to_image_z_image_turbo_fp8_1222.json",
-    "face_swap": "face_swap_qwen_2509_gguf_1222.json",
-    "multi_image_blend": "multi_image_blend_qwen_2509_gguf_1222.json",
-    "single_image_edit": "single_image_edit_qwen_2509_gguf_1222.json",
-    "sketch_to_image": "sketch_to_image_qwen_2509_gguf_1222.json",
+    "text_to_image": "text_to_image_z_image_turbo_fp8_260720_api.json",
+    "face_swap": "face_swap_qwen_2509_260720_api.json",
+    "multi_image_blend": "multi_image_blend_qwen_2509_260720_api.json",
+    "single_image_edit": "single_image_edit_qwen_2509_260720_api.json",
+    "sketch_to_image": "sketch_to_image_qwen_2509_260720_api.json",
     "virtual_human": "InfiniteTalk_IndexTTS_2.json",
     "veo3_long_video": "Veo3_VideoConnection.json",
     "image_to_video": "Veo3_VideoConnection.json",
