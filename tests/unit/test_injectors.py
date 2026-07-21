@@ -106,6 +106,34 @@ def test_ideogram4_missing_key_preserves_template_value():
     print("[OK] missing extra_params keys preserve template default values")
 
 
+def test_multi_angle_param_map_preserves_native_types():
+    workflow = parse_workflow(
+        workflow_name="multi_angle",
+        prompt="",
+        seed=7,
+        image_files={"input": "fixture.png"},
+        extra_params={"horizontal_angle": 90, "vertical_angle": 30, "zoom": 7.5},
+    )
+    inputs = workflow["3"]["inputs"]
+    assert inputs["horizontal_angle"] == 90 and isinstance(inputs["horizontal_angle"], int)
+    assert inputs["vertical_angle"] == 30 and isinstance(inputs["vertical_angle"], int)
+    assert inputs["zoom"] == 7.5 and isinstance(inputs["zoom"], float)
+    assert workflow["1"]["inputs"]["image"] == "fixture.png"
+    assert workflow["4:105"]["inputs"]["seed"] == 7
+    print("[OK] Multi-angle param_map and KSampler seed injection")
+
+
+def test_multi_angle_missing_zoom_preserves_template_value():
+    workflow = parse_workflow(
+        workflow_name="multi_angle",
+        prompt="",
+        seed=1,
+        extra_params={"horizontal_angle": 180, "vertical_angle": 0},
+    )
+    assert workflow["3"]["inputs"]["zoom"] == 5
+    print("[OK] Multi-angle missing zoom preserves template default")
+
+
 def test_param_map_missing_node_does_not_crash():
     workflow = {"178": {"inputs": {"foo": "bar"}, "class_type": "X"}}
     ok = set_node_input_value(workflow, "does-not-exist", "value", 1.0, "test")
@@ -132,6 +160,8 @@ if __name__ == "__main__":
     test_extra_params_takes_priority_over_top_level()
     test_ideogram4_named_param_injection_native_types()
     test_ideogram4_missing_key_preserves_template_value()
+    test_multi_angle_param_map_preserves_native_types()
+    test_multi_angle_missing_zoom_preserves_template_value()
     test_param_map_missing_node_does_not_crash()
     test_workflow_template_files_untouched_on_disk()
     print("\nAll injector tests passed.")

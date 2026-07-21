@@ -51,3 +51,7 @@ apps/*/storage/
 
 LTX_Web.png
 .tokensave/*
+
+docs/*
+mutilangel_ref/*
+ComfyUIAPI_Backup/*

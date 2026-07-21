@@ -400,6 +400,9 @@ def apply_workflow_injections(
 
     seed_node_ids = workflow_config.get("mapping", {}).get("seed_node_ids", [])
     for seed_node_id in seed_node_ids:
-        set_node_input_value(workflow, seed_node_id, "noise_seed", seed, "Config seed_node_ids 注入")
+        node = workflow.get(str(seed_node_id), {})
+        inputs = node.get("inputs", {}) if isinstance(node, dict) else {}
+        seed_input_key = "seed" if "seed" in inputs and "noise_seed" not in inputs else "noise_seed"
+        set_node_input_value(workflow, seed_node_id, seed_input_key, seed, "Config seed_node_ids 注入")
 
     return workflow

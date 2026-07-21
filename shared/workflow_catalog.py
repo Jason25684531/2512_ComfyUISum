@@ -188,9 +188,9 @@ class WorkflowCatalog:
                 node = find_workflow_node(workflow, seed_node_id)
                 if node is None:
                     errors.append(f"{entry.workflow_id}: mapping.seed_node_ids missing node {seed_node_id}")
-                elif not has_input_key(node, "noise_seed"):
+                elif not has_input_key(node, "noise_seed") and not has_input_key(node, "seed"):
                     errors.append(
-                        f"{entry.workflow_id}: mapping.seed_node_ids cannot inject {seed_node_id}.noise_seed"
+                        f"{entry.workflow_id}: mapping.seed_node_ids cannot inject {seed_node_id}.noise_seed or .seed"
                     )
 
             for param_name, target in mapping.get("param_map", {}).items():

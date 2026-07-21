@@ -404,5 +404,40 @@
       "color": "cyan",
       "inputs": []
     }
+  },
+  "multi_angle": {
+    "id": "multi_angle",
+    "aliases": [],
+    "file": "multiple_angles_qwen_2511_260720_api.json",
+    "description": "Generate an image from a selected multi-angle camera view.",
+    "category": "image",
+    "version": "1.0.0",
+    "enabled": true,
+    "observability": {
+      "model_source": {"node_id": "4:108", "input": "unet_name"},
+      "important_nodes": [{"node_id": "2", "stage": "output_save"}],
+      "output": {"strategy": "node_output", "node_ids": ["2"]},
+      "timeout_seconds": 3600,
+      "sensitive_fields": ["images"],
+      "custom_dimensions": {}
+    },
+    "mapping": {
+      "output_node_id": "2",
+      "seed_node_ids": ["4:105"],
+      "param_map": {
+        "horizontal_angle": {"node_id": "3", "input_key": "horizontal_angle"},
+        "vertical_angle": {"node_id": "3", "input_key": "vertical_angle"},
+        "zoom": {"node_id": "3", "input_key": "zoom"}
+      }
+    },
+    "image_map": {"input": "1"},
+    "model_overrides": {"windows": []},
+    "frontend": {
+      "title": "多角度視角 Multi-Angle",
+      "description": "拖曳調整相機角度並生成對應視角。",
+      "icon": "orbit",
+      "color": "violet",
+      "inputs": ["input"]
+    }
   }
 }

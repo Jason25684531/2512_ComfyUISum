@@ -514,6 +514,29 @@ def generate():
                 if not isinstance(field_value, str) or len(field_value) > 2000:
                     return jsonify({'error': f'{field_name} must be a string up to 2000 characters'}), 400
                 ideogram4_extra_params[field_name] = field_value
+
+        multi_angle_extra_params = {}
+        if workflow == 'multi_angle':
+            input_filename = (data.get('images') or {}).get('input')
+            if not input_filename:
+                return jsonify({'error': 'input image is required for multi_angle'}), 400
+
+            for field_name, minimum, maximum, integer_only in (
+                ('horizontal_angle', 0, 360, True),
+                ('vertical_angle', -30, 60, True),
+                ('zoom', 0.0, 10.0, False),
+            ):
+                if field_name not in data:
+                    continue
+                raw_value = data[field_name]
+                if isinstance(raw_value, bool) or not isinstance(raw_value, (int, float)):
+                    return jsonify({'error': f'{field_name} must be a number within range'}), 400
+                if integer_only and not isinstance(raw_value, int):
+                    return jsonify({'error': f'{field_name} must be a number within range'}), 400
+                value = raw_value if integer_only else float(raw_value)
+                if value < minimum or value > maximum:
+                    return jsonify({'error': f'{field_name} must be within range'}), 400
+                multi_angle_extra_params[field_name] = value
         # =====================================================
         # 這裡會檢查 data['audio'] 是否為 Base64 字串
         # 如果是，就轉存成檔案，並把 data['audio'] 替換成檔名
@@ -576,6 +599,7 @@ def generate():
             'extra_params': (
                 {'retake_start': retake_start_val, 'retake_end': retake_end_val}
                 if workflow == 'ltx_retake_v2v'
+                else multi_angle_extra_params if workflow == 'multi_angle'
                 else ideogram4_extra_params
             ),
             'created_at': iso_utc(),
