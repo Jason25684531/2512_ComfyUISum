@@ -241,6 +241,26 @@
             box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.8);
         }
 
+        /* Keep the Image Composition tool picker inside its panel at every viewport width. */
+        #tool-selector-overlay {
+            overflow-y: auto;
+            padding: 1.5rem;
+        }
+
+        #tool-selector-overlay .floating-toolbar {
+            max-height: calc(100vh - 3rem);
+            overflow-y: auto;
+            padding: clamp(2rem, 6vw, 6rem);
+        }
+
+        #tool-selector-overlay .tool-grid {
+            flex-wrap: wrap;
+        }
+
+        #tool-selector-overlay .tool-card {
+            width: min(16rem, 100%);
+        }
+
         /* Custom Input */
         .custom-input {
             background: rgba(0, 0, 0, 0.4);
@@ -646,7 +666,7 @@
                             </div>
 
                             <!-- Tool Grid -->
-                            <div class="flex flex-nowrap justify-center gap-10">
+                            <div class="tool-grid flex justify-center gap-10">
                                 <!-- Face Swap -->
                                 <button onclick="selectTool('face_swap')"
                                     class="tool-card glass-card rounded-[32px] p-10 w-64 h-64 flex flex-col flex-shrink-0 items-center justify-center text-center cursor-pointer hover:border-purple-500/50 group">
