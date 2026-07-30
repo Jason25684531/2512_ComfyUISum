@@ -15,12 +15,10 @@ import json
 try:
     from .workflow.injectors import apply_workflow_injections
     from .workflow.loader import get_workflow_path, load_workflow
-    from .workflow.video_trim import trim_veo3_workflow
     from .workflow_registry import WorkflowRegistry
 except ImportError:
     from workflow.injectors import apply_workflow_injections
     from workflow.loader import get_workflow_path, load_workflow
-    from workflow.video_trim import trim_veo3_workflow
     from workflow_registry import WorkflowRegistry
 
 
@@ -89,7 +87,6 @@ def parse_workflow(
         audio_file=audio_file,
         video_file=video_file,
         extra_params=merged_extra_params,
-        trim_veo3_workflow=trim_veo3_workflow,
     )
 
 

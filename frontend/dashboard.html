@@ -976,42 +976,6 @@
                                 </div>
                             </div>
                             <div class="flex flex-nowrap justify-center gap-10">
-                                <!-- Long Video -->
-                                <button onclick="selectVideoTool('veo3_long_video')"
-                                    class="tool-card glass-card rounded-[32px] p-10 w-64 h-64 flex flex-col flex-shrink-0 items-center justify-center text-center cursor-pointer hover:border-amber-500/50 group">
-                                    <div
-                                        class="w-24 h-24 flex items-center justify-center rounded-2xl bg-amber-500/10 text-amber-300 mx-auto mb-4 group-hover:bg-amber-500/20 group-hover:scale-110 transition-all border border-amber-500/20">
-                                        <i data-lucide="film" class="w-12 h-12"></i>
-                                    </div>
-                                    <h3 class="text-xl font-bold text-white mb-1"
-                                        style="font-family: 'TTNormsProBold', sans-serif;">Long Gen</h3>
-                                    <p class="text-xl text-gray-500">長片生成</p>
-                                </button>
-
-                                <!-- Text to Video -->
-                                <button onclick="selectVideoTool('t2v_veo3')"
-                                    class="tool-card glass-card rounded-[32px] p-10 w-64 h-64 flex flex-col flex-shrink-0 items-center justify-center text-center cursor-pointer hover:border-blue-500/50 group">
-                                    <div
-                                        class="w-24 h-24 flex items-center justify-center rounded-2xl bg-blue-500/10 text-blue-300 mx-auto mb-4 group-hover:bg-blue-500/20 group-hover:scale-110 transition-all border border-blue-500/20">
-                                        <i data-lucide="type" class="w-12 h-12"></i>
-                                    </div>
-                                    <h3 class="text-xl font-bold text-white mb-1"
-                                        style="font-family: 'TTNormsProBold', sans-serif;">Text2Video</h3>
-                                    <p class="text-xl text-gray-500">文字轉影片</p>
-                                </button>
-
-                                <!-- First-Last Frame -->
-                                <button onclick="selectVideoTool('flf_veo3')"
-                                    class="tool-card glass-card rounded-[32px] p-10 w-64 h-64 flex flex-col flex-shrink-0 items-center justify-center text-center cursor-pointer hover:border-purple-500/50 group">
-                                    <div
-                                        class="w-24 h-24 flex items-center justify-center rounded-2xl bg-purple-500/10 text-purple-300 mx-auto mb-4 group-hover:bg-purple-500/20 group-hover:scale-110 transition-all border border-purple-500/20">
-                                        <i data-lucide="image" class="w-12 h-12"></i>
-                                    </div>
-                                    <h3 class="text-xl font-bold text-white mb-1"
-                                        style="font-family: 'TTNormsProBold', sans-serif;">F-L Frame</h3>
-                                    <p class="text-xl text-gray-500">首尾禎動畫</p>
-                                </button>
-
                                 <!-- LTX ReTake V2V -->
                                 <button onclick="selectVideoTool('ltx_retake_v2v')"
                                     class="tool-card glass-card rounded-[32px] p-10 w-64 h-64 flex flex-col flex-shrink-0 items-center justify-center text-center cursor-pointer hover:border-orange-500/50 group">
@@ -1022,6 +986,18 @@
                                     <h3 class="text-xl font-bold text-white mb-1"
                                         style="font-family: 'TTNormsProBold', sans-serif;">ReTake</h3>
                                     <p class="text-xl text-gray-500">影片重生成</p>
+                                </button>
+                                <button onclick="selectVideoTool('ltx_i2v')"
+                                    class="tool-card glass-card rounded-[32px] p-10 w-64 h-64 flex flex-col flex-shrink-0 items-center justify-center text-center cursor-pointer hover:border-cyan-500/50 group">
+                                    <div class="w-24 h-24 flex items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-300 mx-auto mb-4"><i data-lucide="image-play" class="w-12 h-12"></i></div>
+                                    <h3 class="text-xl font-bold text-white mb-1" style="font-family: 'TTNormsProBold', sans-serif;">LTX I2V</h3>
+                                    <p class="text-xl text-gray-500">單圖轉影片</p>
+                                </button>
+                                <button onclick="selectVideoTool('ltx_flf')"
+                                    class="tool-card glass-card rounded-[32px] p-10 w-64 h-64 flex flex-col flex-shrink-0 items-center justify-center text-center cursor-pointer hover:border-violet-500/50 group">
+                                    <div class="w-24 h-24 flex items-center justify-center rounded-2xl bg-violet-500/10 text-violet-300 mx-auto mb-4"><i data-lucide="film" class="w-12 h-12"></i></div>
+                                    <h3 class="text-xl font-bold text-white mb-1" style="font-family: 'TTNormsProBold', sans-serif;">LTX FLF</h3>
+                                    <p class="text-xl text-gray-500">首尾幀轉影片</p>
                                 </button>
                             </div>
                             <p class="text-center text-base text-gray-500 mt-10">按 ESC 或點擊外部區域關閉</p>
@@ -1048,91 +1024,40 @@
                                     </div>
                                     <div class="flex-1 min-w-0">
                                         <span id="video-tool-name"
-                                            class="text-xs font-bold text-white block truncate">長片生成</span>
+                                            class="text-xs font-bold text-white block truncate">LTX I2V</span>
                                         <span id="video-tool-desc"
-                                            class="text-[10px] text-gray-500 block truncate">Multi-Shot</span>
+                                            class="text-[10px] text-gray-500 block truncate">單圖轉影片</span>
                                     </div>
                                 </div>
 
-                                <!-- Panel: Multi-Shot -->
-                                <div id="panel-veo3_long_video" class="flex-1 overflow-y-auto p-4">
-                                    <div class="mb-4">
-                                        <h3 class="text-xs font-bold text-white mb-1">Multi-Shot Composition</h3>
-                                        <p class="text-[10px] text-gray-500">Add up to 5 images to create a sequence.
-                                        </p>
+                                <!-- Panel: LTX I2V -->
+                                <div id="panel-ltx_i2v" class="flex-1 overflow-y-auto p-4">
+                                    <h3 class="text-xs font-bold text-white mb-2">LTX 單圖轉影片</h3>
+                                    <p class="text-[10px] text-gray-500 mb-4">上傳一張參考圖片，設定輸出尺寸與時長。</p>
+                                    <div id="zone-ltx-i2v-input" class="upload-zone relative flex flex-col items-center justify-center rounded-xl cursor-pointer bg-black/20 p-3 min-h-[100px]" onclick="triggerFLFUpload('ltx-i2v-input')">
+                                        <input type="file" id="file-ltx-i2v-input" class="hidden" accept="image/*" onchange="handleFLFSelect(event, 'ltx-i2v-input')" />
+                                        <div id="preview-ltx-i2v-input" class="hidden absolute inset-0"><img src="" alt="Preview" class="w-full h-full object-cover rounded-xl" /></div>
+                                        <div id="placeholder-ltx-i2v-input" class="flex flex-col items-center pointer-events-none"><i data-lucide="image-plus" class="w-6 h-6 text-cyan-400 mb-1"></i><span class="text-xs font-bold text-white">上傳參考圖片</span></div>
                                     </div>
-                                    <!-- Shot Upload Zones -->
-                                    <div class="space-y-3" id="motion-shots-upload"></div>
-                                    <!-- Multi Prompts (in sidebar for multi mode) -->
-                                    <div id="motion-prompt-summary" class="hidden space-y-2 mt-4">
-                                        <h4 class="text-[10px] font-bold text-white uppercase">Shot Prompts</h4>
-                                        <div id="motion-prompt-summary-list" class="space-y-1"></div>
-                                    </div>
-                                </div>
-
-                                <!-- Panel: T2V -->
-                                <div id="panel-t2v_veo3" class="hidden flex-1 overflow-y-auto p-4">
-                                    <h3 class="text-xs font-bold text-white mb-2">文字轉影片</h3>
-                                    <p class="text-[10px] text-gray-500 mb-4">直接輸入描述，無需圖片即可生成影片。</p>
-                                    <div class="glass-card rounded-xl p-3 border border-blue-500/20 bg-blue-500/10">
-                                        <div class="flex items-center gap-2">
-                                            <div class="p-1.5 rounded-lg bg-blue-500/20">
-                                                <i data-lucide="type" class="w-4 h-4 text-blue-300"></i>
-                                            </div>
-                                            <div>
-                                                <div class="text-xs font-bold text-white">純文字模式</div>
-                                                <div class="text-[10px] text-gray-400">在下方輸入 Prompt 即可</div>
-                                            </div>
-                                        </div>
+                                    <div class="grid grid-cols-3 gap-3 mt-4">
+                                        <label class="text-[10px] text-gray-500">寬<input id="ltx-i2v-width" type="number" min="512" max="1920" step="1" value="1280" class="w-full bg-black/20 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white" /></label>
+                                        <label class="text-[10px] text-gray-500">高<input id="ltx-i2v-height" type="number" min="512" max="1920" step="1" value="736" class="w-full bg-black/20 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white" /></label>
+                                        <label class="text-[10px] text-gray-500">秒數<input id="ltx-i2v-duration" type="number" min="1" max="10" step="1" value="10" class="w-full bg-black/20 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white" /></label>
                                     </div>
                                 </div>
 
-                                <!-- Panel: FLF -->
-                                <div id="panel-flf_veo3" class="hidden flex-1 overflow-y-auto p-4">
-                                    <h3 class="text-xs font-bold text-white mb-2">首尾禎動畫</h3>
-                                    <p class="text-[10px] text-gray-500 mb-4">上傳首禎與尾禎圖片。</p>
-                                    <div class="space-y-3" id="flf-dropzones">
-                                        <div id="zone-first_frame"
-                                            class="upload-zone relative flex flex-col items-center justify-center rounded-xl cursor-pointer bg-black/20 p-3 min-h-[80px]"
-                                            onclick="triggerFLFUpload('first_frame')">
-                                            <input type="file" id="file-first_frame" class="hidden" accept="image/*"
-                                                onchange="handleFLFSelect(event, 'first_frame')" />
-                                            <div id="preview-first_frame" class="hidden absolute inset-0">
-                                                <img src="" alt="Preview"
-                                                    class="w-full h-full object-cover rounded-xl" />
-                                                <button onclick="event.stopPropagation(); clearFLFImage('first_frame')"
-                                                    class="absolute top-1 right-1 p-0.5 bg-black/70 rounded-full hover:bg-red-500/80 z-10">
-                                                    <i data-lucide="x" class="w-3 h-3 text-white"></i>
-                                                </button>
-                                            </div>
-                                            <div id="placeholder-first_frame"
-                                                class="flex flex-col items-center pointer-events-none">
-                                                <i data-lucide="image" class="w-6 h-6 text-purple-400 mb-1"></i>
-                                                <span class="text-xs font-bold text-white">首禎</span>
-                                            </div>
-                                        </div>
-                                        <div class="flex justify-center">
-                                            <i data-lucide="arrow-down" class="w-4 h-4 text-gray-500"></i>
-                                        </div>
-                                        <div id="zone-last_frame"
-                                            class="upload-zone relative flex flex-col items-center justify-center rounded-xl cursor-pointer bg-black/20 p-3 min-h-[80px]"
-                                            onclick="triggerFLFUpload('last_frame')">
-                                            <input type="file" id="file-last_frame" class="hidden" accept="image/*"
-                                                onchange="handleFLFSelect(event, 'last_frame')" />
-                                            <div id="preview-last_frame" class="hidden absolute inset-0">
-                                                <img src="" alt="Preview"
-                                                    class="w-full h-full object-cover rounded-xl" />
-                                                <button onclick="event.stopPropagation(); clearFLFImage('last_frame')"
-                                                    class="absolute top-1 right-1 p-0.5 bg-black/70 rounded-full hover:bg-red-500/80 z-10">
-                                                    <i data-lucide="x" class="w-3 h-3 text-white"></i>
-                                                </button>
-                                            </div>
-                                            <div id="placeholder-last_frame"
-                                                class="flex flex-col items-center pointer-events-none">
-                                                <i data-lucide="image" class="w-6 h-6 text-purple-400 mb-1"></i>
-                                                <span class="text-xs font-bold text-white">尾禎</span>
-                                            </div>
-                                        </div>
+                                <!-- Panel: LTX FLF -->
+                                <div id="panel-ltx_flf" class="hidden flex-1 overflow-y-auto p-4">
+                                    <h3 class="text-xs font-bold text-white mb-2">LTX 首尾幀轉影片</h3>
+                                    <p class="text-[10px] text-gray-500 mb-4">上傳首幀與尾幀圖片。</p>
+                                    <div class="space-y-3">
+                                        <div id="zone-ltx-flf-first-frame" class="upload-zone relative flex flex-col items-center justify-center rounded-xl cursor-pointer bg-black/20 p-3 min-h-[80px]" onclick="triggerFLFUpload('ltx-flf-first-frame')"><input type="file" id="file-ltx-flf-first-frame" class="hidden" accept="image/*" onchange="handleFLFSelect(event, 'ltx-flf-first-frame')" /><div id="preview-ltx-flf-first-frame" class="hidden absolute inset-0"><img src="" alt="Preview" class="w-full h-full object-cover rounded-xl" /></div><div id="placeholder-ltx-flf-first-frame" class="flex flex-col items-center pointer-events-none"><i data-lucide="image" class="w-6 h-6 text-violet-400 mb-1"></i><span class="text-xs font-bold text-white">首幀</span></div></div>
+                                        <div id="zone-ltx-flf-last-frame" class="upload-zone relative flex flex-col items-center justify-center rounded-xl cursor-pointer bg-black/20 p-3 min-h-[80px]" onclick="triggerFLFUpload('ltx-flf-last-frame')"><input type="file" id="file-ltx-flf-last-frame" class="hidden" accept="image/*" onchange="handleFLFSelect(event, 'ltx-flf-last-frame')" /><div id="preview-ltx-flf-last-frame" class="hidden absolute inset-0"><img src="" alt="Preview" class="w-full h-full object-cover rounded-xl" /></div><div id="placeholder-ltx-flf-last-frame" class="flex flex-col items-center pointer-events-none"><i data-lucide="image" class="w-6 h-6 text-violet-400 mb-1"></i><span class="text-xs font-bold text-white">尾幀</span></div></div>
+                                    </div>
+                                    <div class="grid grid-cols-3 gap-3 mt-4">
+                                        <label class="text-[10px] text-gray-500">寬<input id="ltx-flf-width" type="number" min="512" max="1920" step="1" value="1080" class="w-full bg-black/20 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white" /></label>
+                                        <label class="text-[10px] text-gray-500">高<input id="ltx-flf-height" type="number" min="512" max="1920" step="1" value="1080" class="w-full bg-black/20 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white" /></label>
+                                        <label class="text-[10px] text-gray-500">秒數<input id="ltx-flf-duration" type="number" min="1" max="10" step="1" value="10" class="w-full bg-black/20 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white" /></label>
                                     </div>
                                 </div>
 
@@ -1221,11 +1146,6 @@
                                         <i data-lucide="sparkles" class="w-3 h-3 text-amber-400"></i>
                                         VIDEO PROMPT
                                     </div>
-                                    <button id="toggle-veo3-mode" onclick="toggleVeo3Mode()"
-                                        class="text-xs px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 transition-colors text-gray-400 hover:text-white border border-white/10 flex items-center gap-1.5">
-                                        <i data-lucide="layers" class="w-3 h-3"></i>
-                                        <span id="mode-label">切換至多段模式</span>
-                                    </button>
                                 </div>
 
                                 <!-- Single Prompt Mode -->
@@ -1237,38 +1157,6 @@
                                         class="bg-gradient-to-r from-amber-600 to-orange-600 px-6 rounded-xl font-bold hover:shadow-[0_0_25px_rgba(245,158,11,0.5)] transition-all flex items-center gap-2 border border-white/10 whitespace-nowrap">
                                         <i data-lucide="sparkles" class="w-5 h-5"></i>
                                         <span>Generate</span>
-                                    </button>
-                                </div>
-
-                                <!-- Multi Prompts Mode (Veo3 Long Video) -->
-                                <div id="motion-multi-prompts" class="hidden"
-                                    style="flex-direction: column; gap: 0.75rem;">
-                                    <div class="text-xs text-amber-400 mb-2 flex items-center gap-2">
-                                        <i data-lucide="info" class="w-3 h-3"></i>
-                                        可選填 1-5 個片段，空白片段將自動跳過
-                                    </div>
-                                    <div class="space-y-2">
-                                        <input type="text" id="veo3-segment-0"
-                                            class="w-full custom-input rounded-lg p-3 text-sm"
-                                            placeholder="Segment 1 (Optional)" oninput="updateMotionPromptSummary()" />
-                                        <input type="text" id="veo3-segment-1"
-                                            class="w-full custom-input rounded-lg p-3 text-sm"
-                                            placeholder="Segment 2 (Optional)" oninput="updateMotionPromptSummary()" />
-                                        <input type="text" id="veo3-segment-2"
-                                            class="w-full custom-input rounded-lg p-3 text-sm"
-                                            placeholder="Segment 3 (Optional)" oninput="updateMotionPromptSummary()" />
-                                        <input type="text" id="veo3-segment-3"
-                                            class="w-full custom-input rounded-lg p-3 text-sm"
-                                            placeholder="Segment 4 (Optional)" oninput="updateMotionPromptSummary()" />
-                                        <input type="text" id="veo3-segment-4"
-                                            class="w-full custom-input rounded-lg p-3 text-sm"
-                                            placeholder="Segment 5 (Optional)" oninput="updateMotionPromptSummary()" />
-                                    </div>
-                                    <button id="btn-motion-generate-multi" type="button"
-                                        onclick="handleMotionGenerate()"
-                                        class="w-fit bg-gradient-to-r from-amber-600 to-orange-600 px-8 py-3 rounded-xl font-bold hover:shadow-[0_0_25px_rgba(245,158,11,0.5)] transition-all flex items-center gap-2 border border-white/10">
-                                        <i data-lucide="sparkles" class="w-5 h-5"></i>
-                                        <span>Generate Long Video</span>
                                     </button>
                                 </div>
 
@@ -1692,13 +1580,6 @@
             // Check login status
             checkLoginStatus();
 
-            // Initialize Multi-Shot UI if motion workspace exists
-            const motionShotsUpload = document.getElementById('motion-shots-upload');
-            if (motionShotsUpload && !motionShotsUpload.children.length) {
-                initMotionShotsUI();
-            }
-            syncMotionPromptMode();
-
             // Final icon initialization
             console.log('[Lucide] DOMContentLoaded - Final initialization');
             if (typeof lucide !== 'undefined') {
@@ -1711,7 +1592,7 @@
         // Global State
         // ==========================================
         let currentTool = 'text_to_image';
-        let currentVideoTool = 'veo3_long_video';
+        let currentVideoTool = 'ltx_i2v';
         let currentRatio = '1:1';
         let currentBatchSize = 1;
         let uploadedImages = { source: null, target: null, input: null, extra: null };
@@ -2229,13 +2110,6 @@
                 if (item.dataset.id === 'motion') item.classList.add('active');
             });
 
-            // 初始化 Motion Shots UI
-            const motionShotsUpload = document.getElementById('motion-shots-upload');
-            if (motionShotsUpload && !motionShotsUpload.children.length) {
-                initMotionShotsUI();
-            }
-            syncMotionPromptMode();
-
             lucide.createIcons();
         }
 
@@ -2266,158 +2140,16 @@
             currentVideoTool = toolId;
             hideVideoToolMenu();
             // Update panels
-            ['veo3_long_video', 't2v_veo3', 'flf_veo3', 'ltx_retake_v2v'].forEach(id => {
+            ['ltx_retake_v2v', 'ltx_i2v', 'ltx_flf'].forEach(id => {
                 const panel = document.getElementById(`panel-${id}`);
                 if (panel) panel.classList.toggle('hidden', id !== toolId);
             });
             // Update header
-            const names = { veo3_long_video: '長片生成', t2v_veo3: '文字轉影片', flf_veo3: '首尾禎動畫', ltx_retake_v2v: 'ReTake' };
-            const descs = { veo3_long_video: 'Multi-Shot', t2v_veo3: 'Text to Video', flf_veo3: 'First-Last Frame', ltx_retake_v2v: '影片重生成' };
+            const names = { ltx_i2v: 'LTX I2V', ltx_flf: 'LTX FLF', ltx_retake_v2v: 'ReTake' };
+            const descs = { ltx_i2v: '單圖轉影片', ltx_flf: '首尾幀轉影片', ltx_retake_v2v: '影片重生成' };
             document.getElementById('video-tool-name').textContent = names[toolId] || '';
             document.getElementById('video-tool-desc').textContent = descs[toolId] || '';
-            syncMotionPromptMode();
             lucide.createIcons();
-        }
-
-        // Veo3 Mode Toggle
-        window.veo3MultiMode = false; // Default to Single Mode
-
-        function updateMotionPromptSummary() {
-            const summaryContainer = document.getElementById('motion-prompt-summary');
-            const summaryList = document.getElementById('motion-prompt-summary-list');
-            if (!summaryContainer || !summaryList) {
-                return;
-            }
-
-            summaryList.replaceChildren();
-
-            let summaryCount = 0;
-            for (let shotIndex = 1; shotIndex <= 5; shotIndex++) {
-                const shotInput = document.getElementById(`motion-file-${shotIndex}`);
-                const hasImage = Boolean(shotInput && shotInput.files && shotInput.files[0]);
-                if (!hasImage) {
-                    continue;
-                }
-
-                const segmentInput = document.getElementById(`veo3-segment-${shotIndex - 1}`);
-                const item = document.createElement('div');
-                item.className = 'text-[10px] text-gray-400 leading-relaxed';
-                item.textContent = `Shot ${shotIndex}: ${segmentInput && segmentInput.value.trim() ? segmentInput.value.trim() : '待補提示詞'}`;
-                summaryList.appendChild(item);
-                summaryCount += 1;
-            }
-
-            const shouldShowSummary = currentVideoTool === 'veo3_long_video' && window.veo3MultiMode && summaryCount > 0;
-            summaryContainer.classList.toggle('hidden', !shouldShowSummary);
-        }
-
-        function syncMotionPromptMode() {
-            const isLongVideoTool = currentVideoTool === 'veo3_long_video';
-            const modeLabel = document.getElementById('mode-label');
-            const singlePrompt = document.getElementById('motion-single-prompt');
-            const multiPrompts = document.getElementById('motion-multi-prompts');
-            const toggleBtn = document.getElementById('toggle-veo3-mode');
-            const summaryContainer = document.getElementById('motion-prompt-summary');
-
-            if (toggleBtn) {
-                toggleBtn.classList.toggle('hidden', !isLongVideoTool);
-                const icon = toggleBtn.querySelector('i');
-                if (icon) {
-                    icon.setAttribute('data-lucide', window.veo3MultiMode ? 'layout' : 'layers-3');
-                }
-            }
-
-            if (!isLongVideoTool) {
-                if (modeLabel) {
-                    modeLabel.textContent = '切換至多段模式';
-                }
-                if (singlePrompt) {
-                    singlePrompt.classList.remove('hidden');
-                    singlePrompt.style.display = 'flex';
-                }
-                if (multiPrompts) {
-                    multiPrompts.classList.add('hidden');
-                    multiPrompts.style.display = 'none';
-                }
-                if (summaryContainer) {
-                    summaryContainer.classList.add('hidden');
-                }
-                if (typeof lucide !== 'undefined') {
-                    lucide.createIcons();
-                }
-                return;
-            }
-
-            if (modeLabel) {
-                modeLabel.textContent = window.veo3MultiMode ? '切換至單段模式' : '切換至多段模式';
-            }
-            if (singlePrompt) {
-                singlePrompt.classList.toggle('hidden', window.veo3MultiMode);
-                singlePrompt.style.display = window.veo3MultiMode ? 'none' : 'flex';
-            }
-            if (multiPrompts) {
-                multiPrompts.classList.toggle('hidden', !window.veo3MultiMode);
-                multiPrompts.style.display = window.veo3MultiMode ? 'flex' : 'none';
-            }
-
-            updateMotionPromptSummary();
-
-            if (typeof lucide !== 'undefined') {
-                lucide.createIcons();
-            }
-        }
-
-        function toggleVeo3Mode() {
-            if (currentVideoTool !== 'veo3_long_video') {
-                return;
-            }
-
-            window.veo3MultiMode = !window.veo3MultiMode;
-            console.log('[Video Studio] Toggling mode to:', window.veo3MultiMode ? 'Multi' : 'Single');
-            syncMotionPromptMode();
-        }
-
-        // Motion Shots UI
-        function initMotionShotsUI() {
-            const container = document.getElementById('motion-shots-upload');
-            if (!container) return;
-            container.innerHTML = '';
-            for (let i = 1; i <= 5; i++) {
-                container.innerHTML += `
-                    <div id="motion-shot-${i}" class="upload-zone rounded-lg p-3 flex items-center gap-3 cursor-pointer" onclick="triggerMotionShot(${i})">
-                        <input type="file" id="motion-file-${i}" class="hidden" accept="image/*" onchange="handleMotionShotSelect(event, ${i})" />
-                        <div id="motion-preview-${i}" class="hidden w-12 h-12 rounded-lg overflow-hidden">
-                            <img src="" class="w-full h-full object-cover" />
-                        </div>
-                        <div id="motion-placeholder-${i}" class="flex items-center gap-2">
-                            <i data-lucide="image" class="w-5 h-5 text-gray-400"></i>
-                            <span class="text-sm text-gray-400">Shot ${i}</span>
-                        </div>
-                    </div>
-                `;
-            }
-            lucide.createIcons();
-        }
-
-        function triggerMotionShot(num) {
-            document.getElementById(`motion-file-${num}`).click();
-        }
-
-        function handleMotionShotSelect(event, num) {
-            const file = event.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = e => {
-                const preview = document.getElementById(`motion-preview-${num}`);
-                const placeholder = document.getElementById(`motion-placeholder-${num}`);
-                const zone = document.getElementById(`motion-shot-${num}`);
-                preview.querySelector('img').src = e.target.result;
-                preview.classList.remove('hidden');
-                placeholder.classList.add('hidden');
-                zone.classList.add('has-image');
-                updateMotionPromptSummary();
-            };
-            reader.readAsDataURL(file);
         }
 
         // FLF Upload
@@ -2544,8 +2276,7 @@
         async function handleMotionGenerate() {
             console.log('[Motion] Generate triggered, currentVideoTool:', currentVideoTool);
             const statusEl = document.getElementById('motion-status');
-            const isMultiMode = currentVideoTool === 'veo3_long_video' && Boolean(window.veo3MultiMode);
-            const btn = isMultiMode ? document.getElementById('btn-motion-generate-multi') : document.getElementById('btn-motion-generate');
+            const btn = document.getElementById('btn-motion-generate');
             if (!statusEl || !btn) {
                 return;
             }
@@ -2569,60 +2300,32 @@
                     prompt: prompt
                 };
 
-                if (currentVideoTool === 'flf_veo3') {
-                    workflow = 'FLF';
-                    const firstFrame = document.getElementById('file-first_frame')?.files[0];
-                    const lastFrame = document.getElementById('file-last_frame')?.files[0];
-
-                    if (!firstFrame || !lastFrame) {
-                        throw new Error('請上傳首尾幀圖片');
-                    }
-
-                    // 转换为 Base64
-                    payload.images.first_frame = await fileToBase64(firstFrame);
-                    payload.images.last_frame = await fileToBase64(lastFrame);
-
-                } else if (currentVideoTool === 't2v_veo3') {
-                    workflow = 'T2V';
-
+                if (currentVideoTool === 'ltx_i2v' || currentVideoTool === 'ltx_flf') {
+                    workflow = currentVideoTool;
                     if (!prompt) {
                         throw new Error('請輸入提示詞');
                     }
 
-                } else if (currentVideoTool === 'veo3_long_video') {
-                    workflow = 'veo3_long_video';
-
-                    if (isMultiMode) {
-                        // Multi Mode: 使用 veo3-segment-0 到 veo3-segment-4
-                        const prompts = [];
-                        for (let i = 0; i < 5; i++) {
-                            const segmentInput = document.getElementById(`veo3-segment-${i}`);
-                            if (segmentInput && segmentInput.value.trim()) {
-                                prompts.push(segmentInput.value.trim());
-                            }
-                        }
-
-                        if (prompts.length > 0) {
-                            payload.prompts = prompts;
-                            delete payload.prompt;
-                        }
+                    const prefix = currentVideoTool === 'ltx_i2v' ? 'ltx-i2v' : 'ltx-flf';
+                    const requiredFiles = currentVideoTool === 'ltx_i2v'
+                        ? [['input', document.getElementById('file-ltx-i2v-input')?.files[0]]]
+                        : [['first_frame', document.getElementById('file-ltx-flf-first-frame')?.files[0]], ['last_frame', document.getElementById('file-ltx-flf-last-frame')?.files[0]]];
+                    if (requiredFiles.some(([, file]) => !file)) {
+                        throw new Error(currentVideoTool === 'ltx_i2v' ? '請上傳參考圖片' : '請上傳首幀與尾幀圖片');
+                    }
+                    for (const [field, file] of requiredFiles) {
+                        payload.images[field] = await fileToBase64(file);
                     }
 
-                    // 收集所有上傳的圖片
-                    let shotCount = 0;
-                    for (let i = 1; i <= 5; i++) {
-                        const file = document.getElementById(`motion-file-${i}`)?.files[0];
-                        if (file) {
-                            payload.images[`shot${i}`] = await fileToBase64(file);
-                            shotCount++;
-                        }
+                    const dimensions = {
+                        video_width: Number(document.getElementById(`${prefix}-width`)?.value),
+                        video_height: Number(document.getElementById(`${prefix}-height`)?.value),
+                        video_duration: Number(document.getElementById(`${prefix}-duration`)?.value),
+                    };
+                    if (!Object.values(dimensions).every(Number.isInteger)) {
+                        throw new Error('寬、高與秒數必須為整數');
                     }
-
-                    if (shotCount === 0) {
-                        throw new Error('請至少上傳一個鏡頭');
-                    }
-
-                    payload.mode = isMultiMode ? 'multi' : 'single';
+                    Object.assign(payload, dimensions);
 
                 } else if (currentVideoTool === 'ltx_retake_v2v') {
                     workflow = 'ltx_retake_v2v';

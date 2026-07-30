@@ -220,39 +220,6 @@
       ]
     }
   },
-  "veo3_long_video": {
-    "id": "veo3_long_video",
-    "aliases": [],
-    "file": "Veo3_VideoConnection.json",
-    "description": "Veo3 多鏡頭長影片",
-    "category": "video",
-    "version": "1.0.0",
-    "enabled": true,
-    "observability": {"model_source": {"fallback": "unknown"}, "important_nodes": [{"node_id": "110", "stage": "output_save"}], "output": {"strategy": "node_output", "node_ids": ["110"]}, "timeout_seconds": 3600, "sensitive_fields": ["prompts", "images"], "custom_dimensions": {}},
-    "mapping": {
-      "output_node_id": "110",
-      "prompt_segments": {
-        "0": "10",
-        "1": "21",
-        "2": "31",
-        "3": "41",
-        "4": "51"
-      }
-    },
-    "frontend": {
-      "title": "Veo3 Long Video",
-      "description": "多鏡頭長影片",
-      "icon": "video",
-      "color": "cyan",
-      "inputs": [
-        "shot_0",
-        "shot_1",
-        "shot_2",
-        "shot_3",
-        "shot_4"
-      ]
-    }
-  },
   "image_to_video": {
     "id": "image_to_video",
     "aliases": [],
@@ -278,59 +245,6 @@
       "color": "sky",
       "inputs": [
         "shot_0"
-      ]
-    }
-  },
-  "t2v_veo3": {
-    "id": "t2v_veo3",
-    "aliases": [
-      "T2V"
-    ],
-    "file": "T2V.json",
-    "description": "Veo3 文字轉影片",
-    "category": "video",
-    "version": "1.0.0",
-    "enabled": true,
-    "observability": {"model_source": {"fallback": "unknown"}, "important_nodes": [{"node_id": "110", "stage": "output_save"}], "output": {"strategy": "node_output", "node_ids": ["110"]}, "timeout_seconds": 3600, "sensitive_fields": ["prompt", "images"], "custom_dimensions": {}},
-    "mapping": {
-      "prompt_node_id": "10",
-      "output_node_id": "110"
-    },
-    "frontend": {
-      "title": "T2V",
-      "description": "文字轉影片",
-      "icon": "sparkles",
-      "color": "indigo",
-      "inputs": []
-    }
-  },
-  "flf_veo3": {
-    "id": "flf_veo3",
-    "aliases": [
-      "FLF"
-    ],
-    "file": "FLF.json",
-    "description": "Veo3 首尾幀動畫",
-    "category": "video",
-    "version": "1.0.0",
-    "enabled": true,
-    "observability": {"model_source": {"fallback": "unknown"}, "important_nodes": [{"node_id": "110", "stage": "output_save"}], "output": {"strategy": "node_output", "node_ids": ["110"]}, "timeout_seconds": 3600, "sensitive_fields": ["prompt", "images"], "custom_dimensions": {}},
-    "mapping": {
-      "prompt_node_id": "111",
-      "output_node_id": "110"
-    },
-    "image_map": {
-      "first_frame": "112",
-      "last_frame": "113"
-    },
-    "frontend": {
-      "title": "FLF",
-      "description": "首尾幀動畫",
-      "icon": "film",
-      "color": "rose",
-      "inputs": [
-        "first_frame",
-        "last_frame"
       ]
     }
   },
@@ -454,6 +368,78 @@
       "icon": "orbit",
       "color": "violet",
       "inputs": ["input"]
+    }
+  },
+  "ltx_i2v": {
+    "id": "ltx_i2v",
+    "aliases": [],
+    "file": "LTX_2.3_I2V.json",
+    "description": "LTX-2.3 image-to-video",
+    "category": "video",
+    "version": "1.0.0",
+    "enabled": true,
+    "observability": {
+      "model_source": {"node_id": "329", "input": "unet_name"},
+      "important_nodes": [{"node_id": "140", "stage": "output_save"}],
+      "output": {"strategy": "node_output", "node_ids": ["140"]},
+      "timeout_seconds": 3600,
+      "sensitive_fields": ["prompt", "images"],
+      "custom_dimensions": {}
+    },
+    "mapping": {
+      "output_node_id": "140",
+      "seed_node_ids": ["114", "115"],
+      "param_map": {
+        "video_width": {"node_id": "292", "input_key": "value"},
+        "video_height": {"node_id": "293", "input_key": "value"},
+        "video_duration": {"node_id": "291", "input_key": "value"}
+      }
+    },
+    "prompt_map": {"main": {"node_id": "352", "input_key": "value"}},
+    "image_map": {"input": "167"},
+    "model_overrides": {"windows": []},
+    "frontend": {
+      "title": "LTX Image to Video",
+      "description": "Generate a video from one image.",
+      "icon": "image-play",
+      "color": "cyan",
+      "inputs": ["input"]
+    }
+  },
+  "ltx_flf": {
+    "id": "ltx_flf",
+    "aliases": [],
+    "file": "LTX2.3_FLF_api.json",
+    "description": "LTX-2.3 first-last-frame video",
+    "category": "video",
+    "version": "1.0.0",
+    "enabled": true,
+    "observability": {
+      "model_source": {"node_id": "187", "input": "unet_name"},
+      "important_nodes": [{"node_id": "43", "stage": "output_save"}],
+      "output": {"strategy": "node_output", "node_ids": ["43"]},
+      "timeout_seconds": 3600,
+      "sensitive_fields": ["prompt", "images"],
+      "custom_dimensions": {}
+    },
+    "mapping": {
+      "output_node_id": "43",
+      "seed_node_ids": ["14", "15"],
+      "param_map": {
+        "video_width": {"node_id": "2080", "input_key": "value"},
+        "video_height": {"node_id": "2079", "input_key": "value"},
+        "video_duration": {"node_id": "2078", "input_key": "value"}
+      }
+    },
+    "prompt_map": {"main": {"node_id": "2103", "input_key": "value"}},
+    "image_map": {"first_frame": "45", "last_frame": "47"},
+    "model_overrides": {"windows": []},
+    "frontend": {
+      "title": "LTX First-Last Frame",
+      "description": "Generate a video between two images.",
+      "icon": "film",
+      "color": "violet",
+      "inputs": ["first_frame", "last_frame"]
     }
   }
 }

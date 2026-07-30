@@ -3,7 +3,7 @@
 import json
 import random
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 try:
     from .legacy_maps import (
@@ -147,7 +147,6 @@ def apply_workflow_injections(
     audio_file: str,
     video_file: str = None,
     extra_params: dict = None,
-    trim_veo3_workflow: Callable[[dict, dict], dict],
 ) -> dict:
     config_data = registry._config
     workflow_config = config_data.get(workflow_entry.workflow_id, {})
@@ -161,9 +160,6 @@ def apply_workflow_injections(
             print(f"[Parser] 偵測到 image_map 設定: {image_map_config}")
     except Exception as e:
         print(f"[Parser] Warning: failed to read config.json; using fallback: {e}")
-
-    if workflow_name == "veo3_long_video":
-        workflow = trim_veo3_workflow(workflow, image_files)
 
     resolution = ASPECT_RATIO_MAP.get(aspect_ratio, DEFAULT_RESOLUTION)
     width = resolution["width"]

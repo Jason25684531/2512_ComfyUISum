@@ -83,9 +83,11 @@ Worker 與 ComfyUI 之間全程透過 **JSON API（`POST /prompt`）+ WebSocket�
 | `multi_image_blend` | 多圖混合（Qwen） | 圖像 |
 | `virtual_human` | 虛擬人說話（InfiniteTalk + IndexTTS） | 影片 |
 | `image_to_video` | 圖生影片 | 影片 |
-| `t2v_veo3` / `flf_veo3` / `veo3_long_video` | Text-to-Video / 首尾幀 / 長片生成 | 影片 |
+| `ltx_i2v` / `ltx_flf` | LTX 單圖轉影片 / 首尾幀轉影片 | 影片 |
 | `ltx_retake_v2v` | LTX Retake 影片重製（V2V） | 影片 |
 | `ideogram4_regional_t2i` | Ideogram4 區域提示詞文生圖（BBox 畫布指定各區域內容） | 圖像 |
+
+> LongGen、Text2Video 與舊 F-L Frame 已移除；請改用 `ltx_i2v` 或 `ltx_flf`。
 
 > `ideogram4_regional_t2i` 首次生成時 ComfyUI 需載入 Ideogram4 模型，暖機耗時較長；暖機完成後單次生成約數十秒（實測約 53 秒，1080x1920）。
 
@@ -391,7 +393,6 @@ ComfyUISum/
 │   │       ├── loader.py      # Workflow 載入器（API 格式主檔；保留舊 UI fallback 相容）
 │   │       ├── node_utils.py  # 節點工具
 │   │       ├── legacy_maps.py # 舊版對照表
-│   │       └── video_trim.py  # 影片裁切邏輯
 │   ├── comfyui.service.template   # [TWCC] ComfyUI systemd 範本
 │   ├── worker.service.template    # [TWCC] Worker systemd 範本
 │   └── Dockerfile

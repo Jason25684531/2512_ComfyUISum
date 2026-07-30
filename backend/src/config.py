@@ -22,7 +22,6 @@ from shared.config_base import (
     STORAGE_DIR,
     STORAGE_INPUT_DIR,
     STORAGE_OUTPUT_DIR,
-    get_env_bool,
     get_env_int,
     get_env_str,
 )
@@ -34,7 +33,3 @@ FLASK_PORT = get_env_int("FLASK_PORT", 5001)
 # ComfyUI 模型路徑（模型掃描用）
 COMFYUI_CHECKPOINTS_DIR = COMFYUI_MODELS_DIR / "checkpoints"
 COMFYUI_UNET_DIR = COMFYUI_MODELS_DIR / "unet"
-
-# [TEMP] Veo3 測試模式
-VEO3_TEST_MODE = get_env_bool("VEO3_TEST_MODE", False)
-VEO3_TEST_VIDEO_PATH = get_env_str("VEO3_TEST_VIDEO_PATH", "tests/IU_Final/IU_Combine.mp4")

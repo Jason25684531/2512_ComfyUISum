@@ -18,11 +18,11 @@ const _fallbackWorkflowCatalog = [
     { id: "sketch_to_image", aliases: ["sketch"], category: "image", frontend: { title: "Sketch to Image", description: "草圖轉圖", icon: "pencil", color: "emerald", inputs: ["input"] } },
     { id: "image_edit", aliases: ["single_image_edit", "single_edit"], category: "image", frontend: { title: "Image Edit", description: "單圖編輯", icon: "image", color: "pink", inputs: ["input"] } },
     { id: "virtual_human", aliases: ["avatar_talk"], category: "avatar", frontend: { title: "Avatar Talk", description: "數位人像", icon: "mic", color: "teal", inputs: ["avatar"] } },
-    { id: "veo3_long_video", aliases: [], category: "video", frontend: { title: "Veo3 Long Video", description: "多鏡頭長影片", icon: "video", color: "cyan", inputs: ["shot_0", "shot_1", "shot_2", "shot_3", "shot_4"] } },
     { id: "image_to_video", aliases: [], category: "video", frontend: { title: "Image to Video", description: "圖生影片", icon: "clapperboard", color: "sky", inputs: ["shot_0"] } },
-    { id: "t2v_veo3", aliases: ["T2V"], category: "video", frontend: { title: "T2V", description: "文字轉影片", icon: "sparkles", color: "indigo", inputs: [] } },
-    { id: "flf_veo3", aliases: ["FLF"], category: "video", frontend: { title: "FLF", description: "首尾幀動畫", icon: "film", color: "rose", inputs: ["first_frame", "last_frame"] } },
     { id: "ltx_retake_v2v", aliases: [], category: "video", frontend: { title: "影片重生成 ReTake", description: "上傳影片並重新生成指定時間區段", icon: "redo-2", color: "orange", inputs: ["video"] } },
+    { id: "ltx_i2v", aliases: [], category: "video", frontend: { title: "LTX Image to Video", description: "單圖轉影片", icon: "image-play", color: "cyan", inputs: ["input"] } },
+    { id: "ltx_flf", aliases: [], category: "video", frontend: { title: "LTX First-Last Frame", description: "首尾幀轉影片", icon: "film", color: "violet", inputs: ["first_frame", "last_frame"] } },
+    { id: "multi_angle", aliases: [], category: "image", frontend: { title: "多角度視角 Multi-Angle", description: "拖曳調整相機角度並生成對應視角。", icon: "orbit", color: "violet", inputs: ["input"] } },
     { id: "ideogram4_regional_t2i", aliases: [], category: "image", frontend: { title: "區域提示詞 Regional Prompt", description: "以 BBox 畫布指定各區域內容並生成圖片", icon: "layout-grid", color: "cyan", inputs: [] } }
 ];
 

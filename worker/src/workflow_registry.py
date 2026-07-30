@@ -7,7 +7,7 @@ from typing import Any
 from shared.workflow_catalog import WorkflowCatalog, can_inject_prompt, find_workflow_node, has_input_key
 
 
-# 注意：所有歷史別名（multi_blend、single_image_edit、sketch、T2V、FLF …）
+# 注意：所有歷史別名（multi_blend、single_image_edit、sketch …）
 # 已統一收斂至 ComfyUIworkflow/config.json 的 ``aliases`` 欄位，並由 WorkflowCatalog
 # 的單一 alias 索引解析。此處不再維護獨立的別名表，避免兩處不同步。
 

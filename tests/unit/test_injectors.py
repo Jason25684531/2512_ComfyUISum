@@ -7,6 +7,7 @@ template files staying byte-identical on disk.
 """
 
 import hashlib
+import json
 import sys
 from pathlib import Path
 
@@ -141,15 +142,86 @@ def test_param_map_missing_node_does_not_crash():
     print("[OK] set_node_input_value on missing node returns False, no crash")
 
 
+def test_ltx_i2v_template_is_valid_and_image_path_is_enabled():
+    template = json.loads((WORKFLOW_DIR / "LTX_2.3_I2V.json").read_text(encoding="utf-8"))
+    assert "354" not in template
+    assert all(node.get("class_type") for node in template.values())
+    assert template["290"]["inputs"]["value"] is False
+    print("[OK] LTX I2V template is a valid ComfyUI API payload")
+
+
+def test_ltx_i2v_injection_and_defaults():
+    workflow = parse_workflow(
+        workflow_name="ltx_i2v",
+        prompt="__PROMPT_OVERRIDE_TEST__",
+        seed=12345,
+        image_files={"input": "input.png"},
+        extra_params={"video_width": 1280, "video_height": 704, "video_duration": 6},
+    )
+    assert workflow["352"]["inputs"]["value"] == "__PROMPT_OVERRIDE_TEST__"
+    assert workflow["167"]["inputs"]["image"] == "input.png"
+    assert [workflow[node]["inputs"]["value"] for node in ("292", "293", "291")] == [1280, 704, 6]
+    assert all(isinstance(workflow[node]["inputs"]["value"], int) for node in ("292", "293", "291"))
+    assert all(workflow[node]["inputs"]["noise_seed"] == 12345 for node in ("114", "115"))
+
+    defaults = parse_workflow(workflow_name="ltx_i2v", prompt="x", seed=1, image_files={"input": "input.png"})
+    assert [defaults[node]["inputs"]["value"] for node in ("292", "293", "291")] == [1280, 736, 10]
+    print("[OK] LTX I2V injection preserves native values and template defaults")
+
+
+def test_ltx_flf_injection_and_models_are_not_overridden():
+    template = json.loads((WORKFLOW_DIR / "LTX2.3_FLF_api.json").read_text(encoding="utf-8"))
+    workflow = parse_workflow(
+        workflow_name="ltx_flf",
+        prompt="__PROMPT_OVERRIDE_TEST__",
+        seed=12345,
+        model="turbo_fp8",
+        image_files={"first_frame": "start.png", "last_frame": "end.png"},
+        extra_params={"video_width": 1024, "video_height": 1024, "video_duration": 4},
+    )
+    assert workflow["2103"]["inputs"]["value"] == "__PROMPT_OVERRIDE_TEST__"
+    assert workflow["45"]["inputs"]["image"] == "start.png"
+    assert workflow["47"]["inputs"]["image"] == "end.png"
+    assert [workflow[node]["inputs"]["value"] for node in ("2080", "2079", "2078")] == [1024, 1024, 4]
+    assert all(workflow[node]["inputs"]["noise_seed"] == 12345 for node in ("14", "15"))
+    assert workflow["187"]["inputs"]["unet_name"] == template["187"]["inputs"]["unet_name"]
+
+    i2v = parse_workflow(workflow_name="ltx_i2v", prompt="x", seed=1, model="turbo_fp8", image_files={"input": "input.png"})
+    i2v_template = json.loads((WORKFLOW_DIR / "LTX_2.3_I2V.json").read_text(encoding="utf-8"))
+    assert i2v["329"]["inputs"]["unet_name"] == i2v_template["329"]["inputs"]["unet_name"]
+    print("[OK] LTX FLF injection and protected LTX UNET models")
+
+
+def test_retired_video_workflows_are_unavailable_and_image_to_video_remains():
+    assert not (WORKFLOW_DIR / "T2V.json").exists()
+    assert not (WORKFLOW_DIR / "FLF.json").exists()
+    assert (WORKFLOW_DIR / "Veo3_VideoConnection.json").exists()
+    for workflow_name in ("veo3_long_video", "t2v_veo3", "flf_veo3", "T2V", "FLF"):
+        try:
+            parse_workflow(workflow_name=workflow_name)
+        except KeyError:
+            pass
+        else:
+            raise AssertionError(f"retired workflow remained available: {workflow_name}")
+
+    workflow = parse_workflow(workflow_name="image_to_video", image_files={"shot_0": "fixture.png"})
+    assert workflow["6"]["inputs"]["image"] == "fixture.png"
+    print("[OK] retired video workflows are unavailable; image_to_video remains")
+
+
 def test_workflow_template_files_untouched_on_disk():
     ltx_path = WORKFLOW_DIR / "LTX2.3_ReTake_V2V.json"
     ideogram_path = WORKFLOW_DIR / "Ideogram4_T2I_Regional_Prompt.json"
-    before = {p: file_hash(p) for p in (ltx_path, ideogram_path)}
+    i2v_path = WORKFLOW_DIR / "LTX_2.3_I2V.json"
+    flf_path = WORKFLOW_DIR / "LTX2.3_FLF_api.json"
+    before = {p: file_hash(p) for p in (ltx_path, ideogram_path, i2v_path, flf_path)}
 
     parse_workflow(workflow_name="ltx_retake_v2v", prompt="x", seed=1, extra_params={"retake_start": 1.0, "retake_end": 2.0})
     parse_workflow(workflow_name="ideogram4_regional_t2i", prompt="x", seed=1, extra_params={"elements_data": "[]"})
+    parse_workflow(workflow_name="ltx_i2v", prompt="x", seed=1, image_files={"input": "input.png"})
+    parse_workflow(workflow_name="ltx_flf", prompt="x", seed=1, image_files={"first_frame": "start.png", "last_frame": "end.png"})
 
-    after = {p: file_hash(p) for p in (ltx_path, ideogram_path)}
+    after = {p: file_hash(p) for p in (ltx_path, ideogram_path, i2v_path, flf_path)}
     assert before == after
     print("[OK] workflow template JSON files unchanged on disk after parse_workflow()")
 
@@ -163,5 +235,9 @@ if __name__ == "__main__":
     test_multi_angle_param_map_preserves_native_types()
     test_multi_angle_missing_zoom_preserves_template_value()
     test_param_map_missing_node_does_not_crash()
+    test_ltx_i2v_template_is_valid_and_image_path_is_enabled()
+    test_ltx_i2v_injection_and_defaults()
+    test_ltx_flf_injection_and_models_are_not_overridden()
+    test_retired_video_workflows_are_unavailable_and_image_to_video_remains()
     test_workflow_template_files_untouched_on_disk()
     print("\nAll injector tests passed.")

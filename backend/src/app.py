@@ -255,10 +255,7 @@ app.logger = logger
 # 從 config 載入配置
 from config import (
     REDIS_HOST, REDIS_PORT, REDIS_PASSWORD, JOB_QUEUE,
-    STORAGE_OUTPUT_DIR,
-    # [TEMP] Veo3 測試模式配置
-    VEO3_TEST_MODE, VEO3_TEST_VIDEO_PATH,
-    PROJECT_ROOT  # 需要用於定位測試視頻文件
+    PROJECT_ROOT
 )
 REDIS_QUEUE_NAME = JOB_QUEUE
 WARMUP_STATUS_KEY = os.getenv('WARMUP_STATUS_KEY', 'worker:warmup:status')
@@ -431,8 +428,11 @@ def generate():
             return jsonify({'error': 'Missing JSON data'}), 400
         
         prompt = data.get('prompt', '').strip()
-        prompts = data.get('prompts', [])  # Veo3 Long Video: 5 段視頻的 prompts
-        workflow_resolution = resolve_workflow_request(PROJECT_ROOT, data.get('workflow', 'text_to_image'))
+        prompts = data.get('prompts', [])
+        try:
+            workflow_resolution = resolve_workflow_request(PROJECT_ROOT, data.get('workflow', 'text_to_image'))
+        except KeyError:
+            return jsonify({'error': 'Unsupported workflow'}), 400
         workflow = workflow_resolution.workflow_id
         if workflow_resolution.alias_hit:
             logger.info(
@@ -482,8 +482,11 @@ def generate():
             if retake_start_val < 0 or retake_end_val <= retake_start_val:
                 return jsonify({'error': 'retake_start must be >= 0 and less than retake_end'}), 400
 
+        extra_params = {}
+        if workflow == 'ltx_retake_v2v':
+            extra_params = {'retake_start': retake_start_val, 'retake_end': retake_end_val}
+
         # ideogram4_regional_t2i: 區域提示詞文生圖，於信任邊界驗證 elements_data 與風格欄位
-        ideogram4_extra_params = {}
         if workflow == 'ideogram4_regional_t2i':
             if not prompt:
                 return jsonify({'error': 'prompt is required for ideogram4_regional_t2i'}), 400
@@ -502,7 +505,7 @@ def generate():
             if not (256 <= width_val <= 4096) or not (256 <= height_val <= 4096):
                 return jsonify({'error': 'width and height must be between 256 and 4096'}), 400
 
-            ideogram4_extra_params = {
+            extra_params = {
                 'elements_data': canonical_elements_data,
                 'width': width_val,
                 'height': height_val,
@@ -513,9 +516,8 @@ def generate():
                     continue
                 if not isinstance(field_value, str) or len(field_value) > 2000:
                     return jsonify({'error': f'{field_name} must be a string up to 2000 characters'}), 400
-                ideogram4_extra_params[field_name] = field_value
+                extra_params[field_name] = field_value
 
-        multi_angle_extra_params = {}
         if workflow == 'multi_angle':
             input_filename = (data.get('images') or {}).get('input')
             if not input_filename:
@@ -536,7 +538,32 @@ def generate():
                 value = raw_value if integer_only else float(raw_value)
                 if value < minimum or value > maximum:
                     return jsonify({'error': f'{field_name} must be within range'}), 400
-                multi_angle_extra_params[field_name] = value
+                extra_params[field_name] = value
+
+        if workflow in {'ltx_i2v', 'ltx_flf'}:
+            required_images = ('input',) if workflow == 'ltx_i2v' else ('first_frame', 'last_frame')
+            images = data.get('images') or {}
+            for field_name in required_images:
+                if not images.get(field_name):
+                    return jsonify({'error': f'{field_name} image is required'}), 400
+
+            for field_name, minimum, maximum in (
+                ('video_width', 512, 1920),
+                ('video_height', 512, 1920),
+                ('video_duration', 1, 10),
+            ):
+                if field_name not in data:
+                    continue
+                raw_value = data[field_name]
+                if isinstance(raw_value, bool) or isinstance(raw_value, float):
+                    return jsonify({'error': f'{field_name} must be an integer between {minimum} and {maximum}'}), 400
+                try:
+                    value = int(raw_value)
+                except (TypeError, ValueError):
+                    return jsonify({'error': f'{field_name} must be an integer between {minimum} and {maximum}'}), 400
+                if not minimum <= value <= maximum:
+                    return jsonify({'error': f'{field_name} must be between {minimum} and {maximum}'}), 400
+                extra_params[field_name] = value
         # =====================================================
         # 這裡會檢查 data['audio'] 是否為 Base64 字串
         # 如果是，就轉存成檔案，並把 data['audio'] 替換成檔名
@@ -596,12 +623,7 @@ def generate():
             'video': video_filename,  # 影片檔名 (ltx_retake_v2v 工作流使用)
             'retake_start': retake_start_val,
             'retake_end': retake_end_val,
-            'extra_params': (
-                {'retake_start': retake_start_val, 'retake_end': retake_end_val}
-                if workflow == 'ltx_retake_v2v'
-                else multi_angle_extra_params if workflow == 'multi_angle'
-                else ideogram4_extra_params
-            ),
+            'extra_params': extra_params,
             'created_at': iso_utc(),
             'submitted_at': iso_utc(),
             'workflow_version': workflow_resolution.entry.version,
@@ -624,61 +646,6 @@ def generate():
             except Exception:
                 logger.exception('job observability create failed', extra={'job_id': job_id, 'request_id': g.request_id})
                 return jsonify({'error': 'Job persistence unavailable'}), 503
-        
-        # ==========================================
-        # [TEMP] Veo3 測試模式: Veo3 Long Video 攔截
-        # ==========================================
-        if VEO3_TEST_MODE and workflow == 'veo3_long_video':
-            logger.info(f"🔧 [TEST MODE] 測試模式已啟用，檢查圖片上傳...")
-            logger.info(f"🔧 [TEST MODE] VEO3_TEST_MODE={VEO3_TEST_MODE}, workflow={workflow}")
-            
-            # 檢查是否有上傳圖片
-            images = data.get('images', {})
-            has_images = bool(images and len(images) > 0)
-            
-            logger.info(f"🔧 [TEST MODE] 上傳圖片數量: {len(images) if images else 0}")
-            logger.info(f"🔧 [TEST MODE] 檢測結果: has_images={has_images}")
-            
-            if has_images:
-                logger.warning(f"🔧 [TEST MODE] ✅ 檢測到圖片上傳，返回測試視頻: {VEO3_TEST_VIDEO_PATH}")
-                
-                # 構造假的完成狀態並存入 Redis
-                test_video_filename = os.path.basename(VEO3_TEST_VIDEO_PATH)
-                test_video_url = f'/api/outputs/{test_video_filename}'
-                
-                status_key = f"job:status:{job_id}"
-                redis_client.hset(status_key, mapping={
-                    'job_id': job_id,
-                    'status': 'finished',  # 前端檢查 'finished' 狀態
-                    'progress': 100,
-                    'image_url': test_video_url,  # 前端讀取 'image_url' 欄位
-                    'video_url': test_video_url,  # 同時設置 video_url 供未來使用
-                    'output_path': test_video_url,  # 備用欄位
-                    'error': '',
-                    'updated_at': datetime.now().isoformat(),
-                    'test_mode': 'true'  # 標記為測試模式
-                })
-                redis_client.expire(status_key, 86400)
-                
-                # 將測試視頻複製到 outputs 目錄以便下載
-                import shutil
-                test_video_src = PROJECT_ROOT / VEO3_TEST_VIDEO_PATH
-                test_video_dest = STORAGE_OUTPUT_DIR / test_video_filename
-                if test_video_src.exists():
-                    shutil.copy2(test_video_src, test_video_dest)
-                    logger.info(f"✓ [TEST MODE] 測試視頻已複製到 outputs: {test_video_filename}")
-                else:
-                    logger.error(f"❌ [TEST MODE] 測試視頻不存在: {test_video_src}")
-                
-                # 直接返回完成狀態，跳過佇列處理
-                return jsonify({
-                    'job_id': job_id,
-                    'status': 'completed',
-                    'video_url': test_video_url,
-                    'message': '[TEST MODE] 已返回測試視頻'
-                }), 200
-            else:
-                logger.info(f"🔧 [TEST MODE] ❌ 未檢測到圖片上傳，繼續正常流程")
         
         # 4. 檢查 Redis 可用性
         if redis_client is None:
@@ -723,7 +690,7 @@ def generate():
                 'job_id': job_id,
                 'status': 'queued',
                 'message': '任務已成功提交'
-            }), 200
+            }), 202 if workflow in {'ltx_i2v', 'ltx_flf'} else 200
 
         except RedisError:
             if tracker:
@@ -1305,14 +1272,6 @@ if __name__ == '__main__':
     logger.info("🚀 Backend API 啟動中...")
     logger.info("📁 同時提供前端靜態文件服務")
     logger.info("✓ 結構化日誌系統已啟動（雙通道輸出）")
-    
-    # [TEMP] 顯示 Veo3 測試模式狀態
-    if VEO3_TEST_MODE:
-        logger.warning(f"🔧 [TEST MODE] Veo3 測試模式已啟用！")
-        logger.warning(f"🔧 [TEST MODE] 觸發條件: veo3_long_video + 上傳圖片")
-        logger.warning(f"🔧 [TEST MODE] 測試視頻: {VEO3_TEST_VIDEO_PATH}")
-    else:
-        logger.info("ℹ️  Veo3 測試模式未啟用")
     
     is_windows = sys.platform.startswith('win')
     is_debug = FLASK_DEBUG_MODE
