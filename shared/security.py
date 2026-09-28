@@ -4,11 +4,11 @@ Shared security helpers for API-safe serialization and runtime configuration.
 
 from __future__ import annotations
 
-import os
 from html import unescape as html_unescape
 from typing import Any
 
 from markupsafe import escape
+from shared.env_resolution import read_env_str
 
 INTERNAL_SERVER_ERROR_MESSAGE = "Internal server error occurred"
 OPERATION_FAILED_MESSAGE = "Operation failed"
@@ -32,10 +32,10 @@ def sanitize_response_payload(payload: Any) -> Any:
 
 def get_flask_debug_mode() -> bool:
     """Derive Flask debug mode from explicit flags or development environment."""
-    flask_debug = os.getenv("FLASK_DEBUG")
-    if flask_debug is not None:
+    flask_debug = read_env_str("FLASK_DEBUG", "")
+    if flask_debug:
         return flask_debug.strip().lower() in {"1", "true", "yes", "on"}
-    return os.getenv("FLASK_ENV", "").strip().lower() == "development"
+    return read_env_str("FLASK_ENV", "").lower() == "development"
 
 
 def get_public_error_message(message: str | None = None) -> str:

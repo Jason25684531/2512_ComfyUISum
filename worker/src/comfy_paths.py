@@ -4,7 +4,10 @@ Helpers for normalizing ComfyUI workflow model paths before submission.
 
 from __future__ import annotations
 
-import os
+try:
+    from .config import COMFYUI_RUNTIME_PROFILE
+except ImportError:
+    from config import COMFYUI_RUNTIME_PROFILE
 
 
 BACKSLASH = chr(92)
@@ -63,11 +66,7 @@ PATH_REPLACEMENTS = (
 
 def _resolve_target_profile() -> str:
     """偵測目標 ComfyUI 平台（windows / linux）"""
-    profile = os.getenv("COMFYUI_RUNTIME_PROFILE", "")
-    if profile:
-        return profile.lower()
-    import platform
-    return "windows" if platform.system().lower().startswith("win") else "linux"
+    return COMFYUI_RUNTIME_PROFILE
 
 
 REVERSE_PATH_REPLACEMENTS = (

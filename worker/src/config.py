@@ -5,6 +5,7 @@ Worker Configuration
 """
 
 import sys
+import platform
 from pathlib import Path
 
 # 添加 shared 模組到 Python 路徑
@@ -36,6 +37,13 @@ from shared.runtime_settings import (
 
 
 _COMFY_RUNTIME = build_legacy_comfy_runtime_settings()
+
+COMFYUI_RUNTIME_PROFILE = get_env_str(
+    "COMFYUI_RUNTIME_PROFILE",
+    "windows" if platform.system().lower().startswith("win") else "linux",
+).lower()
+COMFY_CONNECT_RETRIES = get_env_int("COMFY_CONNECT_RETRIES", 10)
+BUILD_ID = get_env_str("BUILD_ID", "")
 
 DEFAULT_UNET_MODEL = get_env_str(
     "DEFAULT_UNET_MODEL",

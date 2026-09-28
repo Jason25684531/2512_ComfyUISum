@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 from shared.error_sanitizer import classify_comfy_error, sanitize_error
-from shared.job_contracts import JobStatus, duration_ms, is_valid_transition, success_rate
+from shared.job_contracts import JobStatus, canonical_status, duration_ms, is_valid_transition, public_status, success_rate
 
 
 def test_state_machine_rejects_terminal_overwrite():
@@ -18,6 +18,14 @@ def test_duration_rejects_negative_clock():
 def test_success_rate_excludes_cancelled_by_construction():
     assert success_rate(8, 2) == 0.8
     assert success_rate(0, 0) is None
+
+
+def test_public_and_canonical_status_conversion_is_shared():
+    assert public_status(JobStatus.RUNNING) == "processing"
+    assert public_status(JobStatus.COMPLETED) == "finished"
+    assert canonical_status("processing") == JobStatus.RUNNING.value
+    assert canonical_status("finished") == JobStatus.COMPLETED.value
+    assert canonical_status("queued") == JobStatus.QUEUED.value
 
 
 def test_error_sanitization_and_mapping():

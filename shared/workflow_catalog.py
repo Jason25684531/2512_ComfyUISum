@@ -31,6 +31,16 @@ class WorkflowFrontendMetadata:
 
 
 @dataclass(frozen=True)
+class WorkflowRuntimeMetadata:
+    """Non-public defaults shared by workflow loading and injection."""
+
+    model_aliases: dict[str, str]
+    aspect_ratios: dict[str, dict[str, int]]
+    default_aspect_ratio: str
+    default_resolution: dict[str, int]
+
+
+@dataclass(frozen=True)
 class WorkflowCatalogEntry:
     workflow_id: str
     file: str
@@ -78,6 +88,7 @@ class WorkflowCatalog:
         self.config_path = Path(config_path)
         self.workflow_dir = Path(workflow_dir)
         self._raw_config = raw_config
+        self._runtime = self._build_runtime_metadata(raw_config.get("_runtime"))
         self._entries = self._build_entries(raw_config)
         self._alias_index = self._build_alias_index(self._entries)
         self._alias_hits: dict[str, int] = {}
@@ -97,9 +108,13 @@ class WorkflowCatalog:
     def raw_config(self) -> dict[str, Any]:
         """公開的原始 config.json 內容（唯讀用途）。
 
-        提供給 worker 的 WorkflowRegistry 取代直接存取私有屬性 ``_raw_config``。
+        提供給 worker runtime 取代直接存取私有屬性 ``_raw_config``。
         """
         return self._raw_config
+
+    @property
+    def runtime(self) -> WorkflowRuntimeMetadata:
+        return self._runtime
 
     def resolve(self, workflow_name: str | None) -> WorkflowResolution:
         requested_id = (workflow_name or "text_to_image").strip() or "text_to_image"
@@ -209,6 +224,10 @@ class WorkflowCatalog:
     def _build_entries(self, raw_config: dict[str, Any]) -> dict[str, WorkflowCatalogEntry]:
         entries: dict[str, WorkflowCatalogEntry] = {}
         for config_key, config in raw_config.items():
+            if config_key == "_runtime":
+                continue
+            if not isinstance(config, dict):
+                raise ValueError(f"workflow entry {config_key!r} must be an object")
             workflow_id = str(config.get("id", config_key)).strip() or config_key
             frontend_config = config.get("frontend", {})
             frontend = WorkflowFrontendMetadata(
@@ -262,6 +281,50 @@ class WorkflowCatalog:
                 frontend=frontend,
             )
         return entries
+
+    @staticmethod
+    def _build_runtime_metadata(raw_runtime: Any) -> WorkflowRuntimeMetadata:
+        if not isinstance(raw_runtime, dict):
+            raise ValueError("_runtime metadata is required")
+
+        model_aliases = raw_runtime.get("model_aliases")
+        if not isinstance(model_aliases, dict) or not model_aliases:
+            raise ValueError("_runtime.model_aliases must be a non-empty object")
+        normalized_models: dict[str, str] = {}
+        for alias, filename in model_aliases.items():
+            if not isinstance(alias, str) or not alias.strip() or not isinstance(filename, str) or not filename.strip():
+                raise ValueError("_runtime.model_aliases values must be non-empty strings")
+            normalized_models[alias.strip()] = filename.strip()
+
+        aspect_ratios = raw_runtime.get("aspect_ratios")
+        if not isinstance(aspect_ratios, dict) or not aspect_ratios:
+            raise ValueError("_runtime.aspect_ratios must be a non-empty object")
+        normalized_ratios: dict[str, dict[str, int]] = {}
+        for ratio, resolution in aspect_ratios.items():
+            if not isinstance(ratio, str) or not ratio.strip() or not isinstance(resolution, dict):
+                raise ValueError("_runtime.aspect_ratios entries must be resolution objects")
+            width = resolution.get("width")
+            height = resolution.get("height")
+            if isinstance(width, bool) or isinstance(height, bool) or not isinstance(width, int) or not isinstance(height, int) or width <= 0 or height <= 0:
+                raise ValueError("_runtime.aspect_ratios width/height must be positive integers")
+            normalized_ratios[ratio.strip()] = {"width": width, "height": height}
+
+        default_aspect_ratio = raw_runtime.get("default_aspect_ratio")
+        if not isinstance(default_aspect_ratio, str) or default_aspect_ratio not in normalized_ratios:
+            raise ValueError("_runtime.default_aspect_ratio must reference aspect_ratios")
+
+        default_resolution = raw_runtime.get("default_resolution")
+        if not isinstance(default_resolution, dict):
+            raise ValueError("_runtime.default_resolution must be an object")
+        if default_resolution != normalized_ratios[default_aspect_ratio]:
+            raise ValueError("_runtime.default_resolution must match default_aspect_ratio")
+
+        return WorkflowRuntimeMetadata(
+            model_aliases=normalized_models,
+            aspect_ratios=normalized_ratios,
+            default_aspect_ratio=default_aspect_ratio,
+            default_resolution=dict(default_resolution),
+        )
 
     @staticmethod
     def _build_alias_index(entries: dict[str, WorkflowCatalogEntry]) -> dict[str, str]:

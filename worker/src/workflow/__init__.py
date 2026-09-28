@@ -1,4 +1,4 @@
-"""Workflow parsing helpers used by the json_parser compatibility facade."""
+"""Workflow loading and injection helpers used by the runtime module."""
 
 from .loader import get_workflow_path, load_workflow
 

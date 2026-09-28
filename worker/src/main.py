@@ -1,1077 +1,231 @@
-"""
-Worker Main Loop
-=================
-從 Redis 佇列取得任務，解析 workflow，送交 ComfyUI 執行。
-"""
+"""Worker lifecycle and Redis dequeue loop.
 
-import os
-import sys
+Single-job execution lives in :mod:`job_processor`; this module owns only
+startup, signals, heartbeat, maintenance, dequeue, and shutdown.
+"""
+from __future__ import annotations
+
 import json
-import time
-import redis
-import base64
-import uuid
-import signal
 import logging
-import threading
+import signal
 import socket
-from logging.handlers import RotatingFileHandler
+import sys
+import threading
+import time
+from datetime import datetime
 from pathlib import Path
-from datetime import datetime, timedelta
 
-# ============================================
-# Graceful Shutdown 支援（SIGTERM / SIGINT）
-# ============================================
+import redis
+
+# Allow direct execution from worker/src/main.py to import repository modules.
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+from shared.utils import get_redis_client, load_env, setup_logger
+
+load_env()
+
+from comfy_client import ComfyClient
+from config import (
+    COMFYUI_OUTPUT_DIR,
+    COMFYUI_INPUT_DIR,
+    JOB_QUEUE,
+    REDIS_HOST,
+    REDIS_PORT,
+    WARMUP_MODE,
+    BUILD_ID,
+)
+from job_processor import (
+    JobProcessor,
+    cleanup_old_output_files,
+    cleanup_old_temp_files,
+    reconcile_stale_running,
+)
+from shared.config_base import (
+    JOB_RECONCILE_SECONDS,
+    WORKER_HEARTBEAT_SECONDS,
+    WORKER_HEARTBEAT_TTL_SECONDS,
+    WORKER_ID,
+    WORKFLOW_MANIFEST_POLICY,
+)
+from shared.job_tracker import JobTracker
+from shared.observability_runtime import job_repository
+from warmup import WarmupController
+from workflow.runtime import load_workflow_catalog
+
+logger = setup_logger("worker", log_level=logging.INFO)
 _shutdown_flag = False
-_current_job_id = None  # 追蹤當前處理中的任務
-GPU_SYNC_WARNING = "雙機模式需要先將圖片上傳到 GPU ComfyUI input，否則 LoadImage 會失敗"
+_current_job_id: str | None = None
 
 
-def _shutdown_handler(signum, frame):
-    """收到 SIGTERM/SIGINT 時設置關閉旗標，等待當前任務完成"""
+def _shutdown_handler(signum, _frame) -> None:
     global _shutdown_flag
     _shutdown_flag = True
-    sig_name = signal.Signals(signum).name
-    print(f"\n⚠️ 收到 {sig_name} 信號，等待當前任務完成後安全關閉...")
+    logger.info("shutdown signal received: %s", signal.Signals(signum).name)
 
 
 signal.signal(signal.SIGTERM, _shutdown_handler)
 signal.signal(signal.SIGINT, _shutdown_handler)
 
-# ============================================
-# 添加 shared 模組路徑
-# ============================================
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-# ==========================================
-# Phase 8C: 使用新的結構化日誌系統
-# ==========================================
-from shared.utils import load_env, setup_logger, JobLogAdapter, get_redis_client
-from shared.security import get_public_error_message
-
-load_env()
-
-# 設置雙通道結構化日誌系統
-logger = setup_logger("worker", log_level=logging.INFO)
-logger.info("=" * 60)
-logger.info("Worker 日誌系統已啟動 (雙通道輸出)")
-logger.info("=" * 60)
-
-from json_parser import parse_workflow
-from comfy_client import ComfyClient
-from warmup import WarmupController
-from workflow_registry import WorkflowRegistry
-from config import (
-    REDIS_HOST, REDIS_PORT, REDIS_PASSWORD,
-    COMFYUI_INPUT_DIR, COMFYUI_OUTPUT_DIR, JOB_QUEUE, TEMP_FILE_MAX_AGE_HOURS,
-    JOB_STATUS_EXPIRE_SECONDS, STORAGE_INPUT_DIR, print_config,
-    WORKER_TIMEOUT, COMFY_WS_WAIT_TIMEOUT_SECONDS, COMFY_SUBMIT_TIMEOUT_SECONDS,
-    COMFY_HISTORY_TIMEOUT_SECONDS, OUTPUT_COPY_RETRY_COUNT,
-    OUTPUT_COPY_RETRY_DELAY_SECONDS, OUTPUT_COPY_WAIT_SECONDS,
-    DEFAULT_UNET_MODEL, DEFAULT_CLIP_MODEL,
-    DEFAULT_VAE_MODEL, WARMUP_MODE,
-)
-from shared.error_sanitizer import (
-    COMFYUI_OUTPUT_MISSING,
-    COMFYUI_TIMEOUT,
-    COMFYUI_UNAVAILABLE,
-    ENGINE_EXECUTION_FAILED,
-)
-from shared.config_base import JOB_OBSERVABILITY_ENABLED, WORKER_HEARTBEAT_SECONDS, WORKER_HEARTBEAT_TTL_SECONDS, WORKER_ID, WORKFLOW_MANIFEST_POLICY, JOB_RECONCILE_SECONDS, JOB_STALE_GRACE_SECONDS, STORAGE_OUTPUT_DIR
-from shared.job_contracts import JobStatus, validate_job_payload
-from shared.job_tracker import JobTracker
-from shared.observability_runtime import job_repository
-
-# Keep existing call sites compatible while using the operation-specific render wait timeout.
-WORKER_TIMEOUT = COMFY_WS_WAIT_TIMEOUT_SECONDS
-
-
-def save_base64_image(base64_data: str, job_id: str, field_name: str) -> str:
-    """
-    將 base64 圖片保存到 ComfyUI input 目錄
-    
-    Args:
-        base64_data: base64 編碼的圖片數據 (可能包含 data:image/xxx;base64, 前綴)
-        job_id: 任務 ID
-        field_name: 欄位名稱 (source, target, input 等)
-    
-    Returns:
-        保存的檔名 (不含路徑，用於 ComfyUI 相對路徑參考)
-    """
-    import io
-    from PIL import Image
-    
-    # 移除 data:image/xxx;base64, 前綴（更嚴格的處理）
-    if isinstance(base64_data, str) and "," in base64_data:
-        base64_data = base64_data.split(",", 1)[1].strip()
-    
-    # 解碼 base64
-    try:
-        image_bytes = base64.b64decode(base64_data)
-    except Exception as e:
-        raise ValueError(f"Base64 解碼失敗: {e}")
-    
-    # 始終轉換為真正的 PNG 格式（解決格式不匹配問題）
-    # 原因：用戶上傳的圖片可能是 JPEG, AVIF, WebP 等格式，
-    #       如果直接保存為 .png 副檔名但內容是其他格式，
-    #       ComfyUI 的 LoadImage 節點可能無法正確識別
-    try:
-        img = Image.open(io.BytesIO(image_bytes))
-        original_format = img.format
-        logger.info(f"📷 原始圖片格式: {original_format}, 尺寸: {img.size}")
-        
-        # 轉換為 RGB（處理 RGBA 或其他色彩模式）
-        if img.mode in ('RGBA', 'LA', 'P'):
-            # 創建白色背景
-            background = Image.new('RGB', img.size, (255, 255, 255))
-            if img.mode == 'P':
-                img = img.convert('RGBA')
-            background.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
-            img = background
-        elif img.mode != 'RGB':
-            img = img.convert('RGB')
-        
-        # 保存為真正的 PNG 格式
-        img_buffer = io.BytesIO()
-        img.save(img_buffer, format='PNG', optimize=True)
-        image_bytes = img_buffer.getvalue()
-        logger.info(f"✅ 已轉換為 PNG 格式，大小: {len(image_bytes)} bytes")
-        
-    except Exception as e:
-        raise ValueError(f"圖片格式轉換失敗: {e}")
-
-    
-    # 生成唯一檔名（只用檔名，不用絕對路徑）
-    filename = f"upload_{job_id}_{field_name}.png"
-    filepath = Path(COMFYUI_INPUT_DIR) / filename
-    
-    # 確保目錄存在
-    filepath.parent.mkdir(parents=True, exist_ok=True)
-    
-    # 寫入檔案
-    try:
-        with open(filepath, "wb") as f:
-            f.write(image_bytes)
-            f.flush()  # 確保寫入磁碟
-            os.fsync(f.fileno())  # 強制同步到磁碟
-        
-        logger.info(f"💾 已保存圖片: {filename} ({len(image_bytes)} bytes) 至 {filepath}")
-        
-        # 驗證檔案是否可讀（確保 ComfyUI 能讀取）
-        if not filepath.exists():
-            raise FileNotFoundError(f"檔案寫入後無法找到: {filepath}")
-        
-        file_size = filepath.stat().st_size
-        if file_size != len(image_bytes):
-            raise IOError(f"檔案大小不符，預期 {len(image_bytes)} bytes，實際 {file_size} bytes")
-        
-        # 嘗試重新開啟檔案驗證可讀性
+def worker_heartbeat(redis_client, comfy_client=None) -> None:
+    """Publish worker and ComfyUI liveness while the process is running."""
+    while not _shutdown_flag:
         try:
-            from PIL import Image
-            with Image.open(filepath) as test_img:
-                test_img.verify()
-            logger.info(f"✅ 檔案驗證成功: {filename}")
-        except Exception as verify_err:
-            logger.warning(f"⚠️ 檔案驗證警告: {verify_err}")
-        
-        # 添加短暫延遲，確保檔案系統完成所有 I/O 操作
-        time.sleep(0.1)
-        
-    except Exception as e:
-        logger.error(f"❌ 檔案寫入失敗: {e}")
-        raise
-    
-    # 返回只有檔名（相對路徑），不返回絕對路徑
-    return filename
-
-
-def copy_audio_to_comfyui(audio_filename: str, job_id: str, client: "ComfyClient" = None, job_logger=None) -> str:
-    """
-    將音訊檔案從 storage/inputs 複製到 ComfyUI input 目錄，
-    並透過 /upload/image API 跨機推送（Windows ComfyUI + Linux/WSL2 容器 worker 的拓樸下，
-    檔案系統複製無法跨越容器邊界，須以 HTTP 上傳為準）
-
-    Args:
-        audio_filename: 上傳的音訊檔名 (如 audio_1ba6e2ba-e8a.mp3)
-        job_id: 任務 ID (用於生成唯一檔名)
-        client: ComfyClient 實例，用於跨機 HTTP 上傳
-        job_logger: 任務專用 logger
-
-    Returns:
-        複製後的檔名 (不含路徑)
-    """
-    import shutil
-
-    # 來源檔案路徑
-    source_path = Path(STORAGE_INPUT_DIR) / audio_filename
-
-    if not source_path.exists():
-        raise FileNotFoundError(f"找不到音訊檔案: {source_path}")
-
-    # 保留原副檔名，生成新檔名
-    file_ext = source_path.suffix.lower()
-    new_filename = f"audio_{job_id}{file_ext}"
-    dest_path = Path(COMFYUI_INPUT_DIR) / new_filename
-
-    # 確保目錄存在
-    dest_path.parent.mkdir(parents=True, exist_ok=True)
-
-    # 複製檔案（原生同機模式下即為最終落地位置）
-    shutil.copy2(source_path, dest_path)
-
-    logger.info(f"🎵 已複製音訊: {audio_filename} -> {new_filename} ({source_path.stat().st_size} bytes)")
-
-    if client is not None:
-        sync_image_to_comfyui_input(client, dest_path, job_logger or logger)
-
-    return new_filename
-
-
-def copy_video_to_comfyui(video_filename: str, job_id: str, client: "ComfyClient" = None, job_logger=None) -> str:
-    """
-    將影片檔案從 storage/inputs 複製到 ComfyUI input 目錄，
-    並透過 /upload/image API 跨機推送（同 copy_audio_to_comfyui 的跨機理由）
-
-    Args:
-        video_filename: 上傳的影片檔名 (如 video_1ba6e2ba-e8a.mp4)
-        job_id: 任務 ID (用於生成唯一檔名)
-        client: ComfyClient 實例，用於跨機 HTTP 上傳
-        job_logger: 任務專用 logger
-
-    Returns:
-        複製後的檔名 (不含路徑)
-    """
-    import shutil
-
-    source_path = Path(STORAGE_INPUT_DIR) / video_filename
-
-    if not source_path.exists():
-        raise FileNotFoundError(f"找不到影片檔案: {source_path}")
-
-    file_ext = source_path.suffix.lower()
-    new_filename = f"video_{job_id}{file_ext}"
-    dest_path = Path(COMFYUI_INPUT_DIR) / new_filename
-
-    dest_path.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(source_path, dest_path)
-
-    logger.info(f"🎬 已複製影片: {video_filename} -> {new_filename} ({source_path.stat().st_size} bytes)")
-
-    if client is not None:
-        sync_image_to_comfyui_input(client, dest_path, job_logger or logger)
-
-    return new_filename
-
-
-def sync_image_to_comfyui_input(client: ComfyClient, filepath: Path, job_logger) -> None:
-    # TODO: Keep /upload/image as the canonical bridge for CPU/GPU split deployments.
-    job_logger.info(
-        "Syncing input image to GPU ComfyUI input via /upload/image: %s",
-        filepath.name,
-    )
-    if client.upload_image(str(filepath)):
-        return
-
-    message = f"{GPU_SYNC_WARNING}；目前上傳失敗: {filepath.name}"
-    job_logger.error(message)
-    raise RuntimeError(message)
-
-
-def cleanup_old_temp_files():
-    """
-    清理超過指定時間的暫存圖片檔案
-    """
-    input_dir = Path(COMFYUI_INPUT_DIR)
-    if not input_dir.exists():
-        return
-    
-    cutoff_time = datetime.now() - timedelta(hours=TEMP_FILE_MAX_AGE_HOURS)
-    deleted_count = 0
-    
-    for filepath in input_dir.glob("upload_*.png"):
-        try:
-            file_mtime = datetime.fromtimestamp(filepath.stat().st_mtime)
-            if file_mtime < cutoff_time:
-                filepath.unlink()
-                deleted_count += 1
-        except Exception as e:
-            logger.warning(f"⚠️ 無法刪除 {filepath}: {e}")
-    
-    if deleted_count > 0:
-        logger.info(f"🗑️ 已清理 {deleted_count} 個過期暫存檔案")
-
-
-def resolve_output_path(filename: str) -> Path:
-    """將輸出檔名解析到 Worker 本地輸出目錄，並阻擋路徑穿越。"""
-    safe_name = Path(filename).name
-    output_root = Path(COMFYUI_OUTPUT_DIR).resolve()
-    output_path = (output_root / safe_name).resolve()
-    output_path.relative_to(output_root)
-    return output_path
-
-
-def validate_local_output_file(filename: str, job_logger) -> tuple[Path, int]:
-    """驗證 comfy_client 已落地到本機的輸出檔案存在且大小正確。"""
-    output_path = resolve_output_path(filename)
-    if not output_path.exists() or not output_path.is_file():
-        raise FileNotFoundError(f"本地輸出檔案不存在: {output_path}")
-
-    file_size = output_path.stat().st_size
-    if file_size <= 0:
-        raise IOError(f"本地輸出檔案大小無效: {output_path}")
-
-    job_logger.info(f"💾 本地輸出檔案已就緒: {output_path} ({file_size} bytes)")
-    return output_path, file_size
-
-
-def cleanup_old_output_files():
-    """
-    清理 storage/outputs 中超過 30 天的圖片檔案
-    """
-    if not COMFYUI_OUTPUT_DIR.exists():
-        return
-    
-    cutoff_time = datetime.now() - timedelta(days=30)
-    deleted_count = 0
-    total_size = 0
-
-    for filepath in COMFYUI_OUTPUT_DIR.glob("*"):
-        if not filepath.is_file():
-            continue
-
-        try:
-            file_mtime = datetime.fromtimestamp(filepath.stat().st_mtime)
-            if file_mtime < cutoff_time:
-                file_size = filepath.stat().st_size
-
-                # 刪除檔案
-                filepath.unlink()
-                deleted_count += 1
-                total_size += file_size
-
-        except Exception as e:
-            logger.warning(f"⚠️ 無法刪除 {filepath}: {e}")
-
-    if deleted_count > 0:
-        size_mb = total_size / (1024 * 1024)
-        logger.info(f"🗑️ 已清理 {deleted_count} 個超過 30 天的輸出圖片 (釋放 {size_mb:.2f} MB)")
-
-
-def reconcile_stale_running(redis_client, client: ComfyClient) -> int:
-    """Finalize a recovered output or time out an abandoned running job.
-
-    This intentionally never requeues GPU work.  A stale worker may have
-    submitted a prompt already, so only ComfyUI history/output persistence can
-    complete it; all other expired jobs become a durable timeout.
-    """
-    if not JOB_OBSERVABILITY_ENABLED:
-        return 0
-    repository = job_repository()
-    tracker = JobTracker(repository)
-    resolved = tracker.replay_output_receipts(Path(STORAGE_OUTPUT_DIR))
-    now = datetime.utcnow()
-    registry = WorkflowRegistry()
-    for job in repository.list_running_jobs():
-        started = job.get("started_at") or job.get("updated_at")
-        if not started:
-            continue
-        if getattr(started, "tzinfo", None):
-            started = started.replace(tzinfo=None)
-        try:
-            timeout = registry.get(job.get("workflow_id") or "").observability.get("timeout_seconds", WORKER_TIMEOUT)
-            expired = now >= started + timedelta(seconds=int(timeout) + JOB_STALE_GRACE_SECONDS)
-        except Exception:
-            expired = now >= started + timedelta(seconds=WORKER_TIMEOUT + JOB_STALE_GRACE_SECONDS)
-        if not expired:
-            continue
-        heartbeat_key = f"worker:heartbeat:{job.get('worker_id') or ''}"
-        heartbeat_state = "alive" if job.get("worker_id") and redis_client.exists(heartbeat_key) else "stale"
-        prompt_id = job.get("comfyui_prompt_id")
-        outputs = client.get_outputs_from_history(prompt_id) if prompt_id else {}
-        candidates = [("video", item) for item in outputs.get("videos", []) + outputs.get("gifs", [])]
-        candidates += [("image", item) for item in outputs.get("images", [])]
-        if candidates:
-            output_type, item = candidates[-1]
-            filename = client.copy_output_file(item.get("filename", ""), item.get("subfolder", ""), item.get("type", "output"), job["job_id"])
-            if filename:
-                try:
-                    path, _ = validate_local_output_file(filename, logger)
-                    if tracker.complete_with_output(job["job_id"], path=path, storage_uri=f"/outputs/{filename}", filename=filename,
-                                                    output_type=output_type, source_node_id=item.get("node_id"), metadata={"recovered_from": "history"}):
-                        update_job_status(redis_client, job["job_id"], "finished", progress=100, image_url=f"/outputs/{filename}")
-                        resolved += 1
-                        continue
-                except Exception:
-                    logger.exception("stale job output recovery failed: %s", job["job_id"])
-        if tracker.fail(job["job_id"], JobStatus.RUNNING, stage="timeout", code="JOB_TIMEOUT", message=f"worker heartbeat={heartbeat_state}; workflow execution timed out"):
-            tracker.event(job["job_id"], "job_timed_out", resulting_status="failed", stage="timeout", error_code="JOB_TIMEOUT", metadata={"heartbeat": heartbeat_state})
-            update_job_status(redis_client, job["job_id"], "failed", error="Job timed out", public_error=True)
-            resolved += 1
-    return resolved
-
-
-def worker_heartbeat(redis_client, comfy_client=None):
-    """
-    Worker 心跳線程 - 每 10 秒向 Redis 發送心跳信號
-    Backend 可通過檢查 'worker:heartbeat' 鍵來判斷 Worker 是否在線
-    
-    Args:
-        redis_client: Redis 客戶端實例
-    """
-    while True:
-        try:
-            # 設置心跳鍵，30 秒過期
             worker_id = WORKER_ID or socket.gethostname()
-            current = _current_job_id or ''
-            key = f'worker:heartbeat:{worker_id}'
-            redis_client.hset(key, mapping={'worker_id': worker_id, 'status': 'busy' if current else 'idle', 'current_job_id': current, 'last_seen_at': datetime.utcnow().isoformat() + 'Z', 'build': os.getenv('BUILD_ID', '')})
+            current = _current_job_id or ""
+            key = f"worker:heartbeat:{worker_id}"
+            redis_client.hset(
+                key,
+                mapping={
+                    "worker_id": worker_id,
+                    "status": "busy" if current else "idle",
+                    "current_job_id": current,
+                    "last_seen_at": datetime.utcnow().isoformat() + "Z",
+                    "build": BUILD_ID,
+                },
+            )
             redis_client.expire(key, WORKER_HEARTBEAT_TTL_SECONDS)
-            redis_client.sadd('worker:heartbeat:index', worker_id)
+            redis_client.sadd("worker:heartbeat:index", worker_id)
             # ponytail: bounded cleanup; a dedicated registry is only needed for very large worker fleets.
-            for stale_id in list(redis_client.sscan_iter('worker:heartbeat:index', count=100))[:100]:
-                if not redis_client.exists(f'worker:heartbeat:{stale_id}'):
-                    redis_client.srem('worker:heartbeat:index', stale_id)
-            redis_client.setex('worker:heartbeat', WORKER_HEARTBEAT_TTL_SECONDS, 'alive')
+            for stale_id in list(redis_client.sscan_iter("worker:heartbeat:index", count=100))[:100]:
+                if not redis_client.exists(f"worker:heartbeat:{stale_id}"):
+                    redis_client.srem("worker:heartbeat:index", stale_id)
+            redis_client.setex("worker:heartbeat", WORKER_HEARTBEAT_TTL_SECONDS, "alive")
             if comfy_client:
                 reachable = comfy_client.check_connection(retry=0, initial_delay=0)
-                redis_client.hset('comfyui:health', mapping={'status': 'healthy' if reachable else 'unavailable', 'last_checked_at': datetime.utcnow().isoformat() + 'Z'})
-                redis_client.expire('comfyui:health', WORKER_HEARTBEAT_TTL_SECONDS * 2)
-            logger.debug("💓 Worker 心跳發送成功")
+                redis_client.hset(
+                    "comfyui:health",
+                    mapping={
+                        "status": "healthy" if reachable else "unavailable",
+                        "last_checked_at": datetime.utcnow().isoformat() + "Z",
+                    },
+                )
+                redis_client.expire("comfyui:health", WORKER_HEARTBEAT_TTL_SECONDS * 2)
             time.sleep(WORKER_HEARTBEAT_SECONDS)
-        except Exception as e:
-            logger.error(f"❌ Worker 心跳發送失敗: {e}")
-            time.sleep(WORKER_HEARTBEAT_SECONDS)
-
-
-def update_job_status(
-    r: redis.Redis,
-    job_id: str,
-    status: str,
-    progress: int = 0,
-    image_url: str = None,
-    error: str = None,
-    public_error: bool = False,
-    **extra,
-):
-    """
-    更新任務狀態到 Redis
-
-    Args:
-        r: Redis 客戶端
-        job_id: 任務 ID
-        status: 狀態 (processing, finished, failed)
-        progress: 進度 (0-100)
-        image_url: 輸出圖片 URL
-        error: 錯誤訊息
-    """
-    status_key = f"job:status:{job_id}"
-    data = {
-        "status": status,
-        "progress": progress,
-        "canonical_status": {"queued": "queued", "processing": "running", "finished": "completed"}.get(status, status),
-        "worker_id": WORKER_ID or socket.gethostname(),
-    }
-
-    if image_url:
-        data["image_url"] = image_url
-    if error:
-        data["error"] = error if public_error else get_public_error_message(error)
-    data.update({key: value for key, value in extra.items() if value is not None})
-
-    r.hset(status_key, mapping=data)
-    r.expire(status_key, JOB_STATUS_EXPIRE_SECONDS)
-    logger.info(f"✓ Redis 狀態更新: {job_id} -> {status}")
-
-
-def process_job(r: redis.Redis, client: ComfyClient, job_data: dict):
-    """
-    處理單個任務
-    
-    job_data 格式:
-    {
-        "job_id": "uuid",
-        "prompt": "描述文字",
-        "seed": -1,
-        "workflow": "text_to_image",
-        "model": "turbo_fp8",
-        "aspect_ratio": "1:1",
-        "batch_size": 1,
-        "images": {
-            "source": "base64...",
-            "target": "base64..."
-        }
-    }
-    """
-    valid_payload, payload_error = validate_job_payload(job_data)
-    if not valid_payload:
-        logger.error("refusing payload: %s", payload_error)
-        r.rpush(f"{JOB_QUEUE}:dead", json.dumps({"error": payload_error, "payload": {"job_id": job_data.get("job_id") if isinstance(job_data, dict) else None}}))
-        return
-    job_id = job_data["job_id"]
-    tracker = None
-    if JOB_OBSERVABILITY_ENABLED:
-        try:
-            tracker = JobTracker(job_repository())
-            if not tracker.transition(job_id, JobStatus.QUEUED, JobStatus.RUNNING, worker_id=WORKER_ID or socket.gethostname()):
-                logger.warning("job claim rejected: %s", job_id)
-                return
-            tracker.event(job_id, 'worker_claimed', resulting_status='running')
         except Exception:
-            logger.exception("durable worker claim failed: %s", job_id)
-            return
-    requested_workflow = job_data.get("workflow", "text_to_image")
-    try:
-        workflow_registry = WorkflowRegistry()
-        workflow_name = workflow_registry.resolve_name(requested_workflow)
-        workflow_entry = workflow_registry.get(workflow_name)
-        if not workflow_entry.enabled:
-            raise ValueError(f"workflow disabled: {workflow_name}")
-        workflow_adapter = workflow_registry.get_adapter(workflow_name)
-    except Exception as exc:
-        if tracker:
-            tracker.fail(job_id, JobStatus.RUNNING, stage="workflow_resolve", code="UNSUPPORTED_WORKFLOW", message=exc)
-        update_job_status(r, job_id, "failed", error="Unsupported workflow")
-        return
-    job_data["workflow"] = workflow_name
-    job_data.setdefault("workflow_requested", requested_workflow)
-    if tracker:
-        tracker.event(job_id, "workflow_resolved", resulting_status="running", metadata={"workflow_id": workflow_entry.workflow_id, "version": workflow_entry.version})
-    user_id = job_data.get("user_id")
-    user_label = job_data.get("user_label") or ("anonymous" if not user_id else f"user:{user_id}")
-    
-    # Phase 8C: 使用 JobLogAdapter 自動注入 job_id
-    from shared.utils import JobLogAdapter
-    import logging
-    base_logger = logging.getLogger("worker")
-    job_logger = JobLogAdapter(
-        base_logger,
-        {
-            'job_id': job_id,
-            'workflow': workflow_name,
-            'user_id': user_id,
-            'user_label': user_label,
-        },
-    )
-    
-    job_logger.info("="*50)
-    job_logger.info(f"🚀 開始處理任務")
-    job_logger.info("="*50)
-    
-    try:
-        # 1. 更新狀態為處理中
-        update_job_status(r, job_id, "processing", progress=10)
-        
-        # 2. 提取參數
-        prompt = job_data.get("prompt", "")
-        prompts = job_data.get("prompts", [])  # Veo3 Long Video: 多段 prompts
-        seed = job_data.get("seed", -1)
-        aspect_ratio = job_data.get("aspect_ratio", "1:1")
-        model = job_data.get("model", "turbo_fp8")
-        batch_size = job_data.get("batch_size", 1)
-        images = job_data.get("images", {})  # base64 圖片字典
-        
-        job_logger.info(f"Workflow: {workflow_name}")
-        job_logger.info(f"Prompt: {prompt[:50] if prompt else '(empty)'}...")
-        if prompts:
-            job_logger.info(f"Prompts: {len(prompts)} segments")
-        job_logger.info(f"Aspect Ratio: {aspect_ratio}")
-        job_logger.info(f"Model: {model}")
-        job_logger.info(f"Batch Size: {batch_size}")
-        job_logger.info(f"Images: {list(images.keys()) if images else 'None'}")
-        job_logger.info(
-            "Timeout config: submit=%ss, ws_wait=%ss, history=%ss, copy_retries=%s, copy_delay=%ss, copy_wait=%ss",
-            COMFY_SUBMIT_TIMEOUT_SECONDS,
-            COMFY_WS_WAIT_TIMEOUT_SECONDS,
-            COMFY_HISTORY_TIMEOUT_SECONDS,
-            OUTPUT_COPY_RETRY_COUNT,
-            OUTPUT_COPY_RETRY_DELAY_SECONDS,
-            OUTPUT_COPY_WAIT_SECONDS,
-        )
-        
-        # 3. 處理上傳的圖片 (base64 -> 檔案)
-        # 3. 處理上傳的圖片 (base64 -> 檔案)
-        update_job_status(r, job_id, "processing", progress=15)
-        
-        image_files = {}  # 儲存檔名映射 {"source": "upload_xxx_source.png"}
-        if images:
-            job_logger.info(f"📷 開始處理 {len(images)} 張圖片...")
-            for field_name, base64_data in images.items():
-                if base64_data:
-                    try:
-                        # 原本的邏輯：存到 CPU 機台本地
-                        filename = save_base64_image(base64_data, job_id, field_name)
-                        image_files[field_name] = filename
-                        job_logger.info("image save complete: field=%s filename=%s", field_name, filename)
-                        
-                        # 🌟【新增這兩行】：把存在 CPU 的檔案，透過網路推送到 GPU
-                        filepath = Path(COMFYUI_INPUT_DIR) / filename
-                        sync_image_to_comfyui_input(client, filepath, job_logger)
-                        
-                    except Exception as e:
-                        job_logger.warning(f"⚠️ 處理圖片 {field_name} 失敗: {e}")
-        
-        # 3.5 處理音訊參數 (Phase 7 新增)
-        # 需要將音訊從 storage/inputs 複製到 ComfyUI/input
-        audio_file = job_data.get("audio", "")
-        comfyui_audio_file = ""
-        if audio_file:
-            job_logger.info(f"🎵 Audio file specified: {audio_file}")
-            try:
-                comfyui_audio_file = copy_audio_to_comfyui(audio_file, job_id, client, job_logger)
-                job_logger.info("audio save complete: filename=%s", comfyui_audio_file)
-            except Exception as e:
-                job_logger.warning(f"⚠️ 複製音訊檔案失敗: {e}")
-                comfyui_audio_file = ""
-
-        # 3.6 處理影片參數 (LTX ReTake V2V 新增)
-        # 需要將影片從 storage/inputs 複製到 ComfyUI/input
-        video_file = job_data.get("video", "")
-        retake_start = job_data.get("retake_start")
-        retake_end = job_data.get("retake_end")
-        extra_params = job_data.get("extra_params") or {}
-        comfyui_video_file = ""
-        if video_file:
-            job_logger.info(f"🎬 Video file specified: {video_file}")
-            try:
-                comfyui_video_file = copy_video_to_comfyui(video_file, job_id, client, job_logger)
-                job_logger.info("video save complete: filename=%s", comfyui_video_file)
-            except Exception as e:
-                job_logger.warning(f"⚠️ 複製影片檔案失敗: {e}")
-                comfyui_video_file = ""
-
-        # 4. 解析 workflow (包含圖片、音訊與影片注入)
-        update_job_status(r, job_id, "processing", progress=20)
-
-        job_logger.info("parse start")
-        workflow = parse_workflow(
-            workflow_name=workflow_name,
-            prompt=prompt,
-            seed=seed,
-            aspect_ratio=aspect_ratio,
-            model=model,
-            batch_size=batch_size,
-            image_files=image_files,      # 傳入圖片檔名映射
-            audio_file=comfyui_audio_file, # 傳入複製後的音訊檔名 (Phase 7)
-            video_file=comfyui_video_file, # 傳入複製後的影片檔名 (LTX ReTake V2V)
-            retake_start=retake_start,     # ReTake 起始秒數
-            retake_end=retake_end,         # ReTake 結束秒數
-            extra_params=extra_params,     # 通用具名參數（如 Ideogram4 elements_data）
-            prompts=prompts               # Veo3 Long Video: 傳入多段 prompts
-        )
-        job_logger.info("parse end")
-        
-        job_logger.info("Workflow 解析完成")
-        if tracker:
-            tracker.event(job_id, "workflow_loaded", resulting_status="running")
-        
-        # 5. 檢查 ComfyUI 連接
-        if not client.check_connection():
-            raise Exception("無法連接 ComfyUI，請確認是否已啟動")
-        
-        # 6. 提交任務到 ComfyUI
-        update_job_status(r, job_id, "processing", progress=30)
-        if not client.check_connection():
-            raise RuntimeError(COMFYUI_UNAVAILABLE)
-
-        if workflow_name == "ideogram4_regional_t2i":
-            client.verify_regional_caption_contract(workflow)
-        
-        job_logger.info("ComfyUI submit start")
-        prompt_id = client.queue_prompt(workflow)
-        if not prompt_id:
-            raise RuntimeError(ENGINE_EXECUTION_FAILED)
-        if tracker:
-            tracker.set_prompt_id(job_id, prompt_id)
-            tracker.event(job_id, "comfyui_submitted", resulting_status="running")
-        update_job_status(r, job_id, "processing", progress=30, comfyui_prompt_id=prompt_id)
-        if not prompt_id:
-            raise Exception("任務提交失敗")
-        
-        job_logger.info(f"任務已提交，prompt_id: {prompt_id}")
-        
-        # 7. 定義進度更新回調函數
-        last_db_progress = -10
-        def on_progress(progress):
-            nonlocal last_db_progress
-            # 檢查任務是否被取消
-            status_key = f"job:status:{job_id}"
-            current_status = r.hget(status_key, "status")
-            # /interrupt is instance-wide in the deployed ComfyUI.  A running
-            # cancellation remains a request until a prompt-specific terminal
-            # event is observed, so this legacy branch must never execute.
-            if False:
-                job_logger.warning("🛑 任務已被取消，發送中斷指令...")
-                # Intentionally no global ComfyUI interrupt here.
-                raise Exception("Task cancelled by user")
-            
-            # 將進度從 30% 開始映射到 30-95%
-            mapped_progress = 30 + int(progress * 0.65)
-            update_job_status(r, job_id, "processing", progress=mapped_progress)
-            if tracker and mapped_progress - last_db_progress >= 10:
-                last_db_progress = mapped_progress
-                tracker.progress(job_id, mapped_progress)
-            job_logger.info("progress heartbeat: progress=%s mapped_progress=%s", progress, mapped_progress)
-
-        # 8. 等待 ComfyUI 執行完成
-        comfy_started = False
-        def on_event(event_type, event):
-            nonlocal comfy_started
-            if not tracker:
-                return
-            node_info = workflow_adapter.node(workflow, event.get("node"))
-            node_id = node_info["node_id"]
-            node_type = node_info["node_type"]
-            if event_type == "node_started":
-                if not comfy_started:
-                    comfy_started = True
-                    tracker.event(job_id, "comfyui_started", resulting_status="running")
-                tracker.update_node(job_id, node_id=node_id, node_type=node_type)
-                tracker.event(job_id, "node_started", resulting_status="running", stage=node_info["stage"], node_id=node_id, node_type=node_type)
-            elif event_type == "node_completed":
-                tracker.update_node(job_id, node_id=node_id, node_type=node_type, completed=True)
-                tracker.event(job_id, "node_completed", resulting_status="running", stage=node_info["stage"], node_id=node_id, node_type=node_type)
-            elif event_type == "execution_error":
-                tracker.event(job_id, "job_failed", resulting_status="running", stage="comfyui_execution", error_code="COMFYUI_NODE_ERROR", message=event.get("exception_message"))
-            elif event_type == "execution_interrupted":
-                current = tracker.repository.get_job(job_id) or {}
-                if current.get("cancel_requested_at"):
-                    if tracker.transition(job_id, JobStatus.RUNNING, JobStatus.CANCELLED,
-                                          error_stage="cancellation", error_code="CANCELLED_BY_CLIENT"):
-                        tracker.event(job_id, "job_cancelled", resulting_status="cancelled", stage="cancellation", error_code="CANCELLED_BY_CLIENT")
-
-        def should_abort():
-            current = tracker.repository.get_job(job_id) if tracker else None
-            return "client_cancel_requested" if current and current.get("cancel_requested_at") else None
-
-        def on_abort():
-            job_logger.info("cancellation request observed; waiting for prompt-specific ComfyUI terminal event")
-
-        result = client.wait_for_completion(
-            prompt_id=prompt_id,
-            timeout=WORKER_TIMEOUT,  # 使用配置值 (預設 2400 秒 = 40 分鐘)
-            on_progress=on_progress,
-            on_event=on_event,
-            should_abort=should_abort,
-            on_abort=on_abort,
-        )
-
-        if result.get("interrupted"):
-            current = tracker.repository.get_job(job_id) if tracker else None
-            if current and current.get("status") == JobStatus.CANCELLED.value:
-                update_job_status(r, job_id, "cancelled", error="Task cancelled by user", public_error=True)
-                return
-
-        # 9. 根據執行結果處理輸出
-        if result.get("success"):
-            videos = result.get("videos", [])
-            gifs = result.get("gifs", [])  # VHS_VideoCombine 輸出影片也在這裡
-            images = result.get("images", [])
-            
-            # 合併所有視訊類輸出 (videos + gifs)，統一處理
-            all_video_outputs = []
-            for v in videos:
-                v["_source"] = "videos"
-                all_video_outputs.append(v)
-            for g in gifs:
-                g["_source"] = "gifs"
-                all_video_outputs.append(g)
-            
-            job_logger.info(f"📊 輸出統計: videos={len(videos)}, gifs={len(gifs)}, images={len(images)}")
-            
-            output_list = []
-            output_type = "unknown"
-            
-            # 優先順序: 視訊類 (videos + gifs) > 圖片
-            if all_video_outputs:
-                output_list = all_video_outputs
-                output_type = "video"
-                job_logger.info(f"🎥 收到 {len(all_video_outputs)} 個視訊輸出")
-            elif images:
-                output_list = images
-                output_type = "image"
-                job_logger.info(f"📷 收到 {len(images)} 張輸出圖片")
-            
-            if output_list:
-                # 過濾掉臨時預覽圖（type: 'temp'），只保留真實輸出
-                real_outputs = [item for item in output_list if item.get("type") != "temp"]
-                
-                if not real_outputs:
-                    job_logger.warning("⚠️ 只有臨時預覽圖，沒有真實輸出")
-                    job_logger.info("📋 臨時預覽圖列表:")
-                    for item in output_list:
-                        job_logger.info(f"   - {item.get('filename')} (type: {item.get('type')})")
-                    # 如果完全沒有輸出，使用臨時預覽圖作為後備
-                    real_outputs = output_list
-                else:
-                    job_logger.info(f"✓ 過濾後剩餘 {len(real_outputs)} 個真實輸出")
-                
-                # 優先選擇完整合併的影片 (filename 包含 Combined 或 Full)
-                selected_file = None
-                
-                # 1. 第一輪篩選：找 "Combined" 或 "Full" (Veo3 Long Video 最終輸出)
-                for item in real_outputs:
-                    filename = item.get("filename", "")
-                    if "Combined" in filename or "Full" in filename:
-                        selected_file = item
-                        job_logger.info(f"✨ 優先選擇合併影片: {filename}")
-                        break
-                
-                # 2. 第二輪篩選：如果有 subfolder (備選)
-                if not selected_file:
-                    for item in real_outputs:
-                        if item.get("subfolder"):
-                            selected_file = item
-                            job_logger.info(f"選擇有子目錄的檔案: {item.get('filename')} (subfolder: {item.get('subfolder')})")
-                            break
-                
-                # 3. 最後手段：使用最後一個（通常最終輸出在最後）
-                if not selected_file:
-                    selected_file = real_outputs[-1]
-                    job_logger.info(f"使用最後一個檔案: {selected_file.get('filename')}")
-                
-                # 嘗試複製選中的檔案（傳遞 file_type）
-                file_type = selected_file.get("type", "output")
-                job_logger.info(
-                    "output copy start: filename=%s subfolder=%s type=%s",
-                    selected_file.get("filename"),
-                    selected_file.get("subfolder", ""),
-                    file_type,
-                )
-                new_filename = client.copy_output_file(
-                    filename=selected_file.get("filename"),
-                    subfolder=selected_file.get("subfolder", ""),
-                    file_type=file_type,
-                    job_id=job_id
-                )
-                
-                # 如果選中的檔案複製失敗，嘗試其他檔案
-                if not new_filename and len(real_outputs) > 1:
-                    job_logger.warning("⚠️ 第一選擇失敗，嘗試其他檔案...")
-                    for item in real_outputs:
-                        if item == selected_file:
-                            continue
-                        file_type = item.get("type", "output")
-                        new_filename = client.copy_output_file(
-                            filename=item.get("filename"),
-                            subfolder=item.get("subfolder", ""),
-                            file_type=file_type,
-                            job_id=job_id
-                        )
-                        if new_filename:
-                            job_logger.info(f"✓ 成功複製備選檔案: {item.get('filename')}")
-                            break
-                
-                if new_filename:
-                    job_logger.info("output copy complete: filename=%s", new_filename)
-                    try:
-                        local_output_path, file_size = validate_local_output_file(new_filename, job_logger)
-                    except Exception as output_err:
-                        if tracker:
-                            tracker.fail(job_id, JobStatus.RUNNING, stage="output_storage", code="OUTPUT_PERSIST_ERROR", message=output_err)
-                        update_job_status(
-                            r,
-                            job_id,
-                            "failed",
-                            progress=95,
-                            error=COMFYUI_OUTPUT_MISSING,
-                        )
-                        job_logger.error(f"❌ 本地輸出落庫失敗: {output_err}")
-                        return
-
-                    # 無論是圖片還是影片，都通過 image_url 欄位回傳 (前端會根據副檔名判斷)
-                    file_url = f"/outputs/{new_filename}"
-                    if tracker:
-                        if not tracker.complete_with_output(
-                            job_id, path=local_output_path, storage_uri=file_url, filename=new_filename,
-                            output_type=output_type, source_node_id=str(selected_file.get("node_id") or "") or (workflow_adapter.expected_output_nodes() or (None,))[0],
-                            metadata={"source_type": file_type},
-                        ):
-                            raise RuntimeError("durable output finalize rejected")
-                    update_job_status(r, job_id, "finished", progress=100, image_url=file_url)
-                    job_logger.info(
-                        f"✅ 任務完成，輸出 ({output_type}): {file_url} "
-                        f"-> {local_output_path.name} ({file_size} bytes)"
-                    )
-                else:
-                    raise RuntimeError("output persistence failed")
-            else:
-                raise RuntimeError("expected output not found")
-        else:
-            error = result.get("error", "未知錯誤")
-            
-            # 超時情況特殊處理：嘗試從 History API 獲取部分結果
-            if "超時" in error or "timeout" in error.lower():
-                job_logger.warning("⚠️ 任務超時，嘗試獲取已完成的輸出...")
-                try:
-                    partial_outputs = client.get_outputs_from_history(prompt_id)
-                    all_partial = partial_outputs.get("videos", []) + partial_outputs.get("gifs", []) + partial_outputs.get("images", [])
-                    if all_partial:
-                        # 有部分輸出，也複製到 Gallery
-                        new_filename = client.copy_output_file(
-                            filename=all_partial[-1].get("filename"),
-                            subfolder=all_partial[-1].get("subfolder", ""),
-                            job_id=job_id
-                        )
-                        if new_filename:
-                            try:
-                                validate_local_output_file(new_filename, job_logger)
-                            except Exception as output_err:
-                                job_logger.warning(f"⚠️ 部分輸出驗證失敗: {output_err}")
-                                update_job_status(r, job_id, "failed", error=error)
-                                return
-                            file_url = f"/outputs/{new_filename}"
-                            update_job_status(r, job_id, "failed", error=f"{error} (partial output saved)", image_url=file_url)
-                            job_logger.info(f"⚠️ 任務超時但已保存部分輸出: {file_url}")
-                            return
-                except Exception as partial_err:
-                    job_logger.warning(f"⚠️ 獲取部分輸出失敗: {partial_err}")
-            
-            update_job_status(r, job_id, "failed", error=error)
-            if tracker:
-                tracker.fail(job_id, JobStatus.RUNNING, stage="comfyui_execution", code="UNKNOWN_ERROR", message=error)
-            job_logger.error(f"❌ 任務失敗: {error}")
-            
-    except Exception as e:
-        job_logger.exception("❌ 處理錯誤")
-        update_job_status(r, job_id, "failed", progress=0, error=ENGINE_EXECUTION_FAILED)
-        if tracker:
-            tracker.fail(job_id, JobStatus.RUNNING, stage="comfyui_submit", code="COMFYUI_SUBMIT_ERROR", message=e)
+            logger.exception("worker heartbeat failed")
+            time.sleep(WORKER_HEARTBEAT_SECONDS)
 
 
-def main():
-    global _current_job_id
-    """
-    Worker 主迴圈
-    """
-    logger.info("="*50)
-    logger.info("🚀 Worker 啟動中...")
-    logger.info("="*50)
-    
-    # 1. 連接 Redis
-    try:
-        r = get_redis_client()
-        r.ping()
-        logger.info(f"✅ Redis 連接成功 ({REDIS_HOST}:{REDIS_PORT})")
-    except Exception as e:
-        logger.exception("❌ Redis 連接失敗")
-        sys.exit(1)
-    
-    # 2. 初始化 ComfyUI 客戶端
-    client = ComfyClient(logger=logger)
-    manifest_errors = WorkflowRegistry().validate_configured_workflows()
-    if manifest_errors:
-        logger.warning("workflow observability validation: %s", "; ".join(manifest_errors))
+def _validate_runtime(catalog) -> None:
+    errors = catalog.validate()
+    for entry in catalog.entries.values():
+        if not entry.version:
+            errors.append(f"{entry.workflow_id}: version is required")
+        if not isinstance(entry.observability.get("output"), dict):
+            errors.append(f"{entry.workflow_id}: observability.output is required")
+    if errors:
+        logger.warning("workflow observability validation: %s", "; ".join(errors))
         if WORKFLOW_MANIFEST_POLICY == "strict":
-            sys.exit(1)
+            raise RuntimeError("workflow manifest validation failed")
+
+
+def main() -> None:
+    global _current_job_id
+
+    logger.info("Worker starting")
+    try:
+        redis_client = get_redis_client()
+        redis_client.ping()
+        logger.info("Redis connected: %s:%s", REDIS_HOST, REDIS_PORT)
+    except Exception:
+        logger.exception("Redis connection failed")
+        raise SystemExit(1)
+
+    comfy_client = ComfyClient(logger=logger)
+    _validate_runtime(load_workflow_catalog())
     try:
         replayed = JobTracker(job_repository()).replay_output_receipts(Path(COMFYUI_OUTPUT_DIR))
         if replayed:
             logger.info("replayed %s durable output receipts", replayed)
     except Exception:
         logger.exception("output receipt reconciliation failed")
+
     warmup_controller = WarmupController(
-        redis_client=r,
-        comfy_client=client,
+        redis_client=redis_client,
+        comfy_client=comfy_client,
         logger=logger,
         queue_name=JOB_QUEUE,
     )
+    processor = JobProcessor(redis_client, comfy_client, logger_instance=logger)
 
-    # 3. 啟動 Worker 心跳線程
-    logger.info("💓 啟動 Worker 心跳線程...")
-    heartbeat_thread = threading.Thread(target=worker_heartbeat, args=(r, client), daemon=True)
-    heartbeat_thread.start()
+    threading.Thread(
+        target=worker_heartbeat,
+        args=(redis_client, comfy_client),
+        daemon=True,
+    ).start()
 
-    # 4. 檢查 ComfyUI 連接
-    if client.check_connection():
-        logger.info("✅ ComfyUI 連接成功")
-
-        # 5.1 啟動受管暖機流程或回退模式
+    if comfy_client.check_connection():
+        logger.info("ComfyUI connected")
         warmup_controller.start()
     else:
-        logger.warning("⚠️ ComfyUI 尚未啟動，將持續等待...")
+        logger.warning("ComfyUI unavailable; warmup deferred")
         warmup_controller.mark_unavailable()
-    
-    # 5. 清理舊的暫存檔案
-    logger.info("🗑️ 清理過期暫存檔案...")
+
     cleanup_old_temp_files()
-    
-    # 6. 清理超過 30 天的輸出圖片
-    logger.info("🗑️ 清理超過 30 天的輸出圖片...")
     cleanup_old_output_files()
 
-    # 7. 開始處理佇列
-    logger.info(f"\n監聽佇列: {JOB_QUEUE}")
-    logger.info(f"ComfyUI Input 目錄: {COMFYUI_INPUT_DIR}")
-    logger.info(f"暖機模式: {WARMUP_MODE}")
-    logger.info("等待任務中...\n")
-    
     processing_queue = f"{JOB_QUEUE}:processing"
-    stranded = r.lrange(processing_queue, 0, -1)
+    stranded = redis_client.lrange(processing_queue, 0, -1)
     if stranded:
-        r.delete(processing_queue)
-        r.rpush(JOB_QUEUE, *stranded)
+        redis_client.delete(processing_queue)
+        redis_client.rpush(JOB_QUEUE, *stranded)
         logger.warning("requeued %s unacknowledged jobs", len(stranded))
-    last_cleanup_time = time.time()
-    last_reconcile_time = 0.0
-    CLEANUP_INTERVAL = 3600  # 每小時清理一次
-    redis_retry_delay = 2.0  # Redis 重連指數退避初始值
-    REDIS_RETRY_MAX_DELAY = 60.0
-    
+
+    last_cleanup = time.time()
+    last_reconcile = 0.0
+    cleanup_interval = 3600
+    retry_delay = 2.0
+    max_retry_delay = 60.0
+
+    logger.info("Worker listening on queue %s (input=%s, warmup=%s)", JOB_QUEUE, COMFYUI_INPUT_DIR, WARMUP_MODE)
     while not _shutdown_flag:
         try:
-            # 定期清理暫存檔案和輸出圖片
-            if time.time() - last_cleanup_time > CLEANUP_INTERVAL:
+            now = time.time()
+            if now - last_cleanup > cleanup_interval:
                 cleanup_old_temp_files()
                 cleanup_old_output_files()
-                last_cleanup_time = time.time()
+                last_cleanup = now
+            if now - last_reconcile >= JOB_RECONCILE_SECONDS:
+                last_reconcile = now
+                reconcile_stale_running(redis_client, comfy_client)
 
-            if time.time() - last_reconcile_time >= JOB_RECONCILE_SECONDS:
-                last_reconcile_time = time.time()
-                reconcile_stale_running(r, client)
-            
-            # BLPOP: 阻塞式取出任務 (超時 5 秒)
-            job_json = r.blmove(JOB_QUEUE, processing_queue, 5, src='LEFT', dest='RIGHT')
-            
-            # 連接成功，重置退避延遲
-            redis_retry_delay = 2.0
-            
-            if job_json:
-                try:
-                    job_data = json.loads(job_json)
-                    _current_job_id = job_data.get('job_id', 'unknown')
-                    warmup_controller.request_priority_handoff()
-                    process_job(r, client, job_data)
-                    _current_job_id = None
-                except json.JSONDecodeError as e:
-                    logger.exception("JSON 解析錯誤")
-                    _current_job_id = None
-                finally:
-                    r.lrem(processing_queue, 1, job_json)
-            
-        except redis.ConnectionError as e:
-            logger.exception(f"Redis 連接中斷，{redis_retry_delay:.0f}s 後重試")
-            time.sleep(redis_retry_delay)
-            redis_retry_delay = min(redis_retry_delay * 2, REDIS_RETRY_MAX_DELAY)
+            job_json = redis_client.blmove(JOB_QUEUE, processing_queue, 5, src="LEFT", dest="RIGHT")
+            retry_delay = 2.0
+            if not job_json:
+                continue
+
             try:
-                r = get_redis_client()
-                logger.info("✅ Redis 重連成功")
-                redis_retry_delay = 2.0  # 重置
-            except Exception as reconnect_err:
-                logger.exception("⚠️ Redis 重連失敗")
-                
+                job_data = json.loads(job_json)
+                _current_job_id = job_data.get("job_id", "unknown")
+                warmup_controller.request_priority_handoff()
+                processor.process(job_data)
+            except json.JSONDecodeError:
+                logger.exception("invalid job JSON")
+            finally:
+                _current_job_id = None
+                redis_client.lrem(processing_queue, 1, job_json)
+
+        except redis.ConnectionError:
+            logger.exception("Redis connection lost; retrying in %.0fs", retry_delay)
+            time.sleep(retry_delay)
+            retry_delay = min(retry_delay * 2, max_retry_delay)
+            try:
+                redis_client = get_redis_client()
+                processor.redis = redis_client
+                warmup_controller.redis_client = redis_client
+                logger.info("Redis reconnected")
+                retry_delay = 2.0
+            except Exception:
+                logger.exception("Redis reconnect failed")
         except KeyboardInterrupt:
-            logger.info("\n收到中斷信號，正在關閉...")
             break
-            
-        except Exception as e:
-            logger.exception("未預期錯誤")
+        except Exception:
+            logger.exception("worker loop failed")
             time.sleep(1)
-    
-    # Graceful shutdown: 確認當前任務狀態
-    if _current_job_id:
-        logger.info(f"⏳ 等待任務 {_current_job_id} 完成...")
-    logger.info("✅ Worker 已安全關閉")
+
+    logger.info("Worker stopped")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

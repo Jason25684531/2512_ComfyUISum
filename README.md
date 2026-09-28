@@ -95,7 +95,7 @@ Workflow metadata 的主要來源是：
 ComfyUIworkflow/config.json
 ~~~
 
-目前的 Workflow runtime、registry、legacy maps 與相容 fallback 仍保留，這些不是本 Change 的清理範圍。ComfyUIworkflow_api/ 也仍由 Compose mount，供既有流程使用。
+Workflow runtime 由 `shared/workflow_catalog.py` 與 `worker/src/workflow/runtime.py` 負責。`ComfyUIworkflow_api/` 仍由 Compose mount，作為 API-format workflow asset/fallback；已退休的 registry、legacy maps 與 parser 檔案已移除。
 
 ## Repository 結構
 
@@ -112,8 +112,6 @@ worker/
     main.py                Worker lifecycle 與既有 job execution
     config.py              Worker 設定
     comfy_client.py        ComfyUI HTTP／WebSocket client
-    workflow_registry.py   現有 workflow registry
-    json_parser.py         現有 workflow parser
     workflow/              runtime、injector、node utility 與 legacy map
 
 shared/
@@ -126,7 +124,7 @@ shared/
   path_utils.py            storage path safety
 
 frontend/
-  config.js                local API origin 與既有 catalog fallback
+  config.js                local API origin and Backend runtime catalog bootstrap
 
 ComfyUIworkflow/
   config.json              workflow metadata
@@ -137,6 +135,30 @@ docker-compose.yml         唯一 active Compose
 scripts/                   local validation 與 maintenance
 tests/                     unit、integration、migration、frontend tests
 ~~~
+
+## Final runtime architecture
+
+Change 3 keeps the runtime boundaries explicit:
+
+```text
+Backend app.py
+  -> api_routes.py / system_routes.py / admin_routes.py
+  -> job_service.py
+  -> shared contracts, repository, Redis
+
+Worker main.py
+  -> job_processor.py
+  -> workflow/runtime.py + injectors/node_utils.py
+  -> comfy_client.py
+
+ComfyUIworkflow/config.json -> WorkflowCatalog -> Backend / Worker
+ComfyUIworkflow_api/ remains the mounted API-format asset/fallback directory
+  because Compose, Dockerfile, loader, catalog validation, and warmup reference it.
+```
+
+Retired implementation files `workflow_registry.py`, `legacy_maps.py`, and
+`json_parser.py` are no longer runtime callers; tests assert canonical
+WorkflowCatalog behavior instead.
 
 ## API
 

@@ -9,7 +9,7 @@ WORKER_SRC = Path(__file__).resolve().parents[2] / "worker" / "src"
 sys.path[:0] = [str(WORKER_SRC.parent.parent), str(WORKER_SRC)]
 
 from comfy_client import ComfyClient  # noqa: E402
-from json_parser import parse_workflow  # noqa: E402
+from workflow.runtime import parse_workflow  # noqa: E402
 from regional_prompt import SAFE_ERROR, verify_regional_caption_contract  # noqa: E402
 
 

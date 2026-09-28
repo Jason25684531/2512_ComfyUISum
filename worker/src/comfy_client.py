@@ -20,6 +20,7 @@ from urllib.parse import urlparse
 from comfy_paths import normalize_comfy_paths
 from config import (
     COMFY_HOST, COMFY_PORT, COMFY_HTTP_URL, COMFY_WS_URL,
+    COMFY_CONNECT_RETRIES,
     COMFYUI_OUTPUT_DIR, STORAGE_OUTPUT_DIR, COMFY_HTTP_TIMEOUT,
     COMFY_SUBMIT_TIMEOUT_SECONDS, COMFY_WS_WAIT_TIMEOUT_SECONDS,
     COMFY_HISTORY_TIMEOUT_SECONDS, OUTPUT_COPY_RETRY_COUNT,
@@ -76,9 +77,8 @@ class ComfyClient:
         Returns:
             是否連接成功
         """
-        import os
         if retry is None:
-            retry = int(os.getenv('COMFY_CONNECT_RETRIES', '10'))
+            retry = COMFY_CONNECT_RETRIES
         
         delay = initial_delay
         for attempt in range(retry + 1):
@@ -214,6 +214,16 @@ class ComfyClient:
         all_gifs = []    # 收集所有輸出 GIF
         
         try:
+            # A cached ComfyUI execution can finish before the WebSocket is
+            # ready. Check durable history first so completed work never waits
+            # on a socket that is no longer needed.
+            history_outputs = self.get_outputs_from_history(prompt_id)
+            if any(history_outputs.values()):
+                result.update(success=True, **history_outputs)
+                result["recovered_from_history"] = True
+                self._log("info", "ComfyUI prompt already completed; recovered output from history")
+                return result
+
             # Host-network WebSocket handshakes can exceed the short polling interval.
             ws = None
             for attempt in range(2):

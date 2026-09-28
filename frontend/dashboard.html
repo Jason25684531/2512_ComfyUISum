@@ -665,89 +665,8 @@
 
                             </div>
 
-                            <!-- Tool Grid -->
-                            <div class="tool-grid flex justify-center gap-10">
-                                <!-- Face Swap -->
-                                <button onclick="selectTool('face_swap')"
-                                    class="tool-card glass-card rounded-[32px] p-10 w-64 h-64 flex flex-col flex-shrink-0 items-center justify-center text-center cursor-pointer hover:border-purple-500/50 group">
-                                    <div
-                                        class="w-24 h-24 flex items-center justify-center rounded-2xl bg-purple-500/10 text-purple-300 mx-auto mb-4 group-hover:bg-purple-500/20 group-hover:scale-110 transition-all border border-purple-500/20">
-                                        <i data-lucide="users" class="w-12 h-12"></i>
-                                    </div>
-                                    <h3 class="text-xl font-bold text-white mb-1"
-                                        style="font-family: 'TT Norms Pro Normal', sans-serif;">Face Swap</h3>
-                                    <p class="text-xl text-gray-500">換臉</p>
-                                </button>
-
-                                <!-- Multi-Blend -->
-                                <button onclick="selectTool('multi_image_blend')"
-                                    class="tool-card glass-card rounded-[32px] p-10 w-64 h-64 flex flex-col flex-shrink-0 items-center justify-center text-center cursor-pointer hover:border-amber-500/50 group">
-                                    <div
-                                        class="w-24 h-24 flex items-center justify-center rounded-2xl bg-amber-500/10 text-amber-300 mx-auto mb-4 group-hover:bg-amber-500/20 group-hover:scale-110 transition-all border border-amber-500/20">
-                                        <i data-lucide="layers" class="w-12 h-12"></i>
-                                    </div>
-                                    <h3 class="text-xl font-bold text-white mb-1"
-                                        style="font-family: 'TT Norms Pro Normal', sans-serif;">Multi-Blend</h3>
-                                    <p class="text-xl text-gray-500">多圖融合</p>
-                                </button>
-
-                                <!-- Sketch to Image -->
-                                <button onclick="selectTool('sketch_to_image')"
-                                    class="tool-card glass-card rounded-[32px] p-10 w-64 h-64 flex flex-col flex-shrink-0 items-center justify-center text-center cursor-pointer hover:border-emerald-500/50 group">
-                                    <div
-                                        class="w-24 h-24 flex items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-300 mx-auto mb-4 group-hover:bg-emerald-500/20 group-hover:scale-110 transition-all border border-emerald-500/20">
-                                        <i data-lucide="pencil" class="w-12 h-12"></i>
-                                    </div>
-                                    <h3 class="text-xl font-bold text-white mb-1"
-                                        style="font-family: 'TT Norms Pro Normal', sans-serif;">Sketch</h3>
-                                    <p class="text-xl  text-gray-500">草稿轉精稿</p>
-                                </button>
-
-                                <!-- Text to Image -->
-                                <button onclick="selectTool('text_to_image')"
-                                    class="tool-card glass-card rounded-[32px] p-10 w-64 h-64 flex flex-col flex-shrink-0 items-center justify-center text-center cursor-pointer hover:border-blue-500/50 group">
-                                    <div
-                                        class="w-24 h-24 flex items-center justify-center rounded-2xl bg-blue-500/10 text-blue-300 mx-auto mb-4 group-hover:bg-blue-500/20 group-hover:scale-110 transition-all border border-blue-500/20">
-                                        <i data-lucide="type" class="w-12 h-12"></i>
-                                    </div>
-                                    <h3 class="text-xl font-bold text-white mb-1"
-                                        style="font-family: 'TT Norms Pro Normal', sans-serif;">Text2Img</h3>
-                                    <p class="text-xl text-gray-500">文生圖</p>
-                                </button>
-
-                                <!-- Single Image Edit -->
-                                <button onclick="selectTool('single_image_edit')"
-                                    class="tool-card glass-card rounded-[32px] p-10 w-64 h-64 flex flex-col flex-shrink-0 items-center justify-center text-center cursor-pointer hover:border-pink-500/50 group">
-                                    <div
-                                        class="w-24 h-24 flex items-center justify-center rounded-2xl bg-pink-500/10 text-pink-300 mx-auto mb-4 group-hover:bg-pink-500/20 group-hover:scale-110 transition-all border border-pink-500/20">
-                                        <i data-lucide="image" class="w-12 h-12"></i>
-                                    </div>
-                                    <h3 class="text-xl font-bold text-white mb-1"
-                                        style="font-family: 'TT Norms Pro Normal', sans-serif;">Edit</h3>
-                                    <p class="text-xl text-gray-500">單圖編輯</p>
-                                </button>
-
-                                <button onclick="selectTool('multi_angle')"
-                                    class="tool-card glass-card rounded-[32px] p-10 w-64 h-64 flex flex-col flex-shrink-0 items-center justify-center text-center cursor-pointer hover:border-violet-500/50 group">
-                                    <div class="w-24 h-24 flex items-center justify-center rounded-2xl bg-violet-500/10 text-violet-300 mx-auto mb-4 group-hover:bg-violet-500/20 group-hover:scale-110 transition-all border border-violet-500/20">
-                                        <i data-lucide="orbit" class="w-12 h-12"></i>
-                                    </div>
-                                    <h3 class="text-xl font-bold text-white mb-1" style="font-family: 'TT Norms Pro Normal', sans-serif;">Multi-Angle</h3>
-                                    <p class="text-xl text-gray-500">多角度視角</p>
-                                </button>
-
-                                <!-- Ideogram4 Regional Prompt -->
-                                <button onclick="selectTool('ideogram4_regional_t2i')"
-                                    class="tool-card glass-card rounded-[32px] p-10 w-64 h-64 flex flex-col flex-shrink-0 items-center justify-center text-center cursor-pointer hover:border-cyan-500/50 group">
-                                    <div
-                                        class="w-24 h-24 flex items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-300 mx-auto mb-4 group-hover:bg-cyan-500/20 group-hover:scale-110 transition-all border border-cyan-500/20">
-                                        <i data-lucide="layout-grid" class="w-12 h-12"></i>
-                                    </div>
-                                    <h3 class="text-xl font-bold text-white mb-1"
-                                        style="font-family: 'TT Norms Pro Normal', sans-serif;">Regional Prompt</h3>
-                                    <p class="text-xl text-gray-500">區域提示詞</p>
-                                </button>
-                            </div>
+                            <!-- Tool Grid: rendered from /api/runtime-config -->
+                            <div id="tool-grid" class="tool-grid flex justify-center gap-10"></div>
 
                             <p class="text-center text-base text-gray-500 mt-10">按 ESC 或點擊外部區域關閉</p>
                         </div>
@@ -1549,9 +1468,45 @@
         /**
          * Initialize on Page Load
          */
+        function renderToolGrid() {
+            const grid = document.getElementById('tool-grid');
+            if (!grid) return;
+            grid.replaceChildren();
+            window.getStudioWorkflowCatalog()
+                .filter((entry) => entry.category === 'image')
+                .forEach((entry) => {
+                    const frontend = entry.frontend || {};
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.className = 'tool-card glass-card rounded-[32px] p-10 w-64 h-64 flex flex-col flex-shrink-0 items-center justify-center text-center cursor-pointer group';
+                    button.dataset.workflow = entry.id;
+                    button.addEventListener('click', () => selectTool(entry.id));
+
+                    const icon = document.createElement('div');
+                    icon.className = 'w-24 h-24 flex items-center justify-center rounded-2xl mx-auto mb-4 group-hover:scale-110 transition-all border border-white/20';
+                    icon.dataset.color = frontend.color || 'blue';
+                    const iconNode = document.createElement('i');
+                    iconNode.dataset.lucide = frontend.icon || 'sparkles';
+                    iconNode.className = 'w-12 h-12';
+                    icon.appendChild(iconNode);
+
+                    const title = document.createElement('h3');
+                    title.className = 'text-xl font-bold text-white mb-1';
+                    title.textContent = frontend.title || entry.id;
+                    const description = document.createElement('p');
+                    description.className = 'text-xl text-gray-500';
+                    description.textContent = frontend.description || '';
+
+                    button.append(icon, title, description);
+                    grid.appendChild(button);
+                });
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        }
+
         document.addEventListener('DOMContentLoaded', async () => {
             console.log('[Dashboard] Initializing...');
             await window.STUDIO_RUNTIME_READY;
+            renderToolGrid();
             Object.assign(toolConfig, window.buildStudioImageToolConfig());
             Object.assign(toolInfo, window.buildStudioToolInfo());
             window.toolStates = window.buildStudioToolStates(window.toolStates);
@@ -1601,23 +1556,8 @@
         window.toolStates = window.buildStudioToolStates(window.toolStates);
 
         // Tool Configuration
-        const toolConfig = {
-            'face_swap': { uploads: [{ id: 'source', label: 'Source Face', icon: 'user' }, { id: 'target', label: 'Target Image', icon: 'image' }], color: 'purple' },
-            'multi_image_blend': { uploads: [{ id: 'source', label: 'Image A', icon: 'image' }, { id: 'target', label: 'Image B', icon: 'image' }, { id: 'extra', label: 'Image C', icon: 'image' }], color: 'amber' },
-            'sketch_to_image': { uploads: [{ id: 'input', label: 'Sketch Input', icon: 'pencil' }], color: 'emerald' },
-            'text_to_image': { uploads: [], color: 'blue' },
-            'single_image_edit': { uploads: [{ id: 'input', label: 'Input Image', icon: 'image' }], color: 'pink' },
-            'multi_angle': { uploads: [{ id: 'input', label: 'Input Image', icon: 'image' }], color: 'violet' }
-        };
-
-        const toolInfo = {
-            'face_swap': { name: 'Face Swap', desc: '換臉', icon: 'users', color: 'purple' },
-            'multi_image_blend': { name: 'Multi-Blend', desc: '多圖融合', icon: 'layers-3', color: 'amber' },
-            'sketch_to_image': { name: 'Sketch to Image', desc: '草稿轉精稿', icon: 'pencil', color: 'emerald' },
-            'text_to_image': { name: 'Text to Image', desc: '文生圖', icon: 'type', color: 'blue' },
-            'single_image_edit': { name: 'Single Image Edit', desc: '單圖編輯', icon: 'image', color: 'pink' }
-        };
-        toolInfo.multi_angle = { name: '多角度視角 Multi-Angle', desc: '拖曳調整相機視角', icon: 'orbit', color: 'violet' };
+        const toolConfig = {};
+        const toolInfo = {};
         Object.assign(toolConfig, window.buildStudioImageToolConfig());
         Object.assign(toolInfo, window.buildStudioToolInfo());
 

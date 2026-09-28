@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from shared.runtime_contract import RuntimeContractLoader
+from shared.job_contracts import PAYLOAD_SCHEMA_VERSION, iso_utc
 from shared.workflow_catalog import WorkflowCatalog, WorkflowResolution
 
 
@@ -26,10 +27,15 @@ def build_job_data(
     user_id: int | None,
     user_label: str,
     created_at: datetime,
+    request_id: str | None = None,
+    submitted_at: str | None = None,
 ) -> tuple[WorkflowResolution, dict[str, Any]]:
     resolution = resolve_workflow_request(project_root, data.get("workflow"))
+    created_at_value = iso_utc(created_at)
     job_data = {
         "job_id": job_id,
+        "request_id": request_id or "",
+        "schema_version": PAYLOAD_SCHEMA_VERSION,
         "prompt": data.get("prompt", ""),
         "prompts": data.get("prompts", []),
         "seed": data.get("seed", -1),
@@ -47,7 +53,10 @@ def build_job_data(
         "retake_start": data.get("retake_start", 0),
         "retake_end": data.get("retake_end", 0),
         "extra_params": data.get("extra_params", {}),
-        "created_at": created_at.isoformat(),
+        "created_at": created_at_value,
+        "submitted_at": submitted_at or created_at_value,
+        "workflow_version": resolution.entry.version,
+        "workflow_category": resolution.entry.category,
     }
     return resolution, job_data
 

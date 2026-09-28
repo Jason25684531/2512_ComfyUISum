@@ -34,6 +34,28 @@ LEGACY_STATUS = {
     JobStatus.CANCELLED: "cancelled",
 }
 
+
+def public_status(status: str | JobStatus) -> str:
+    try:
+        return LEGACY_STATUS[JobStatus(status)]
+    except (KeyError, ValueError):
+        return str(status)
+
+
+def canonical_status(status: str | JobStatus) -> str:
+    try:
+        value = JobStatus(status)
+        return value.value
+    except ValueError:
+        pass
+
+    if status == "queued":
+        return JobStatus.QUEUED.value
+    for canonical, public in LEGACY_STATUS.items():
+        if public == status:
+            return canonical.value
+    return str(status)
+
 EVENT_TYPES = frozenset({
     "job_submitted", "validation_passed", "job_queued", "worker_claimed", "workflow_resolved",
     "workflow_loaded", "comfyui_submitted", "comfyui_started", "node_started", "node_completed",

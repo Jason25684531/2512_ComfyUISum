@@ -187,8 +187,8 @@ PROJECT_ROOT = Path(__file__).parent.parent.resolve()
 # Redis 配置 (共用)
 # ==========================================
 REDIS_HOST, REDIS_PORT = _resolve_redis_endpoint()
-REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
-JOB_QUEUE = os.getenv("JOB_QUEUE", "job_queue")
+REDIS_PASSWORD = get_env_str("REDIS_PASSWORD", "")
+JOB_QUEUE = get_env_str("JOB_QUEUE", "job_queue") or "job_queue"
 
 # Durable observability store. MySQL is private/internal; no HTTP port is added.
 DB_HOST = get_env_str("DB_HOST", "localhost") or "localhost"
@@ -226,7 +226,7 @@ WORKFLOW_CONFIG_PATH = WORKFLOW_DIR / "config.json"
 # ==========================================
 # 任務配置 (共用)
 # ==========================================
-JOB_STATUS_EXPIRE_SECONDS = int(os.getenv("JOB_STATUS_EXPIRE_SECONDS", "3600"))
+JOB_STATUS_EXPIRE_SECONDS = get_env_int("JOB_STATUS_EXPIRE_SECONDS", 3600)
 
 # ==========================================
 # ComfyUI 配置 (共用)

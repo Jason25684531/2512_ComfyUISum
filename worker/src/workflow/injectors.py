@@ -6,13 +6,6 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from .legacy_maps import (
-        ASPECT_RATIO_MAP,
-        AUDIO_NODE_MAP,
-        DEFAULT_RESOLUTION,
-        IMAGE_NODE_MAP,
-        MODEL_MAP,
-    )
     from .node_utils import (
         safe_log_value,
         safe_print as print,
@@ -21,13 +14,6 @@ try:
         set_node_prompt_value,
     )
 except ImportError:
-    from workflow.legacy_maps import (
-        ASPECT_RATIO_MAP,
-        AUDIO_NODE_MAP,
-        DEFAULT_RESOLUTION,
-        IMAGE_NODE_MAP,
-        MODEL_MAP,
-    )
     from workflow.node_utils import (
         safe_log_value,
         safe_print as print,
@@ -148,7 +134,7 @@ def apply_workflow_injections(
     video_file: str = None,
     extra_params: dict = None,
 ) -> dict:
-    config_data = registry._config
+    config_data = registry.raw_config
     workflow_config = config_data.get(workflow_entry.workflow_id, {})
     image_map_config = workflow_entry.image_map
 
@@ -161,7 +147,8 @@ def apply_workflow_injections(
     except Exception as e:
         print(f"[Parser] Warning: failed to read config.json; using fallback: {e}")
 
-    resolution = ASPECT_RATIO_MAP.get(aspect_ratio, DEFAULT_RESOLUTION)
+    runtime = registry.runtime
+    resolution = runtime.aspect_ratios.get(aspect_ratio, runtime.default_resolution)
     width = resolution["width"]
     height = resolution["height"]
 
@@ -301,7 +288,7 @@ def apply_workflow_injections(
                 print(f"[Parser] Resolution injected: {width}x{height} into {class_type} node {latent_id}")
                 break
 
-    model_filename = MODEL_MAP.get(model)
+    model_filename = runtime.model_aliases.get(model)
     skip_generic_model_injection = bool(workflow_entry.model_overrides) and not runtime_model_overrides
 
     if skip_generic_model_injection:
@@ -339,9 +326,9 @@ def apply_workflow_injections(
                 print(f"[Parser] Warning: missing configured image field: {field_name}")
 
     if not images_injected:
-        node_map = IMAGE_NODE_MAP.get(workflow_name, {})
+        node_map = {node_id: field_name for field_name, node_id in image_map_config.items()}
         if node_map and image_files:
-            print(f"[Parser] Using fallback image injection (IMAGE_NODE_MAP): {node_map}")
+            print(f"[Parser] Using catalog image injection: {node_map}")
             for node_id, field_name in node_map.items():
                 if field_name in image_files:
                     filename = image_files[field_name]
@@ -361,14 +348,14 @@ def apply_workflow_injections(
             audio_injected = True
 
     if not audio_injected:
-        audio_config = AUDIO_NODE_MAP.get(workflow_name)
+        audio_config = workflow_entry.audio_map.get("audio")
 
         if audio_config and audio_file:
             node_id = audio_config.get("node_id")
             input_key = audio_config.get("input_key", "audio")
 
-            if node_id and set_node_input_value(workflow, node_id, input_key, audio_file, "Fallback audio 注入"):
-                print(f"[Parser] Fallback audio injected: {audio_file} into node {node_id}")
+            if node_id and set_node_input_value(workflow, node_id, input_key, audio_file, "Catalog audio injection"):
+                print(f"[Parser] Catalog audio injected: {audio_file} into node {node_id}")
             elif node_id:
                 print(f"[Parser] Warning: audio target node missing: {node_id}")
         elif audio_config and not audio_file:

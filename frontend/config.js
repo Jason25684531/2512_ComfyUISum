@@ -1,7 +1,6 @@
 const _API_ORIGIN_LOCAL = "http://localhost:5000";
 
 const _isLocalhost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-const _isFileProtocol = window.location.protocol === "file:";
 const _currentPort = window.location.port;
 
 const _isServedByFlask = _isLocalhost && (_currentPort === "5000" || _currentPort === "");
@@ -10,21 +9,6 @@ const _defaultApiOrigin = (_isServedByFlask || _isServedByFastAPI)
     ? window.location.origin
     : _API_ORIGIN_LOCAL;
 
-const _fallbackWorkflowCatalog = [
-    { id: "text_to_image", aliases: [], category: "image", frontend: { title: "Text to Image", description: "文字生圖", icon: "type", color: "blue", inputs: [] } },
-    { id: "face_swap", aliases: [], category: "image", frontend: { title: "Face Swap", description: "換臉", icon: "users", color: "purple", inputs: ["source", "target"] } },
-    { id: "multi_image_blend", aliases: ["multi_blend"], category: "image", frontend: { title: "Multi-Blend", description: "多圖融合", icon: "layers-3", color: "amber", inputs: ["source", "target", "extra"] } },
-    { id: "sketch_to_image", aliases: ["sketch"], category: "image", frontend: { title: "Sketch to Image", description: "草圖轉圖", icon: "pencil", color: "emerald", inputs: ["input"] } },
-    { id: "image_edit", aliases: ["single_image_edit", "single_edit"], category: "image", frontend: { title: "Image Edit", description: "單圖編輯", icon: "image", color: "pink", inputs: ["input"] } },
-    { id: "virtual_human", aliases: ["avatar_talk"], category: "avatar", frontend: { title: "Avatar Talk", description: "數位人像", icon: "mic", color: "teal", inputs: ["avatar"] } },
-    { id: "image_to_video", aliases: [], category: "video", frontend: { title: "Image to Video", description: "圖生影片", icon: "clapperboard", color: "sky", inputs: ["shot_0"] } },
-    { id: "ltx_retake_v2v", aliases: [], category: "video", frontend: { title: "影片重生成 ReTake", description: "上傳影片並重新生成指定時間區段", icon: "redo-2", color: "orange", inputs: ["video"] } },
-    { id: "ltx_i2v", aliases: [], category: "video", frontend: { title: "LTX Image to Video", description: "單圖轉影片", icon: "image-play", color: "cyan", inputs: ["input"] } },
-    { id: "ltx_flf", aliases: [], category: "video", frontend: { title: "LTX First-Last Frame", description: "首尾幀轉影片", icon: "film", color: "violet", inputs: ["first_frame", "last_frame"] } },
-    { id: "multi_angle", aliases: [], category: "image", frontend: { title: "多角度視角 Multi-Angle", description: "拖曳調整相機角度並生成對應視角。", icon: "orbit", color: "violet", inputs: ["input"] } },
-    { id: "ideogram4_regional_t2i", aliases: [], category: "image", frontend: { title: "區域提示詞 Regional Prompt", description: "以 BBox 畫布指定各區域內容並生成圖片", icon: "layout-grid", color: "cyan", inputs: [] } }
-];
-
 window.API_URL = _defaultApiOrigin;
 window.API_BASE_URL = `${window.API_URL}/api`;
 window.API_BASE = window.API_URL;
@@ -32,7 +16,7 @@ window.STUDIO_RUNTIME_CONFIG = {
     api_origin: window.API_URL,
     runtime_profile: "unknown",
     deployment_topology: "local-dev",
-    workflow_catalog: _fallbackWorkflowCatalog
+    workflow_catalog: []
 };
 
 function _buildWorkflowAliasIndex(catalog) {
@@ -49,7 +33,7 @@ function _buildWorkflowAliasIndex(catalog) {
 function _getWorkflowCatalog() {
     return Array.isArray(window.STUDIO_RUNTIME_CONFIG.workflow_catalog)
         ? window.STUDIO_RUNTIME_CONFIG.workflow_catalog
-        : _fallbackWorkflowCatalog;
+        : [];
 }
 
 window.normalizeStudioWorkflowId = function normalizeStudioWorkflowId(workflowId) {
@@ -138,7 +122,7 @@ window.STUDIO_RUNTIME_READY = (async () => {
             window.API_BASE_URL = `${window.API_URL}/api`;
         }
     } catch (error) {
-        console.warn("[RuntimeConfig] Falling back to built-in workflow catalog:", error.message);
+        console.warn("[RuntimeConfig] Runtime catalog unavailable:", error.message);
     }
 
     return window.STUDIO_RUNTIME_CONFIG;

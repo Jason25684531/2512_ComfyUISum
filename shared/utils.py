@@ -11,6 +11,7 @@ import logging
 from pathlib import Path
 from datetime import datetime
 from logging.handlers import TimedRotatingFileHandler
+from shared import env_resolution
 
 
 ENV_FILE_MAP = {
@@ -19,8 +20,8 @@ ENV_FILE_MAP = {
 
 
 def _resolve_env_path(base_path: Path) -> tuple[Path, str]:
-    explicit_env_file = os.getenv("STUDIO_ENV_FILE", "").strip()
-    explicit_env_name = os.getenv("STUDIO_ENV", "").strip().lower()
+    explicit_env_file = env_resolution.read_env_str("STUDIO_ENV_FILE", "")
+    explicit_env_name = env_resolution.read_env_str("STUDIO_ENV", "").lower()
 
     if explicit_env_file:
         env_path = Path(explicit_env_file)
@@ -242,15 +243,15 @@ def get_redis_client(decode_responses: bool = True, max_retries: int = 10,
     from redis import Redis
     from shared.config_base import REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
 
-    retry_override = os.getenv("REDIS_CONNECT_RETRIES")
+    retry_override = env_resolution.read_env_str("REDIS_CONNECT_RETRIES", "") or None
     if retry_override is not None:
         max_retries = max(0, int(retry_override))
 
-    initial_delay_override = os.getenv("REDIS_CONNECT_INITIAL_DELAY")
+    initial_delay_override = env_resolution.read_env_str("REDIS_CONNECT_INITIAL_DELAY", "") or None
     if initial_delay_override is not None:
         initial_delay = max(0.0, float(initial_delay_override))
 
-    max_delay_override = os.getenv("REDIS_CONNECT_MAX_DELAY")
+    max_delay_override = env_resolution.read_env_str("REDIS_CONNECT_MAX_DELAY", "") or None
     if max_delay_override is not None:
         max_delay = max(0.0, float(max_delay_override))
     

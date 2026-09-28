@@ -1,10 +1,10 @@
-import os
 import requests
 from flask import Blueprint, jsonify, request, send_from_directory
 from pathlib import Path
 
 from admin_queries import AdminQueries
 from shared.observability_runtime import job_repository
+from config import COMFY_HTTP_URL
 
 admin_bp = Blueprint("admin_observability", __name__)
 
@@ -98,7 +98,7 @@ def system_health():
         comfyui = comfy_snapshot.get('status', 'unknown')
     else:
         try:
-            url = os.getenv("COMFY_HTTP_URL", "http://127.0.0.1:8188").rstrip("/") + "/system_stats"
+            url = COMFY_HTTP_URL.rstrip("/") + "/system_stats"
             comfyui = "healthy" if requests.get(url, timeout=1).status_code == 200 else "unavailable"
         except Exception:
             comfyui = "unavailable"

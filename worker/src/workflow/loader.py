@@ -4,15 +4,17 @@ import json
 from pathlib import Path
 
 try:
-    from ..workflow_registry import WorkflowRegistry
-    from .legacy_maps import WORKFLOW_MAP
+    from ..config import WORKFLOW_CONFIG_PATH, WORKFLOW_DIR
 except ImportError:
-    from workflow_registry import WorkflowRegistry
-    from workflow.legacy_maps import WORKFLOW_MAP
+    from config import WORKFLOW_CONFIG_PATH, WORKFLOW_DIR
+
+from shared.workflow_catalog import WorkflowCatalog
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
-API_WORKFLOW_FALLBACK_DIR = PROJECT_ROOT / "ComfyUIworkflow_api"
+API_WORKFLOW_FALLBACK_DIRS = (
+    WORKFLOW_DIR.parent / "ComfyUIworkflow_api",
+    Path("/ComfyUIworkflow_api"),
+)
 
 
 def _is_ui_workflow_data(workflow_data) -> bool:
@@ -25,18 +27,10 @@ def _load_json_file(path: Path):
 
 
 def get_workflow_path(workflow_name: str) -> Path:
-    workflow_dir = WorkflowRegistry().workflow_dir
-
-    try:
-        entry = WorkflowRegistry(workflow_dir=workflow_dir).get(workflow_name)
-        if entry.file and entry.path.exists():
-            print(f"[Parser] config.json workflow file: {entry.file}")
-            return entry.path
-    except Exception as e:
-        print(f"[Parser] Warning: failed to read config.json: {e}")
-
-    filename = WORKFLOW_MAP.get(workflow_name, f"{workflow_name}.json")
-    return workflow_dir / filename
+    catalog = WorkflowCatalog.from_paths(WORKFLOW_CONFIG_PATH, WORKFLOW_DIR)
+    resolution = catalog.resolve(workflow_name)
+    print(f"[Parser] config.json workflow file: {resolution.entry.file}")
+    return resolution.entry.path
 
 
 def load_workflow(workflow_name: str) -> dict:
@@ -48,14 +42,16 @@ def load_workflow(workflow_name: str) -> dict:
     workflow_data = _load_json_file(workflow_path)
 
     if _is_ui_workflow_data(workflow_data):
-        fallback_path = API_WORKFLOW_FALLBACK_DIR / workflow_path.name
-        if fallback_path.exists():
-            print(f"[Parser] UI workflow detected; using API fallback: {fallback_path.name}")
-            workflow_data = _load_json_file(fallback_path)
-        else:
+        fallback_path = next(
+            (candidate / workflow_path.name for candidate in API_WORKFLOW_FALLBACK_DIRS if (candidate / workflow_path.name).exists()),
+            None,
+        )
+        if fallback_path is None:
             raise ValueError(
-                f"Workflow {workflow_path.name} is UI format and API fallback is missing: {fallback_path}"
+                f"Workflow {workflow_path.name} is UI format and API fallback is missing"
             )
+        print(f"[Parser] UI workflow detected; using API fallback: {fallback_path}")
+        workflow_data = _load_json_file(fallback_path)
 
     if not isinstance(workflow_data, dict):
         raise TypeError(f"Workflow data must be dict, got {type(workflow_data).__name__}")

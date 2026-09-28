@@ -28,6 +28,7 @@ from config import (
     WARMUP_VIDEO_WORKFLOW_PATH,
 )
 from shared.config_base import PROJECT_ROOT, WORKFLOW_DIR
+from shared.workflow_catalog import WorkflowCatalog
 
 
 TERMINAL_WARMUP_STATES = {"ready", "failed", "skipped", "deferred"}
@@ -316,8 +317,14 @@ class WarmupController:
         if not candidate_path.is_absolute():
             candidate_path = (PROJECT_ROOT / candidate_path).resolve()
 
-        allowed_roots = [WORKFLOW_DIR, PROJECT_ROOT / "ComfyUIworkflow_api"]
-        if not any(_is_within_directory(candidate_path, root) for root in allowed_roots):
+        catalog = WorkflowCatalog.from_paths(WORKFLOW_DIR / "config.json", WORKFLOW_DIR)
+        canonical_paths = {entry.path.resolve() for entry in catalog.entries.values()}
+        fallback_root = PROJECT_ROOT / "ComfyUIworkflow_api"
+        if (
+            candidate_path not in canonical_paths
+            and not _is_within_directory(candidate_path, WORKFLOW_DIR)
+            and not _is_within_directory(candidate_path, fallback_root)
+        ):
             return None
         if not candidate_path.exists() or not candidate_path.is_file():
             return None

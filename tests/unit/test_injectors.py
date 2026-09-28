@@ -15,7 +15,7 @@ WORKER_SRC = Path(__file__).resolve().parents[2] / "worker" / "src"
 sys.path.insert(0, str(WORKER_SRC.parent.parent))
 sys.path.insert(0, str(WORKER_SRC))
 
-from json_parser import parse_workflow  # noqa: E402
+from workflow.runtime import parse_workflow  # noqa: E402
 from workflow.node_utils import set_node_input_value  # noqa: E402
 
 PROJECT_ROOT = WORKER_SRC.parent.parent

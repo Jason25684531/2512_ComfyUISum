@@ -1,4 +1,18 @@
 {
+  "_runtime": {
+    "model_aliases": {
+      "turbo_fp8": "z-image\\z-image-turbo-fp8-e4m3fn.safetensors",
+      "z_image_turbo": "z-image\\z-image-turbo-fp8-e4m3fn.safetensors"
+    },
+    "aspect_ratios": {
+      "1:1": {"width": 1024, "height": 1024},
+      "16:9": {"width": 1216, "height": 832},
+      "9:16": {"width": 832, "height": 1216},
+      "2:3": {"width": 832, "height": 1248}
+    },
+    "default_aspect_ratio": "1:1",
+    "default_resolution": {"width": 1024, "height": 1024}
+  },
   "text_to_image": {
     "id": "text_to_image",
     "aliases": [],
