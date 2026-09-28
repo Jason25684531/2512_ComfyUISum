@@ -88,25 +88,15 @@ def _dedupe_paths(paths: list[Path]) -> list[Path]:
 
 
 def _build_comfy_root_candidates(project_root: Path) -> list[Path]:
-    studio_env = get_env_str("STUDIO_ENV", "").lower()
-    candidates: list[Path] = []
-
-    if os.name == "nt" or studio_env == "local":
-        candidates.extend([
-            Path("C:/ComfyUI_windows_portable/ComfyUI"),
-            Path("C:/ComfyUI"),
-        ])
-
-    if os.name != "nt" or studio_env == "twcc":
-        candidates.extend([
-            Path("/opt/comfyui"),
-            Path("/opt/ComfyUI"),
-        ])
-
-    candidates.extend([
+    candidates = [
         project_root / "ComfyUI",
         project_root.parent / "ComfyUI_windows_portable" / "ComfyUI",
-    ])
+    ]
+    if os.name == "nt":
+        candidates[0:0] = [
+            Path("C:/ComfyUI_windows_portable/ComfyUI"),
+            Path("C:/ComfyUI"),
+        ]
 
     return _dedupe_paths(candidates)
 

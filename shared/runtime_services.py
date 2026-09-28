@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -66,17 +65,12 @@ def build_runtime_diagnostics(
 
     if redis_status != "healthy" or mysql_status not in {"healthy", "n/a"}:
         validation_status = "degraded"
-    elif worker_status != "online" and contract.deployment_topology.startswith("twcc"):
-        validation_status = "degraded"
-
-    gpu_dependency = "external" if contract.deployment_topology.startswith("twcc") else "local"
-    proxy_fix_enabled = os.environ.get("PROXY_FIX", "false").lower() == "true"
 
     return {
         "deployment_topology": contract.deployment_topology,
         "validation_status": validation_status,
-        "proxy_fix_enabled": proxy_fix_enabled,
-        "gpu_dependency": gpu_dependency,
+        "proxy_fix_enabled": False,
+        "gpu_dependency": "local",
         "runtime_profile": contract.runtime_profile,
         "config_valid": contract.config_valid,
         "workflow_config_exists": contract.workflow_config_exists,

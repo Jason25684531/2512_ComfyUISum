@@ -21,7 +21,6 @@ from flask_limiter.util import get_remote_address
 from markupsafe import escape
 from redis import Redis, RedisError
 from werkzeug.utils import secure_filename
-from werkzeug.middleware.proxy_fix import ProxyFix
 
 # ============================================
 # 添加 shared 模組路徑並載入 .env
@@ -110,13 +109,6 @@ def _sanitize_json_response(response):
     response.set_data(json.dumps(sanitize_response_payload(payload), ensure_ascii=False))
     return response
 
-# ============================================
-# ProxyFix: 修正 TWCC LB → Nginx 反向代理鏈的標頭
-# 僅在 PROXY_FIX=true 時啟用，不影響本地 Windows 開發
-# ============================================
-if os.getenv('PROXY_FIX', 'false').lower() == 'true':
-    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
-
 # Local HTTP development must not mark auth cookies as Secure, otherwise
 # browsers and test clients will store them but never send them back.
 def _get_cookie_secure_setting() -> bool:
@@ -127,7 +119,7 @@ def _get_cookie_secure_setting() -> bool:
     if FLASK_DEBUG_MODE:
         return False
 
-    return os.getenv('PROXY_FIX', 'false').lower() == 'true'
+    return False
 
 
 COOKIE_SECURE = _get_cookie_secure_setting()

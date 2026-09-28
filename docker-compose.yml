@@ -2,12 +2,11 @@
 # 本地 canonical compose（Win ComfyUI + WSL2 Docker 服務層）
 # 使用方式：docker compose -f docker-compose.yml --env-file .env.local up -d
 # 本地環境邊界：docker-compose.yml + .env.local + ComfyUIworkflow/
+# Active deployment contract: this file plus .env.local.
 #
 # ComfyUI 在 Windows 原生執行（不在此 compose 內），
 # worker 透過 host.docker.internal 連接。
 # ============================================
-version: '3.8'
-
 services:
   # =========================================
   # 1. Redis 服務

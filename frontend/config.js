@@ -6,8 +6,7 @@ const _currentPort = window.location.port;
 
 const _isServedByFlask = _isLocalhost && (_currentPort === "5000" || _currentPort === "");
 const _isServedByFastAPI = _isLocalhost && _currentPort === "8000";
-const _isServedByProxy = !_isLocalhost && !_isFileProtocol;
-const _defaultApiOrigin = (_isServedByFlask || _isServedByProxy || _isServedByFastAPI)
+const _defaultApiOrigin = (_isServedByFlask || _isServedByFastAPI)
     ? window.location.origin
     : _API_ORIGIN_LOCAL;
 
@@ -148,4 +147,3 @@ window.STUDIO_RUNTIME_READY = (async () => {
 console.log("API Origin:", window.API_URL);
 console.log("API Base URL:", window.API_BASE_URL);
 console.log("Served by Flask:", _isServedByFlask);
-console.log("Served by Nginx/LB:", _isServedByProxy);

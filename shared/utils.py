@@ -15,9 +15,6 @@ from logging.handlers import TimedRotatingFileHandler
 
 ENV_FILE_MAP = {
     "local": ".env.local",
-    "twcc": ".env.twcc",
-    "dev-s3": ".env.dev-s3",
-    "default": ".env",
 }
 
 
@@ -27,6 +24,10 @@ def _resolve_env_path(base_path: Path) -> tuple[Path, str]:
 
     if explicit_env_file:
         env_path = Path(explicit_env_file)
+        if env_path.name.lower() not in {".env.local", ".env.selected"}:
+            raise ValueError(
+                "Unsupported env contract. Use '.env.local' or the container alias '.env.selected'."
+            )
         if not env_path.is_absolute():
             env_path = (base_path / env_path).resolve()
         return env_path, f"STUDIO_ENV_FILE={explicit_env_file}"
@@ -34,31 +35,19 @@ def _resolve_env_path(base_path: Path) -> tuple[Path, str]:
     if explicit_env_name:
         mapped_file = ENV_FILE_MAP.get(explicit_env_name)
         if mapped_file is None:
-            supported = ", ".join(sorted(ENV_FILE_MAP))
             raise ValueError(
-                f"Unsupported STUDIO_ENV='{explicit_env_name}'. Supported values: {supported}"
+                "Unsupported STUDIO_ENV. The only supported value is 'local'."
             )
         return (base_path / mapped_file).resolve(), f"STUDIO_ENV={explicit_env_name}"
 
     local_env_path = (base_path / ".env.local").resolve()
-    legacy_env_path = (base_path / ".env").resolve()
-
-    if local_env_path.exists() and legacy_env_path.exists():
-        raise RuntimeError(
-            "Ambiguous environment selection: both .env.local and .env exist. "
-            "Set STUDIO_ENV_FILE or STUDIO_ENV explicitly."
-        )
-
-    if local_env_path.exists():
-        return local_env_path, "auto-detect .env.local"
-
-    return legacy_env_path, "default .env"
+    return local_env_path, "auto-detect .env.local"
 
 
 def load_env(base_path: Path = None) -> None:
     """
     自動載入專案根目錄的環境檔案。
-    優先順序：STUDIO_ENV_FILE -> STUDIO_ENV -> .env.local -> .env
+    優先順序：STUDIO_ENV_FILE -> STUDIO_ENV=local -> .env.local
     
     Args:
         base_path: 基礎路徑，預設為呼叫檔案的上上層目錄

@@ -1,56 +1,44 @@
 # Runtime Contract
 
-`system-cleanup-and-refactor` 之後，Studio 的 runtime 與 workflow catalog 以 shared 層為單一來源：
+Runtime diagnostics 與 workflow catalog 的 shared source：
 
-- `shared/runtime_contract.py`
-  - 統一解析 `runtime_profile`
-  - 統一解析 API origin、Redis / DB endpoint
-  - 驗證 `ComfyUIworkflow/config.json` 是否存在且可用
-  - 在 TWCC 拓樸下缺少必要 secrets 時採 `fail-closed`
-- `shared/workflow_catalog.py`
-  - 統一 canonical workflow id
-  - 統一 alias 規則
-  - 統一 frontend metadata、image_map、prompt_map、audio_map
+- shared/runtime_contract.py：runtime profile、local API origin、Redis／MySQL endpoint 與 workflow config 狀態。
+- shared/runtime_services.py：job payload、workflow lookup、runtime config 與 diagnostics payload。
+- shared/workflow_catalog.py：canonical workflow id、alias 與 frontend metadata。
+- ComfyUIworkflow/config.json：workflow metadata 的唯一正式來源。
 
-## Canonical Workflow IDs
+## Local runtime
 
-- `image_edit`
-  - aliases: `single_image_edit`, `single_edit`
-- `multi_image_blend`
-  - aliases: `multi_blend`
-- `sketch_to_image`
-  - aliases: `sketch`
-- `t2v_veo3`
-  - aliases: `T2V`
-- `flf_veo3`
-  - aliases: `FLF`
+Runtime contract 固定描述 local-dev：
 
-新寫入的 job 與 queue payload 都只應保存 canonical id。
+~~~
+Browser → Backend → Redis / MySQL → Worker → Local ComfyUI
+~~~
 
-## Frontend Contract
+API origin 預設為 http://localhost:5000；ComfyUI endpoint 由 COMFYUI_SERVER_URL，或 COMFYUI_HOST 與 COMFYUI_PORT，提供。
 
-- `frontend/config.js` 會先載入 fallback catalog
-- 若 `/api/runtime-config` 可用，前端會再以 backend 回傳的 catalog 覆寫本地 fallback
-- `window.normalizeStudioWorkflowId(...)` 是前端唯一應使用的 workflow 正規化入口
+公開 diagnostics response 會保留既有 deployment_topology、api_origin、runtime_profile、workflow 狀態與 service snapshots 欄位。這些欄位的 shape 不因本 Change 改變。
+
+## Workflow contract
+
+- Backend 與 Worker 透過 shared WorkflowCatalog 解析 workflow。
+- Frontend 先保留既有 fallback catalog，再以 /api/runtime-config 回傳的 catalog 更新。
+- 新 job payload 使用 catalog resolver 的 canonical workflow id。
+- 本 Change 不移除 registry、legacy maps 或 compatibility fallback。
+
+## Local environment
+
+- Host contract 是 .env.local。
+- Container mount alias 是 .env.selected。
+- shared/utils.py 只接受 local env contract。
+- Redis、MySQL、Backend、Worker 與 local ComfyUI endpoint 由同一份 local 設定提供。
 
 ## Validation
 
-建議至少執行：
+~~~powershell
+python -m pytest tests/unit tests/integration -q
+docker compose --env-file .env.local config
+python scripts/validate_local_startup.py
+~~~
 
-```powershell
-python -m pytest tests/test_runtime_contract.py tests/test_workflow_catalog_contract.py tests/test_frontend_runtime_catalog.py tests/test_backend_contract.py tests/test_security_hardening.py tests/test_comfy_workflow_runtime.py -q
-python -m pytest tests/test_backend_static_routes.py -q
-python -m pytest tests/v2/test_frontend_serving.py -q
-```
-
-注意：`tests/v2/test_frontend_serving.py` 需要獨立執行，避免 legacy `backend/src/app.py` 模組名稱 `app` 與 v2 package import 互相污染。
-
-## Rollback
-
-若新 catalog 導致前端或 worker 異常：
-
-1. 回退 `ComfyUIworkflow/config.json`
-2. 回退 `shared/workflow_catalog.py` 與 `shared/runtime_contract.py`
-3. 回退 `frontend/config.js`
-4. 回退 `backend/src/app.py`、`worker/src/workflow_registry.py`、`worker/src/main.py`
-5. 重新執行上面的驗證命令
+若本機 ComfyUI 未啟動，保留 compile、unit、contract 與 Compose config 結果，將完整 Backend → Redis → Worker → ComfyUI flow 標記為 environment blocker。

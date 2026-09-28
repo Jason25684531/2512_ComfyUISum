@@ -1,5 +1,11 @@
 # 專案更新日誌
 
+## 2026-09 Local runtime contract
+
+目前 active runtime 已收斂為 docker-compose.yml + .env.local，服務為 Redis、MySQL、Backend、Worker 與本機 ComfyUI。容器內的 .env.selected 只是在 mount 時使用的 local env alias。
+
+本次 deployment cleanup 移除已停用的 deployment-only assets，並保留既有 API、job status、workflow metadata、workflow compatibility fallback、ComfyUIworkflow/ 與 ComfyUIworkflow_api/。完整驗證命令以 README 與 OpenSpec Change 1 為準。
+
 ## 更新日期
 2026-02-05 (最新更新 - 代碼架構優化與重複代碼清理)
 
@@ -1306,8 +1312,6 @@ ComfyUISum/
 ├── scripts/                    # 腳本目錄 (9 個檔案)
 │   ├── start_unified_windows.bat   # Windows 統一啟動 ⭐
 │   ├── start_unified_linux.sh      # Linux 統一啟動
-│   ├── start_ngrok.bat             # Ngrok 啟動
-│   ├── update_ngrok_config.ps1     # Ngrok 配置更新
 │   ├── monitor_status.bat          # 狀態監控
 │   ├── run_stack_test.bat          # 整合測試
 │   └── *.bat/*.py                  # 其他輔助腳本

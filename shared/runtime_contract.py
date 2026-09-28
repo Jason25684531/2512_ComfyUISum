@@ -88,7 +88,7 @@ class RuntimeContractLoader:
         self.platform_name = (platform_name or os.name).strip()
 
     def load(self) -> RuntimeContract:
-        deployment_topology = _get_env(self.env, "DEPLOYMENT_TOPOLOGY", "local-dev") or "local-dev"
+        deployment_topology = "local-dev"
         runtime_profile = _get_env(self.env, "COMFYUI_RUNTIME_PROFILE", "")
         if not runtime_profile:
             runtime_profile = "windows" if self.platform_name.lower().startswith("win") else "linux"
@@ -118,14 +118,10 @@ class RuntimeContractLoader:
             default_port=3306,
             alias_names={"mysql", "studio-mysql"},
         )
-        api_origin = self._resolve_api_origin(deployment_topology)
-        missing_secrets = self._missing_secrets(deployment_topology)
-        secrets_ok = len(missing_secrets) == 0
-        validation_code = "ready"
-        if not secrets_ok:
-            validation_code = "blocked"
-        elif not config_valid:
-            validation_code = "degraded"
+        api_origin = self._resolve_api_origin()
+        missing_secrets: tuple[str, ...] = ()
+        secrets_ok = True
+        validation_code = "ready" if config_valid else "degraded"
 
         comfyui = self._resolve_comfyui_binding()
 
@@ -178,23 +174,12 @@ class RuntimeContractLoader:
             alias_applied=resolution.alias_applied,
         )
 
-    def _resolve_api_origin(self, deployment_topology: str) -> str:
+    def _resolve_api_origin(self) -> str:
         configured_origin = _get_env(self.env, "PUBLIC_API_ORIGIN", "") or _get_env(self.env, "API_ORIGIN", "")
         if configured_origin:
             return configured_origin
 
-        lb_domain = _get_env(self.env, "LB_DOMAIN", "")
-        if deployment_topology.startswith("twcc") and lb_domain:
-            return f"https://{lb_domain}"
         return "http://localhost:5000"
-
-    def _missing_secrets(self, deployment_topology: str) -> tuple[str, ...]:
-        required = []
-        if deployment_topology.startswith("twcc"):
-            required.extend(["TWCC_API_KEY", "TWCC_PROJECT_ID", "TWCC_GPU_VM_ID"])
-
-        missing = [name for name in required if not _get_env(self.env, name, "")]
-        return tuple(missing)
 
     def _resolve_comfyui_binding(self) -> ComfyUIBindingSnapshot:
         raw_url = _get_env(self.env, "COMFYUI_SERVER_URL", "")
