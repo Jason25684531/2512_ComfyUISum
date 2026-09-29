@@ -333,6 +333,7 @@ class JobProcessor:
                 job_logger.warning("audio staging failed for %s: %s", audio_file, exc)
 
         video_file = job_data.get("video", "")
+        video_mode = job_data.get("video_mode", "")
         comfyui_video_file = ""
         if video_file:
             try:
@@ -352,6 +353,7 @@ class JobProcessor:
             image_files=image_files,
             audio_file=comfyui_audio_file,
             video_file=comfyui_video_file,
+            video_mode=video_mode,
             retake_start=job_data.get("retake_start"),
             retake_end=job_data.get("retake_end"),
             extra_params=job_data.get("extra_params") or {},

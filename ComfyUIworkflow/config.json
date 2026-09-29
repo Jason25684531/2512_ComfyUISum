@@ -411,6 +411,19 @@
     },
     "prompt_map": {"main": {"node_id": "352", "input_key": "value"}},
     "image_map": {"input": "167"},
+    "video_mode_map": {
+      "t2v": {
+        "node_id": "290",
+        "input_key": "value",
+        "value": true,
+        "omit_inputs": [{"node_id": "349", "input_key": "image"}]
+      },
+      "i2v": {
+        "node_id": "290",
+        "input_key": "value",
+        "value": false
+      }
+    },
     "model_overrides": {"windows": []},
     "frontend": {
       "title": "LTX Image to Video",

@@ -40,6 +40,7 @@ from config import (
     WARMUP_STATUS_KEY,
 )
 from job_service import BackendRuntime
+from line_routes import create_blueprint as create_line_blueprint
 from system_routes import create_blueprint as create_system_blueprint
 
 
@@ -152,6 +153,9 @@ def create_app() -> Flask:
     )
     application.extensions["backend_runtime"] = runtime
     application.extensions["limiter"] = limiter
+    line_blueprint = create_line_blueprint(runtime)
+    application.extensions["line_adapter"] = line_blueprint.line_adapter
+    application.extensions["line_completion_monitor"] = line_blueprint.line_completion_monitor
 
     CORS(
         application,
@@ -163,6 +167,8 @@ def create_app() -> Flask:
     application.register_blueprint(admin_bp)
     application.register_blueprint(create_api_blueprint(limiter))
     application.register_blueprint(create_system_blueprint(limiter))
+    application.register_blueprint(line_blueprint)
+    line_blueprint.line_completion_monitor.start()
 
     @application.before_request
     def before_request_handler():

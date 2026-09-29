@@ -98,6 +98,36 @@ def apply_model_overrides(workflow: dict, overrides: list[dict], profile: str) -
     return applied_count
 
 
+def apply_video_mode(workflow: dict, workflow_entry, video_mode: str | None) -> bool:
+    if not video_mode:
+        return True
+    mode_map = getattr(workflow_entry, "video_mode_map", {}) or {}
+    mode_config = mode_map.get(video_mode)
+    if not isinstance(mode_config, dict):
+        print(f"[Parser] Warning: unsupported video_mode: {safe_log_value(video_mode)}")
+        return False
+
+    node_id = mode_config.get("node_id")
+    input_key = mode_config.get("input_key", "value")
+    if not node_id or not set_node_input_value(
+        workflow,
+        str(node_id),
+        str(input_key),
+        mode_config.get("value"),
+        f"video_mode={video_mode}",
+    ):
+        return False
+
+    for omitted in mode_config.get("omit_inputs", []):
+        if not isinstance(omitted, dict):
+            continue
+        node = workflow.get(str(omitted.get("node_id")))
+        input_name = omitted.get("input_key")
+        if isinstance(node, dict) and isinstance(node.get("inputs"), dict) and input_name:
+            node["inputs"].pop(input_name, None)
+    return True
+
+
 def _read_workflow_config(config_path: Path, workflow_entry, workflow_name: str) -> tuple[dict[str, Any], dict[str, Any]]:
     config_data = getattr(workflow_entry, "_config", None) or {}
     workflow_config = {}
@@ -132,6 +162,7 @@ def apply_workflow_injections(
     image_files: dict,
     audio_file: str,
     video_file: str = None,
+    video_mode: str = None,
     extra_params: dict = None,
 ) -> dict:
     config_data = registry.raw_config
@@ -154,6 +185,9 @@ def apply_workflow_injections(
 
     if seed == -1:
         seed = random.randint(0, 2**32 - 1)
+
+    if video_mode and not apply_video_mode(workflow, workflow_entry, video_mode):
+        raise ValueError(f"unsupported video mode for workflow: {workflow_name}")
 
     print(f"[Parser] 生成設定: {width}x{height}, Seed: {seed}, Model: {model}")
 

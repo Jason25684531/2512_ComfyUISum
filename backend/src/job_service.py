@@ -166,6 +166,7 @@ class JobService:
                 return {"error": "retake_start must be >= 0 and less than retake_end"}, 400
 
         extra_params: dict[str, Any] = {}
+        video_mode = str(data.get("video_mode") or "").strip().lower()
         if workflow == "ltx_retake_v2v":
             extra_params = {"retake_start": retake_start, "retake_end": retake_end}
 
@@ -214,11 +215,20 @@ class JobService:
                 extra_params[field] = value
 
         if workflow in {"ltx_i2v", "ltx_flf"}:
-            required_images = ("input",) if workflow == "ltx_i2v" else ("first_frame", "last_frame")
             images = data.get("images") or {}
-            for field in required_images:
-                if not images.get(field):
-                    return {"error": f"{field} image is required"}, 400
+            if workflow == "ltx_i2v":
+                video_mode = video_mode or ("i2v" if images.get("input") else "t2v")
+                if video_mode not in {"t2v", "i2v"}:
+                    return {"error": "video_mode must be t2v or i2v"}, 400
+                if video_mode == "i2v" and not images.get("input"):
+                    return {"error": "input image is required for i2v"}, 400
+                if video_mode == "t2v" and images.get("input"):
+                    return {"error": "t2v does not accept an image"}, 400
+            else:
+                video_mode = ""
+                for field in ("first_frame", "last_frame"):
+                    if not images.get(field):
+                        return {"error": f"{field} image is required"}, 400
             for field, minimum, maximum in (("video_width", 512, 1920), ("video_height", 512, 1920), ("video_duration", 1, 10)):
                 if field not in data:
                     continue
@@ -247,7 +257,7 @@ class JobService:
 
         job_id = str(uuid.uuid4())
         builder_data = dict(data)
-        builder_data.update(video=video_filename, retake_start=retake_start, retake_end=retake_end, extra_params=extra_params)
+        builder_data.update(video=video_filename, video_mode=video_mode, retake_start=retake_start, retake_end=retake_end, extra_params=extra_params)
         created_at = datetime.now(timezone.utc)
         submitted_at = iso_utc()
         try:
