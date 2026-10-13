@@ -29,6 +29,7 @@ def parse_workflow(
     image_files: dict = None,
     audio_file: str = None,
     video_file: str = None,
+    video_mode: str = None,
     retake_start: float = None,
     retake_end: float = None,
     extra_params: dict = None,
@@ -74,6 +75,7 @@ def parse_workflow(
         image_files=image_files or {},
         audio_file=audio_file,
         video_file=video_file,
+        video_mode=video_mode,
         extra_params=merged_extra_params,
     )
 

@@ -50,6 +50,7 @@ def build_job_data(
         "images": data.get("images", {}),
         "audio": data.get("audio", ""),
         "video": data.get("video", ""),
+        "video_mode": data.get("video_mode", ""),
         "retake_start": data.get("retake_start", 0),
         "retake_end": data.get("retake_end", 0),
         "extra_params": data.get("extra_params", {}),

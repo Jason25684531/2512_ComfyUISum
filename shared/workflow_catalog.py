@@ -51,6 +51,7 @@ class WorkflowCatalogEntry:
     mapping: dict[str, Any]
     prompt_map: dict[str, Any]
     image_map: dict[str, Any]
+    video_mode_map: dict[str, Any]
     audio_map: dict[str, Any]
     model_overrides: dict[str, Any]
     version: str
@@ -182,6 +183,35 @@ class WorkflowCatalog:
                 elif not has_input_key(node, "image"):
                     errors.append(f"{entry.workflow_id}: image_map.{field_name} cannot inject {node_id}.image")
 
+            for mode_name, mode_config in entry.video_mode_map.items():
+                if not isinstance(mode_config, dict):
+                    errors.append(f"{entry.workflow_id}: video_mode_map.{mode_name} must be an object")
+                    continue
+                node_id = mode_config.get("node_id")
+                input_key = mode_config.get("input_key", "value")
+                node = find_workflow_node(workflow, node_id)
+                if node is None:
+                    errors.append(f"{entry.workflow_id}: video_mode_map.{mode_name} missing node {node_id}")
+                elif not has_input_key(node, input_key):
+                    errors.append(
+                        f"{entry.workflow_id}: video_mode_map.{mode_name} cannot inject {node_id}.{input_key}"
+                    )
+                for omitted in mode_config.get("omit_inputs", []):
+                    if not isinstance(omitted, dict):
+                        errors.append(f"{entry.workflow_id}: video_mode_map.{mode_name}.omit_inputs must contain objects")
+                        continue
+                    omitted_node = find_workflow_node(workflow, omitted.get("node_id"))
+                    omitted_input = omitted.get("input_key", "")
+                    if omitted_node is None:
+                        errors.append(
+                            f"{entry.workflow_id}: video_mode_map.{mode_name}.omit_inputs missing node {omitted.get('node_id')}"
+                        )
+                    elif not has_input_key(omitted_node, omitted_input):
+                        errors.append(
+                            f"{entry.workflow_id}: video_mode_map.{mode_name}.omit_inputs cannot remove "
+                            f"{omitted.get('node_id')}.{omitted_input}"
+                        )
+
             for field_name, target in entry.audio_map.items():
                 node_id = target.get("node_id")
                 input_key = target.get("input_key", "audio")
@@ -271,6 +301,7 @@ class WorkflowCatalog:
                 mapping=mapping if isinstance(mapping, dict) else {},
                 prompt_map=config.get("prompt_map", {}) if isinstance(config.get("prompt_map", {}), dict) else {},
                 image_map=config.get("image_map", {}) if isinstance(config.get("image_map", {}), dict) else {},
+                video_mode_map=config.get("video_mode_map", {}) if isinstance(config.get("video_mode_map", {}), dict) else {},
                 audio_map=audio_map if isinstance(audio_map, dict) else {},
                 model_overrides=config.get("model_overrides", {})
                 if isinstance(config.get("model_overrides", {}), dict)

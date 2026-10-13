@@ -169,6 +169,19 @@ def test_ltx_i2v_injection_and_defaults():
     print("[OK] LTX I2V injection preserves native values and template defaults")
 
 
+def test_ltx_i2v_t2v_mode_omits_image_reference():
+    workflow = parse_workflow(
+        workflow_name="ltx_i2v",
+        prompt="A text-only video prompt",
+        seed=7,
+        video_mode="t2v",
+        image_files={},
+    )
+    assert workflow["290"]["inputs"]["value"] is True
+    assert "image" not in workflow["349"]["inputs"]
+    assert workflow["352"]["inputs"]["value"] == "A text-only video prompt"
+
+
 def test_ltx_flf_injection_and_models_are_not_overridden():
     template = json.loads((WORKFLOW_DIR / "LTX2.3_FLF_api.json").read_text(encoding="utf-8"))
     workflow = parse_workflow(
