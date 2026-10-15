@@ -27,17 +27,11 @@ PyMySQL==1.1.1                # Durable job observability (MySQL DB-API)
 cryptography>=42,<45          # MySQL 8 caching_sha2_password support
 
 # ============================================
-# 設定管理 (shared/runtime_settings.py)
-# ============================================
-pydantic>=2.11,<3.0
-pydantic-settings>=2.10,<3.0
-
-# ============================================
 # 工具類
 # ============================================
 python-dotenv==1.0.0          # 環境變數管理
 colorlog==6.8.0               # Phase 2: 彩色日誌輸出
-rich==13.7.0                  # Phase 6: 終端美化與 RichHandler
+rich==13.7.0                  # Required by Flask-Limiter
 
 # ============================================
 # 測試依賴 (可選，用於 tests/)

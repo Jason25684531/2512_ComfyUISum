@@ -38,6 +38,20 @@ def find_nodes_by_class(workflow: dict, class_type: str) -> list:
     return nodes
 
 
+def apply_runtime_credentials(workflow: dict, targets: dict, credentials: dict) -> None:
+    """Inject server settings without passing credential values to logging helpers."""
+    for setting, destinations in targets.items():
+        value = credentials.get(setting)
+        if not value:
+            raise ValueError("Required StudioCore runtime credential is not configured")
+        for target in destinations:
+            node = workflow.get(str(target["node_id"]), {})
+            inputs = node.get("inputs", {})
+            if target["input_key"] not in inputs:
+                raise ValueError("StudioCore runtime credential target is missing")
+            inputs[target["input_key"]] = value
+
+
 def apply_prompt_map_if_configured(workflow: dict, workflow_config, prompt: str) -> bool:
     if not prompt:
         return False
@@ -109,13 +123,15 @@ def apply_video_mode(workflow: dict, workflow_entry, video_mode: str | None) -> 
 
     node_id = mode_config.get("node_id")
     input_key = mode_config.get("input_key", "value")
-    if not node_id or not set_node_input_value(
+    if node_id and not set_node_input_value(
         workflow,
         str(node_id),
         str(input_key),
         mode_config.get("value"),
         f"video_mode={video_mode}",
     ):
+        return False
+    if not node_id and "omit_inputs" not in mode_config:
         return False
 
     for omitted in mode_config.get("omit_inputs", []):

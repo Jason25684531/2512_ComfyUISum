@@ -59,6 +59,67 @@ class BackendRuntime:
         return bool(self._observability_provider())
 
 
+def _normalize_catalog_inputs(entry, data: dict[str, Any], prompt: str) -> tuple[dict[str, Any], dict[str, Any], str | None]:
+    extra = data.get("extra_params") or {}
+    if not isinstance(extra, dict):
+        return {}, {}, "extra_params must be an object"
+    raw_images = data.get("images") or {}
+    if isinstance(raw_images, list) and entry.input_types.get("images") == "multi-image":
+        images = {"images": raw_images}
+    elif isinstance(raw_images, dict):
+        images = raw_images
+    else:
+        return {}, {}, "invalid images"
+    normalized_images = {
+        key: value for key, value in images.items()
+        if key in getattr(entry, "image_map", {}) and value
+    }
+
+    normalized: dict[str, Any] = {}
+    required = set(entry.required_inputs)
+    fields = required | set(entry.optional_inputs)
+    for name in fields:
+        input_type = entry.input_types.get(name, "text")
+        if input_type in {"image", "multi-image"}:
+            value = images.get(name)
+        elif name == "prompt":
+            value = prompt
+        else:
+            value = extra.get(name, data.get(name, entry.defaults.get(name)))
+
+        if name in required and value in (None, "", []):
+            return {}, {}, f"{name} is required"
+        if input_type == "multi-image":
+            value = value or []
+            if not isinstance(value, list) or any(not isinstance(image, str) or not image for image in value):
+                return {}, {}, f"invalid {name}"
+            if len(value) > entry.max_items[name]:
+                return {}, {}, f"too many {name} (max {entry.max_items[name]})"
+            normalized_images.update({f"{name}.{index}": image for index, image in enumerate(value)})
+            continue
+        if value is None or value == "":
+            continue
+        if input_type == "image" and not isinstance(value, str):
+            return {}, {}, f"invalid {name}"
+
+        choices = entry.choices.get(name)
+        if choices:
+            matched = next((choice for choice in choices if value == choice or str(value) == str(choice)), None)
+            if matched is None:
+                return {}, {}, f"invalid {name}"
+            value = matched
+        elif input_type == "number":
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                return {}, {}, f"invalid {name}"
+            if name == "seed" and (not isinstance(value, int) or not -1 <= value <= 2**64 - 1):
+                return {}, {}, "invalid seed"
+
+        if name != "prompt" and input_type not in {"image", "multi-image"}:
+            normalized[name] = value
+
+    return normalized, normalized_images, None
+
+
 class JobService:
     def __init__(self, runtime: BackendRuntime) -> None:
         self.runtime = runtime
@@ -119,6 +180,8 @@ class JobService:
         return {"filename": safe_filename, "original_name": escape(str(file_storage.filename))}, 200
 
     def submit(self, data: dict[str, Any], *, request_id: str, user_label: str) -> tuple[dict[str, Any], int]:
+        if not isinstance(data.get("prompt", ""), str):
+            return {"error": "prompt must be a string"}, 400
         prompt = data.get("prompt", "").strip()
         prompts = data.get("prompts", [])
         try:
@@ -127,6 +190,14 @@ class JobService:
             return {"error": "Unsupported workflow"}, 400
 
         workflow = workflow_resolution.workflow_id
+        catalog_extra_params, catalog_images, catalog_input_error = _normalize_catalog_inputs(
+            workflow_resolution.entry, data, prompt
+        )
+        if catalog_input_error:
+            return {"error": catalog_input_error}, 400
+        data = {**data, "images": catalog_images}
+        if "seed" in catalog_extra_params:
+            data["seed"] = catalog_extra_params.pop("seed")
         if workflow_resolution.alias_hit:
             self.logger.info(
                 "workflow alias normalized: requested=%s canonical=%s source=%s",
@@ -167,6 +238,13 @@ class JobService:
 
         extra_params: dict[str, Any] = {}
         video_mode = str(data.get("video_mode") or "").strip().lower()
+        entry = workflow_resolution.entry
+        if {"first_frame", "last_frame"}.issubset(entry.input_types):
+            first = bool(catalog_images.get("first_frame"))
+            last = bool(catalog_images.get("last_frame"))
+            video_mode = "fl2v" if first and last else "i2v" if first else "l2v" if last else "t2v"
+            if video_mode not in entry.video_mode_map:
+                return {"error": "Unsupported frame combination"}, 400
         if workflow == "ltx_retake_v2v":
             extra_params = {"retake_start": retake_start, "retake_end": retake_end}
 
@@ -242,6 +320,8 @@ class JobService:
                 if not minimum <= value <= maximum:
                     return {"error": f"{field} must be between {minimum} and {maximum}"}, 400
                 extra_params[field] = value
+
+        extra_params.update(catalog_extra_params)
 
         audio_value = data.get("audio", "")
         if audio_value and isinstance(audio_value, str) and audio_value.startswith("data:audio"):

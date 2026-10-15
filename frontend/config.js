@@ -32,7 +32,7 @@ function _buildWorkflowAliasIndex(catalog) {
 
 function _getWorkflowCatalog() {
     return Array.isArray(window.STUDIO_RUNTIME_CONFIG.workflow_catalog)
-        ? window.STUDIO_RUNTIME_CONFIG.workflow_catalog
+        ? window.STUDIO_RUNTIME_CONFIG.workflow_catalog.filter((entry) => entry.enabled !== false)
         : [];
 }
 
@@ -52,7 +52,7 @@ window.getStudioWorkflowCatalog = function getStudioWorkflowCatalog() {
 window.buildStudioToolStates = function buildStudioToolStates(previousStates = {}) {
     const nextStates = {};
     window.getStudioWorkflowCatalog()
-        .filter((entry) => entry.category === "image")
+        .filter((entry) => entry.category === "image" || (entry.category === "video" && (entry.required_inputs || []).length))
         .forEach((entry) => {
             nextStates[entry.id] = {
                 prompt: "",
@@ -69,18 +69,38 @@ window.buildStudioToolStates = function buildStudioToolStates(previousStates = {
 window.buildStudioImageToolConfig = function buildStudioImageToolConfig() {
     const config = {};
     window.getStudioWorkflowCatalog()
-        .filter((entry) => entry.category === "image")
+        .filter((entry) => entry.category === "image" || (entry.category === "video" && (entry.required_inputs || []).length))
         .forEach((entry) => {
+            const inputTypes = entry.input_types || {};
+            const schemaInputs = [...(entry.required_inputs || []), ...(entry.optional_inputs || [])];
+            const imageInputs = schemaInputs.filter((name) =>
+                ["image", "multi-image"].includes(inputTypes[name])
+            );
             config[entry.id] = {
-                uploads: (entry.frontend.inputs || []).map((inputId) => ({
-                    id: inputId,
-                    label: inputId
+                uploads: (imageInputs.length ? imageInputs : (entry.frontend.inputs || [])).flatMap((inputId) => {
+                    const isMulti = inputTypes[inputId] === "multi-image";
+                    const count = isMulti ? entry.max_items[inputId] : 1;
+                    const label = inputId
                         .split("_")
                         .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-                        .join(" "),
-                    icon: inputId === "input" ? "image" : (inputId === "source" ? "user" : "image")
-                })),
-                color: entry.frontend.color
+                        .join(" ");
+                    return Array.from({length: count}, (_, index) => ({
+                        id: isMulti ? `${inputId}.${index}` : inputId,
+                        field: inputId,
+                        label: `${label}${count > 1 ? ` ${index + 1}` : ''}${(entry.optional_inputs || []).includes(inputId) ? ' (optional)' : ''}`,
+                        icon: inputId === "source" ? "user" : "image"
+                    }));
+                }),
+                color: entry.frontend.color,
+                requiredInputs: entry.required_inputs || [],
+                optionalInputs: entry.optional_inputs || [],
+                inputTypes,
+                choices: entry.choices || {},
+                units: entry.units || {},
+                defaults: entry.defaults || {},
+                actionLabel: entry.frontend.action_label || "Generate",
+                outputType: entry.output_type || "image",
+                supportedModes: entry.supported_modes || []
             };
         });
     return config;
@@ -89,7 +109,7 @@ window.buildStudioImageToolConfig = function buildStudioImageToolConfig() {
 window.buildStudioToolInfo = function buildStudioToolInfo() {
     const info = {};
     window.getStudioWorkflowCatalog()
-        .filter((entry) => entry.category === "image")
+        .filter((entry) => entry.category === "image" || (entry.category === "video" && (entry.required_inputs || []).length))
         .forEach((entry) => {
             info[entry.id] = {
                 name: entry.frontend.title,

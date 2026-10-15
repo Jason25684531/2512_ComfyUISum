@@ -10,26 +10,16 @@ import os
 from pathlib import Path
 
 from shared import env_resolution
+from shared.env_resolution import (
+    read_env_bool as get_env_bool,
+    read_env_float as get_env_float,
+    read_env_int as get_env_int,
+    read_env_str as get_env_str,
+)
 
 
 # 平台名稱（os.name 在 Windows 為 "nt"，統一映射成 env_resolution 預期的字串）
 _PLATFORM_NAME = "windows" if os.name == "nt" else "linux"
-
-
-def get_env_str(name: str, default: str = "") -> str:
-    return env_resolution.read_env_str(name, default)
-
-
-def get_env_int(name: str, default: int) -> int:
-    return env_resolution.read_env_int(name, default)
-
-
-def get_env_float(name: str, default: float) -> float:
-    return env_resolution.read_env_float(name, default)
-
-
-def get_env_bool(name: str, default: bool = False) -> bool:
-    return env_resolution.read_env_bool(name, default)
 
 
 def _expand_path_value(path_value: str) -> str:
@@ -222,6 +212,8 @@ STORAGE_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 # ==========================================
 WORKFLOW_DIR = resolve_path_setting("WORKFLOW_DIR", PROJECT_ROOT / "ComfyUIworkflow", PROJECT_ROOT)
 WORKFLOW_CONFIG_PATH = WORKFLOW_DIR / "config.json"
+STUDIOCORE_AZURE_API_KEY = get_env_str("STUDIOCORE_AZURE_API_KEY", "").strip()
+STUDIOCORE_AZURE_ENDPOINT = get_env_str("STUDIOCORE_AZURE_ENDPOINT", "").strip()
 
 # ==========================================
 # 任務配置 (共用)

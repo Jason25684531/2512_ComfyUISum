@@ -1,12 +1,13 @@
 """Workflow resolution, loading, and API-payload construction."""
 from __future__ import annotations
 
-import copy
-
 from shared.workflow_catalog import WorkflowCatalog, WorkflowResolution
 
-from config import COMFYUI_RUNTIME_PROFILE, WORKFLOW_CONFIG_PATH, WORKFLOW_DIR
-from workflow.injectors import apply_workflow_injections
+from config import (
+    COMFYUI_RUNTIME_PROFILE, WORKFLOW_CONFIG_PATH, WORKFLOW_DIR,
+    STUDIOCORE_AZURE_API_KEY, STUDIOCORE_AZURE_ENDPOINT,
+)
+from workflow.injectors import apply_runtime_credentials, apply_workflow_injections
 from workflow.loader import get_workflow_path, load_workflow
 
 
@@ -49,7 +50,7 @@ def parse_workflow(
     if not isinstance(runtime_model_overrides, list):
         runtime_model_overrides = []
 
-    workflow = copy.deepcopy(load_workflow(workflow_name))
+    workflow = load_workflow(workflow_name)
     merged_extra_params = {}
     if retake_start is not None:
         merged_extra_params["retake_start"] = retake_start
@@ -58,7 +59,7 @@ def parse_workflow(
     if extra_params:
         merged_extra_params.update(extra_params)
 
-    return apply_workflow_injections(
+    workflow = apply_workflow_injections(
         workflow=workflow,
         workflow_name=workflow_name,
         workflow_entry=workflow_entry,
@@ -78,6 +79,15 @@ def parse_workflow(
         video_mode=video_mode,
         extra_params=merged_extra_params,
     )
+    apply_runtime_credentials(
+        workflow,
+        workflow_entry.mapping.get("runtime_credentials", {}),
+        {
+            "STUDIOCORE_AZURE_API_KEY": STUDIOCORE_AZURE_API_KEY,
+            "STUDIOCORE_AZURE_ENDPOINT": STUDIOCORE_AZURE_ENDPOINT,
+        },
+    )
+    return workflow
 
 
 __all__ = [

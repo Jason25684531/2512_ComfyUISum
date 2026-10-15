@@ -139,6 +139,12 @@ class ComfyClient:
         }
         
         try:
+            if any(node.get("inputs", {}).get("api_key") for node in workflow.values() if isinstance(node, dict)):
+                stats = requests.get(f"{self.http_url}/system_stats", timeout=COMFY_HTTP_TIMEOUT)
+                stats.raise_for_status()
+                if "--disable-metadata" not in stats.json().get("system", {}).get("argv", []):
+                    self._log("error", "Credential workflows require ComfyUI --disable-metadata")
+                    return None
             response = requests.post(
                 f"{self.http_url}/prompt",
                 json=payload,
@@ -155,7 +161,7 @@ class ComfyClient:
                 return None
                 
         except Exception as e:
-            self._log("error", "ComfyUI prompt submit error: %s", e)
+            self._log("error", "ComfyUI prompt submit error: %s", type(e).__name__)
             return None
 
     def verify_regional_caption_contract(self, workflow: dict) -> dict:
@@ -373,11 +379,15 @@ class ComfyClient:
                     # 執行錯誤
                     elif msg_type == "execution_error":
                         if msg_data.get("prompt_id") == prompt_id:
+                            error_msg = get_public_error_message(msg_data.get("exception_message", "Unknown error"))
                             if on_event:
-                                on_event("execution_error", msg_data)
-                            error_msg = msg_data.get("exception_message", "未知錯誤")
-                            result["error"] = get_public_error_message(error_msg)
-                            self._log("error", "ComfyUI execution error: %s", error_msg)
+                                on_event("execution_error", {
+                                    "node": msg_data.get("node"),
+                                    "node_type": msg_data.get("node_type"),
+                                    "exception_message": error_msg,
+                                })
+                            result["error"] = error_msg
+                            self._log("error", "ComfyUI execution error at node %s: %s", msg_data.get("node"), error_msg)
                             break
                     elif msg_type == "execution_interrupted" and msg_data.get("prompt_id") == prompt_id:
                         if on_event:
@@ -397,7 +407,7 @@ class ComfyClient:
                 result["recovered_from_history"] = True
             else:
                 result["error"] = get_public_error_message(str(e))
-            self._log("error", "ComfyUI WebSocket error: %s", e)
+            self._log("error", "ComfyUI WebSocket error: %s", type(e).__name__)
         
         return result
     
@@ -681,77 +691,6 @@ class ComfyClient:
             print(f"[ComfyClient] ✗ 中斷錯誤: {e}")
             return False
     
-    def process_task(self, workflow: dict, job_id: str = None) -> dict:
-        """
-        完整處理一個任務
-        
-        Args:
-            workflow: 已解析的 workflow dict
-            job_id: 任務 ID
-        
-        Returns:
-            {
-                "success": bool,
-                "image_url": str or None,
-                "error": str or None
-            }
-        """
-        result = {
-            "success": False,
-            "image_url": None,
-            "error": None
-        }
-        
-        # 1. 檢查連接
-        if not self.check_connection():
-            result["error"] = "???? ComfyUI?????????"
-            return result
-        
-        # 2. 提交任務
-        prompt_id = self.queue_prompt(workflow)
-        if not prompt_id:
-            result["error"] = "任務提交失敗"
-            return result
-        
-        # 3. 等待完成
-        ws_result = self.wait_for_completion(prompt_id)
-        
-        if not ws_result["success"]:
-            result["error"] = ws_result.get("error", "執行失敗")
-            return result
-        
-        # 4. 複製輸出
-        output_candidates = []
-        
-        # 優先檢查影片/GIF
-        if ws_result["videos"]:
-            output_candidates = ws_result["videos"]
-        elif ws_result["gifs"]:
-            output_candidates = ws_result["gifs"]
-        elif ws_result["images"]:
-            output_candidates = ws_result["images"]
-            
-        if output_candidates:
-            for output_file in output_candidates:
-                new_filename = self.copy_output_file(
-                    filename=output_file.get("filename"),
-                    subfolder=output_file.get("subfolder", ""),
-                    file_type=output_file.get("type", "output"),
-                    job_id=job_id
-                )
-                
-                if new_filename:
-                    result["success"] = True
-                    result["image_url"] = f"/outputs/{new_filename}"
-                    break
-        else:
-            result["error"] = "沒有輸出檔案"
-        
-        if not result["success"] and result["error"] is None:
-            result["error"] = "??????"
-        return result
-
-
 # ==========================================
 # 測試用
 # ==========================================

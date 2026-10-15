@@ -298,6 +298,9 @@ class JobProcessor:
 
     def _execute(self, job_data, job_id, workflow_name, workflow_entry, workflow_adapter, tracker, job_logger) -> None:
         update_job_status(self.redis, job_id, "processing", progress=10)
+        if not self.comfy.check_connection():
+            raise RuntimeError(COMFYUI_UNAVAILABLE)
+
         prompt = job_data.get("prompt", "")
         prompts = job_data.get("prompts", [])
         seed = job_data.get("seed", -1)
@@ -319,10 +322,11 @@ class JobProcessor:
                 continue
             try:
                 filename = save_base64_image(base64_data, job_id, field_name, job_logger)
-                image_files[field_name] = filename
                 sync_image_to_comfyui_input(self.comfy, Path(COMFYUI_INPUT_DIR) / filename, job_logger)
+                image_files[field_name] = filename
             except Exception as exc:
                 job_logger.warning("image staging failed for %s: %s", field_name, exc)
+                raise RuntimeError(f"Input image upload failed for {field_name}") from exc
 
         audio_file = job_data.get("audio", "")
         comfyui_audio_file = ""
@@ -331,6 +335,7 @@ class JobProcessor:
                 comfyui_audio_file = copy_audio_to_comfyui(audio_file, job_id, self.comfy, job_logger)
             except Exception as exc:
                 job_logger.warning("audio staging failed for %s: %s", audio_file, exc)
+                raise RuntimeError("Input audio upload failed") from exc
 
         video_file = job_data.get("video", "")
         video_mode = job_data.get("video_mode", "")
@@ -340,6 +345,7 @@ class JobProcessor:
                 comfyui_video_file = copy_video_to_comfyui(video_file, job_id, self.comfy, job_logger)
             except Exception as exc:
                 job_logger.warning("video staging failed for %s: %s", video_file, exc)
+                raise RuntimeError("Input video upload failed") from exc
         update_job_status(self.redis, job_id, "processing", progress=20)
 
         job_logger.info("parse start")
@@ -364,8 +370,6 @@ class JobProcessor:
             tracker.event(job_id, "workflow_loaded", resulting_status="running")
 
         update_job_status(self.redis, job_id, "processing", progress=30)
-        if not self.comfy.check_connection():
-            raise RuntimeError(COMFYUI_UNAVAILABLE)
         if workflow_name == "ideogram4_regional_t2i":
             self.comfy.verify_regional_caption_contract(workflow)
         prompt_id = self.comfy.queue_prompt(workflow)

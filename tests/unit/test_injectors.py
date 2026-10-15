@@ -22,6 +22,18 @@ PROJECT_ROOT = WORKER_SRC.parent.parent
 WORKFLOW_DIR = PROJECT_ROOT / "ComfyUIworkflow"
 
 
+def test_seedvr2_image_and_scale_injection():
+    for scale in (2, 4):
+        workflow = parse_workflow(
+            workflow_name="image_upscale_seedvr2",
+            image_files={"image": "fixture.png"},
+            extra_params={"scale": scale},
+        )
+        assert workflow["1"]["inputs"]["image"] == "fixture.png"
+        assert workflow["83"]["inputs"]["resize_type.multiplier"] == scale
+        assert workflow["9"]["class_type"] == "SaveImage"
+
+
 def file_hash(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 

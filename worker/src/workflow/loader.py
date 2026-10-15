@@ -53,6 +53,9 @@ def load_workflow(workflow_name: str) -> dict:
         print(f"[Parser] UI workflow detected; using API fallback: {fallback_path}")
         workflow_data = _load_json_file(fallback_path)
 
+    if _is_ui_workflow_data(workflow_data):
+        raise ValueError(f"Workflow {workflow_path.name} API fallback is UI format")
+
     if not isinstance(workflow_data, dict):
         raise TypeError(f"Workflow data must be dict, got {type(workflow_data).__name__}")
 

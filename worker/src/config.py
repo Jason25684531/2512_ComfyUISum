@@ -22,6 +22,8 @@ from shared.config_base import (
     STORAGE_DIR,
     STORAGE_INPUT_DIR,
     STORAGE_OUTPUT_DIR,
+    STUDIOCORE_AZURE_API_KEY,
+    STUDIOCORE_AZURE_ENDPOINT,
     WORKFLOW_CONFIG_PATH,
     WORKFLOW_DIR,
     get_env_bool,
@@ -30,13 +32,14 @@ from shared.config_base import (
     get_env_str,
     parse_csv_env,
     parse_key_int_map,
-)
-from shared.runtime_settings import (
-    build_legacy_comfy_runtime_settings,
+    resolve_path_setting,
+    resolve_service_endpoint,
 )
 
 
-_COMFY_RUNTIME = build_legacy_comfy_runtime_settings()
+_COMFY_ENDPOINT = resolve_service_endpoint(
+    "COMFYUI_SERVER_URL", "COMFY_HOST", "COMFY_PORT", "127.0.0.1", 8188
+)
 
 COMFYUI_RUNTIME_PROFILE = get_env_str(
     "COMFYUI_RUNTIME_PROFILE",
@@ -58,14 +61,16 @@ DEFAULT_VAE_MODEL = get_env_str(
     "z-image\\ae.safetensors",
 )
 
-COMFY_HOST = _COMFY_RUNTIME.endpoint.host
-COMFY_PORT = _COMFY_RUNTIME.endpoint.port
-COMFYUI_SERVER_URL = _COMFY_RUNTIME.endpoint.http_url
-COMFY_HTTP_URL = _COMFY_RUNTIME.endpoint.http_url
-COMFY_WS_URL = _COMFY_RUNTIME.endpoint.ws_url
-COMFYUI_INPUT_DIR = _COMFY_RUNTIME.input_dir
-COMFYUI_OUTPUT_DIR = _COMFY_RUNTIME.output_dir
-STORAGE_MODELS_DIR = _COMFY_RUNTIME.models_dir
+COMFY_HOST = _COMFY_ENDPOINT.host
+COMFY_PORT = _COMFY_ENDPOINT.port
+COMFYUI_SERVER_URL = _COMFY_ENDPOINT.http_url
+COMFY_HTTP_URL = _COMFY_ENDPOINT.http_url
+COMFY_WS_URL = _COMFY_ENDPOINT.ws_url
+COMFYUI_INPUT_DIR = resolve_path_setting("COMFYUI_INPUT_DIR", COMFYUI_ROOT / "input", PROJECT_ROOT)
+COMFYUI_OUTPUT_DIR = resolve_path_setting("COMFYUI_OUTPUT_DIR", COMFYUI_ROOT / "output", PROJECT_ROOT)
+STORAGE_MODELS_DIR = resolve_path_setting("STORAGE_MODELS_DIR", STORAGE_DIR / "models", PROJECT_ROOT)
+COMFYUI_INPUT_DIR.mkdir(parents=True, exist_ok=True)
+STORAGE_MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Worker 特定配置
 TEMP_FILE_MAX_AGE_HOURS = get_env_int("TEMP_FILE_MAX_AGE_HOURS", 1)

@@ -53,3 +53,6 @@ LTX_Web.png
 docs/*
 mutilangel_ref/*
 ComfyUIAPI_Backup/*
+ComfyUIworkflow/*
+ComfyUIworkflow_api/*
+logs/*

@@ -82,15 +82,6 @@ except Exception:
     redis_client = None
 
 
-class UserIdFilter(logging.Filter):
-    def filter(self, record):
-        try:
-            record.user_id = getattr(g, "user_id", "INIT")
-        except (RuntimeError, AttributeError):
-            record.user_id = "INIT"
-        return True
-
-
 def _request_origin() -> str | None:
     origin = request.headers.get("Origin")
     return origin if origin in ALLOWED_CORS_ORIGINS else None

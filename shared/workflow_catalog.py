@@ -19,6 +19,7 @@ class WorkflowFrontendMetadata:
     icon: str
     color: str
     inputs: tuple[str, ...]
+    action_label: str
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -27,6 +28,7 @@ class WorkflowFrontendMetadata:
             "icon": self.icon,
             "color": self.color,
             "inputs": list(self.inputs),
+            "action_label": self.action_label,
         }
 
 
@@ -58,6 +60,14 @@ class WorkflowCatalogEntry:
     enabled: bool
     observability: dict[str, Any]
     frontend: WorkflowFrontendMetadata
+    required_inputs: tuple[str, ...]
+    optional_inputs: tuple[str, ...]
+    input_types: dict[str, str]
+    max_items: dict[str, int]
+    choices: dict[str, list[Any]]
+    units: dict[str, str]
+    defaults: dict[str, Any]
+    output_type: str
 
     def to_public_dict(self) -> dict[str, Any]:
         return {
@@ -69,6 +79,15 @@ class WorkflowCatalogEntry:
             "version": self.version,
             "enabled": self.enabled,
             "frontend": self.frontend.to_dict(),
+            "required_inputs": list(self.required_inputs),
+            "optional_inputs": list(self.optional_inputs),
+            "input_types": dict(self.input_types),
+            "max_items": dict(self.max_items),
+            "choices": dict(self.choices),
+            "units": dict(self.units),
+            "defaults": dict(self.defaults),
+            "output_type": self.output_type,
+            "supported_modes": list(self.video_mode_map),
         }
 
 
@@ -92,7 +111,6 @@ class WorkflowCatalog:
         self._runtime = self._build_runtime_metadata(raw_config.get("_runtime"))
         self._entries = self._build_entries(raw_config)
         self._alias_index = self._build_alias_index(self._entries)
-        self._alias_hits: dict[str, int] = {}
 
     @classmethod
     def from_paths(cls, config_path: Path, workflow_dir: Path) -> "WorkflowCatalog":
@@ -119,7 +137,7 @@ class WorkflowCatalog:
 
     def resolve(self, workflow_name: str | None) -> WorkflowResolution:
         requested_id = (workflow_name or "text_to_image").strip() or "text_to_image"
-        if requested_id in self._entries:
+        if requested_id in self._entries and self._entries[requested_id].enabled:
             return WorkflowResolution(
                 requested_id=requested_id,
                 workflow_id=requested_id,
@@ -128,8 +146,7 @@ class WorkflowCatalog:
             )
 
         canonical_id = self._alias_index.get(requested_id)
-        if canonical_id and canonical_id in self._entries:
-            self._alias_hits[requested_id] = self._alias_hits.get(requested_id, 0) + 1
+        if canonical_id and canonical_id in self._entries and self._entries[canonical_id].enabled:
             return WorkflowResolution(
                 requested_id=requested_id,
                 workflow_id=canonical_id,
@@ -139,11 +156,8 @@ class WorkflowCatalog:
 
         raise KeyError(f"Unknown workflow: {requested_id}")
 
-    def get_alias_hit_counts(self) -> dict[str, int]:
-        return dict(self._alias_hits)
-
     def frontend_catalog(self) -> list[dict[str, Any]]:
-        return [entry.to_public_dict() for entry in self._entries.values()]
+        return [entry.to_public_dict() for entry in self._entries.values() if entry.enabled]
 
     def validate(self) -> list[str]:
         errors: list[str] = []
@@ -190,7 +204,9 @@ class WorkflowCatalog:
                 node_id = mode_config.get("node_id")
                 input_key = mode_config.get("input_key", "value")
                 node = find_workflow_node(workflow, node_id)
-                if node is None:
+                if not node_id and "omit_inputs" in mode_config:
+                    pass
+                elif node is None:
                     errors.append(f"{entry.workflow_id}: video_mode_map.{mode_name} missing node {node_id}")
                 elif not has_input_key(node, input_key):
                     errors.append(
@@ -266,6 +282,7 @@ class WorkflowCatalog:
                 icon=str(frontend_config.get("icon", "sparkles")),
                 color=str(frontend_config.get("color", "blue")),
                 inputs=_tuple_of_strings(frontend_config.get("inputs", [])),
+                action_label=str(frontend_config.get("action_label", "Generate")),
             )
             mapping = config.get("mapping", {})
             observability = config.get("observability", {})
@@ -310,6 +327,14 @@ class WorkflowCatalog:
                 enabled=bool(config.get("enabled", True)),
                 observability=observability,
                 frontend=frontend,
+                required_inputs=_tuple_of_strings(config.get("required_inputs", [])),
+                optional_inputs=_tuple_of_strings(config.get("optional_inputs", [])),
+                input_types=dict(config.get("input_types", {})) if isinstance(config.get("input_types", {}), dict) else {},
+                max_items=dict(config.get("max_items", {})),
+                choices=dict(config.get("choices", {})) if isinstance(config.get("choices", {}), dict) else {},
+                units=dict(config.get("units", {})) if isinstance(config.get("units", {}), dict) else {},
+                defaults=dict(config.get("defaults", {})) if isinstance(config.get("defaults", {}), dict) else {},
+                output_type=str(config.get("output_type", config.get("category", "image"))),
             )
         return entries
 

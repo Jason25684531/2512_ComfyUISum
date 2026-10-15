@@ -468,5 +468,371 @@
       "color": "violet",
       "inputs": ["first_frame", "last_frame"]
     }
+  },
+  "image_upscale_seedvr2": {
+    "id": "image_upscale_seedvr2",
+    "aliases": [],
+    "file": "StudioCore_261006_Image_Upscale_Seedvr2_7b_int8.json",
+    "description": "Upscale an image with SeedVR2.",
+    "category": "image",
+    "version": "1.0.0",
+    "enabled": true,
+    "observability": {
+      "model_source": {
+        "node_id": "80",
+        "input": "unet_name"
+      },
+      "important_nodes": [
+        {
+          "node_id": "9",
+          "stage": "output_save"
+        }
+      ],
+      "output": {
+        "strategy": "node_output",
+        "node_ids": [
+          "9"
+        ]
+      },
+      "timeout_seconds": 3600,
+      "sensitive_fields": [
+        "images"
+      ],
+      "custom_dimensions": {}
+    },
+    "mapping": {
+      "output_node_id": "9",
+      "param_map": {
+        "scale": {
+          "node_id": "83",
+          "input_key": "resize_type.multiplier"
+        }
+      }
+    },
+    "image_map": {
+      "image": "1"
+    },
+    "model_overrides": {
+      "windows": [],
+      "linux": []
+    },
+    "required_inputs": [
+      "image"
+    ],
+    "optional_inputs": [
+      "scale"
+    ],
+    "input_types": {
+      "image": "image",
+      "scale": "select"
+    },
+    "choices": {
+      "scale": [
+        2,
+        4
+      ]
+    },
+    "units": {
+      "scale": "x"
+    },
+    "defaults": {
+      "scale": 2
+    },
+    "output_type": "image",
+    "frontend": {
+      "title": "圖像放大",
+      "description": "SeedVR2 image upscaling",
+      "icon": "scan",
+      "color": "cyan",
+      "action_label": "放大"
+    }
+  },
+  "image_gpt25_sunburst": {
+    "id": "image_gpt25_sunburst",
+    "aliases": [],
+    "file": "StudioCore_261006_Image_GPT_Image_2.5_Sunburst_StudioCore_Edition.json",
+    "category": "image",
+    "version": "1.0.0",
+    "enabled": true,
+    "description": "Generate images with GPT Image 2.5 Sunburst.",
+    "model_overrides": {
+      "windows": [],
+      "linux": []
+    },
+    "output_type": "image",
+    "observability": {
+      "model_source": {
+        "node_id": "34",
+        "input": "deployment_name"
+      },
+      "important_nodes": [
+        {
+          "node_id": "18",
+          "stage": "output_save"
+        }
+      ],
+      "output": {
+        "strategy": "node_output",
+        "node_ids": [
+          "18"
+        ]
+      },
+      "timeout_seconds": 3600,
+      "sensitive_fields": [
+        "prompt",
+        "images"
+      ],
+      "custom_dimensions": {}
+    },
+    "frontend": {
+      "title": "圖像生成",
+      "description": "Prompt with up to three optional reference images.",
+      "icon": "sparkles",
+      "color": "amber",
+      "action_label": "Generate"
+    },
+    "prompt_map": {
+      "prompt": {
+        "node_id": "37",
+        "input_key": "String"
+      }
+    },
+    "image_map": {
+      "images.0": "31",
+      "images.1": "35",
+      "images.2": "36"
+    },
+    "mapping": {
+      "output_node_id": "18",
+      "param_map": {
+        "size": {
+          "node_id": "34",
+          "input_key": "size"
+        },
+        "background": {
+          "node_id": "34",
+          "input_key": "background"
+        }
+      },
+      "runtime_credentials": {
+        "STUDIOCORE_AZURE_API_KEY": [
+          {
+            "node_id": "27",
+            "input_key": "api_key"
+          },
+          {
+            "node_id": "34",
+            "input_key": "api_key"
+          }
+        ],
+        "STUDIOCORE_AZURE_ENDPOINT": [
+          {
+            "node_id": "27",
+            "input_key": "endpoint_url"
+          },
+          {
+            "node_id": "34",
+            "input_key": "endpoint_url"
+          }
+        ]
+      }
+    },
+    "required_inputs": [
+      "prompt"
+    ],
+    "optional_inputs": [
+      "images",
+      "size",
+      "background"
+    ],
+    "input_types": {
+      "prompt": "text",
+      "images": "multi-image",
+      "size": "select",
+      "background": "select"
+    },
+    "max_items": {
+      "images": 3
+    },
+    "choices": {
+      "size": [
+        "1024x1024",
+        "1536x1024",
+        "1024x1536"
+      ],
+      "background": [
+        "opaque",
+        "transparent"
+      ]
+    },
+    "defaults": {
+      "size": "1024x1024",
+      "background": "opaque"
+    }
+  },
+  "video_minimax_h3": {
+    "id": "video_minimax_h3",
+    "aliases": [],
+    "file": "StudioCore_261006_Video_Minimax H3_StudioCore_Edition.json",
+    "category": "video",
+    "version": "1.0.0",
+    "enabled": true,
+    "description": "Generate video with MiniMax H3.",
+    "model_overrides": {
+      "windows": [],
+      "linux": []
+    },
+    "output_type": "video",
+    "observability": {
+      "model_source": {
+        "node_id": "105:6",
+        "input": "unet_name"
+      },
+      "important_nodes": [
+        {
+          "node_id": "127",
+          "stage": "output_save"
+        }
+      ],
+      "output": {
+        "strategy": "node_output",
+        "node_ids": [
+          "127"
+        ]
+      },
+      "timeout_seconds": 3600,
+      "sensitive_fields": [
+        "prompt",
+        "images"
+      ],
+      "custom_dimensions": {}
+    },
+    "frontend": {
+      "title": "影像生成",
+      "description": "Prompt with optional first and last frames.",
+      "icon": "video",
+      "color": "violet",
+      "action_label": "Generate"
+    },
+    "prompt_map": {
+      "prompt": {
+        "node_id": "143",
+        "input_key": "String"
+      }
+    },
+    "image_map": {
+      "first_frame": "136",
+      "last_frame": "135"
+    },
+    "mapping": {
+      "output_node_id": "127",
+      "seed_node_ids": [
+        "105:15"
+      ],
+      "param_map": {
+        "width": {
+          "node_id": "105:104",
+          "input_key": "width"
+        },
+        "height": {
+          "node_id": "105:104",
+          "input_key": "height"
+        },
+        "duration": {
+          "node_id": "105:111",
+          "input_key": "value"
+        }
+      },
+      "runtime_credentials": {
+        "STUDIOCORE_AZURE_API_KEY": [
+          {
+            "node_id": "139",
+            "input_key": "api_key"
+          }
+        ],
+        "STUDIOCORE_AZURE_ENDPOINT": [
+          {
+            "node_id": "139",
+            "input_key": "endpoint_url"
+          }
+        ]
+      }
+    },
+    "required_inputs": [
+      "prompt"
+    ],
+    "optional_inputs": [
+      "first_frame",
+      "last_frame",
+      "width",
+      "height",
+      "duration",
+      "seed"
+    ],
+    "input_types": {
+      "prompt": "text",
+      "first_frame": "image",
+      "last_frame": "image",
+      "width": "select",
+      "height": "select",
+      "duration": "select",
+      "seed": "number"
+    },
+    "choices": {
+      "width": [
+        1024,
+        1344,
+        768
+      ],
+      "height": [
+        1024,
+        768,
+        1344
+      ],
+      "duration": [
+        3,
+        5,
+        10
+      ]
+    },
+    "defaults": {
+      "width": 1024,
+      "height": 1024,
+      "duration": 5,
+      "seed": -1
+    },
+    "video_mode_map": {
+      "t2v": {
+        "omit_inputs": [
+          {
+            "node_id": "105:104",
+            "input_key": "first_frame"
+          },
+          {
+            "node_id": "105:104",
+            "input_key": "last_frame"
+          }
+        ]
+      },
+      "i2v": {
+        "omit_inputs": [
+          {
+            "node_id": "105:104",
+            "input_key": "last_frame"
+          }
+        ]
+      },
+      "fl2v": {
+        "omit_inputs": []
+      },
+      "l2v": {
+        "omit_inputs": [
+          {
+            "node_id": "105:104",
+            "input_key": "first_frame"
+          }
+        ]
+      }
+    }
   }
 }

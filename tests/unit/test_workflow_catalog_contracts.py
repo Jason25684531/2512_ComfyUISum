@@ -19,12 +19,17 @@ def catalog():
 def test_all_config_entries_and_public_metadata_are_covered(catalog):
     raw = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
     workflow_raw = {key: value for key, value in raw.items() if key != "_runtime"}
-    assert len(workflow_raw) == 12
-    assert len(catalog.entries) == 12
+    assert len(workflow_raw) == 15
+    assert len(catalog.entries) == 15
     assert catalog.validate() == []
 
-    aliases = {alias for entry in catalog.entries.values() for alias in entry.aliases}
+    aliases = {alias for entry in catalog.entries.values() if entry.enabled for alias in entry.aliases}
     for workflow_id, config in workflow_raw.items():
+        if not config.get("enabled", True):
+            with pytest.raises(KeyError):
+                catalog.resolve(workflow_id)
+            assert workflow_id not in {entry["id"] for entry in catalog.frontend_catalog()}
+            continue
         resolution = catalog.resolve(workflow_id)
         assert resolution.entry.path == WORKFLOW_DIR / config["file"]
         assert resolution.entry.path.is_file()
@@ -33,6 +38,55 @@ def test_all_config_entries_and_public_metadata_are_covered(catalog):
     assert catalog.resolve("single_image_edit").workflow_id == "image_edit"
     assert "_runtime" not in {entry["id"] for entry in catalog.frontend_catalog()}
     assert aliases == {alias for entry in catalog.frontend_catalog() for alias in entry["aliases"]}
+
+
+def test_seedvr2_catalog_contract(catalog):
+    entry = catalog.resolve("image_upscale_seedvr2").entry
+    public = entry.to_public_dict()
+    api_workflow = json.loads(entry.path.parent.parent.joinpath("ComfyUIworkflow_api", entry.file).read_text(encoding="utf-8"))
+
+    assert entry.category == "image"
+    assert entry.required_inputs == ("image",)
+    assert entry.optional_inputs == ("scale",)
+    assert entry.image_map == {"image": "1"}
+    assert entry.mapping["param_map"]["scale"] == {
+        "node_id": "83",
+        "input_key": "resize_type.multiplier",
+    }
+    assert entry.mapping["output_node_id"] == "9"
+    assert entry.choices["scale"] == [2, 4]
+    assert entry.defaults["scale"] == 2
+    assert entry.units["scale"] == "x"
+    assert public["output_type"] == "image"
+    assert public["frontend"]["action_label"] == "放大"
+    assert "api_key" not in json.dumps(public).lower()
+    assert api_workflow["1"]["inputs"]["image"] == "__STUDIOCORE_IMAGE_INPUT__"
+
+
+def test_studiocore_workflow_assets_have_no_embedded_credentials():
+    import re
+
+    paths = [
+        *WORKFLOW_DIR.glob("StudioCore*.json"),
+        *(WORKFLOW_DIR.parent / "ComfyUIworkflow_api").glob("StudioCore*.json"),
+    ]
+    credential_keys = re.compile(r"api[_-]?key|access[_-]?token|credential|authorization", re.I)
+    embedded = []
+
+    def inspect(value, path=""):
+        if isinstance(value, dict):
+            for key, child in value.items():
+                location = f"{path}.{key}" if path else key
+                if credential_keys.search(str(key)) and child not in (None, "", [], {}):
+                    embedded.append(location)
+                inspect(child, location)
+        elif isinstance(value, list):
+            for index, child in enumerate(value):
+                inspect(child, f"{path}[{index}]")
+
+    for path in paths:
+        inspect(json.loads(path.read_text(encoding="utf-8")))
+    assert embedded == []
 
 
 def test_catalog_exposes_canonical_image_mappings(catalog):

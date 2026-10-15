@@ -41,7 +41,7 @@ def create_blueprint(limiter) -> Blueprint:
             return jsonify({"error": INTERNAL_SERVER_ERROR_MESSAGE}), 500
 
     @bp.get("/api/status/<job_id>")
-    @limiter.limit("2 per second")
+    @limiter.limit("6 per second")
     def status(job_id: str):
         try:
             payload, code = _runtime().job_service.status(job_id)

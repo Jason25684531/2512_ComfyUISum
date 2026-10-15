@@ -711,7 +711,7 @@
                                 </div>
                                 <!-- Result Images Grid -->
                                 <div id="canvas-results" class="hidden w-full h-full">
-                                    <div id="results-grid" class="grid gap-4 w-full h-full place-items-center">
+                                    <div id="results-grid" class="grid gap-4 w-full h-full place-items-center" style="align-items: safe center;">
                                     </div>
                                 </div>
 
@@ -744,6 +744,8 @@
 
                                     <!-- Upload Zones -->
                                     <div id="upload-zones" class="flex gap-4 h-28"></div>
+
+                                    <div id="runtime-inputs" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-4"></div>
 
                                     <!-- Prompt Bar -->
                                     <div id="single-prompt-row" class="flex gap-4">
@@ -894,7 +896,7 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="flex flex-nowrap justify-center gap-10">
+                            <div id="video-tool-grid" class="flex flex-nowrap justify-center gap-10">
                                 <!-- LTX ReTake V2V -->
                                 <button onclick="selectVideoTool('ltx_retake_v2v')"
                                     class="tool-card glass-card rounded-[32px] p-10 w-64 h-64 flex flex-col flex-shrink-0 items-center justify-center text-center cursor-pointer hover:border-orange-500/50 group">
@@ -1472,15 +1474,20 @@
             const grid = document.getElementById('tool-grid');
             if (!grid) return;
             grid.replaceChildren();
+            const videoGrid = document.getElementById('video-tool-grid');
+            videoGrid?.querySelectorAll('[data-workflow]').forEach(button => button.remove());
             window.getStudioWorkflowCatalog()
-                .filter((entry) => entry.category === 'image')
+                .filter((entry) => entry.category === 'image' || (entry.category === 'video' && (entry.required_inputs || []).length))
                 .forEach((entry) => {
                     const frontend = entry.frontend || {};
                     const button = document.createElement('button');
                     button.type = 'button';
                     button.className = 'tool-card glass-card rounded-[32px] p-10 w-64 h-64 flex flex-col flex-shrink-0 items-center justify-center text-center cursor-pointer group';
                     button.dataset.workflow = entry.id;
-                    button.addEventListener('click', () => selectTool(entry.id));
+                    button.addEventListener('click', () => {
+                        if (entry.category === 'video') navigateTo('canvas');
+                        selectTool(entry.id);
+                    });
 
                     const icon = document.createElement('div');
                     icon.className = 'w-24 h-24 flex items-center justify-center rounded-2xl mx-auto mb-4 group-hover:scale-110 transition-all border border-white/20';
@@ -1498,7 +1505,7 @@
                     description.textContent = frontend.description || '';
 
                     button.append(icon, title, description);
-                    grid.appendChild(button);
+                    (entry.category === 'video' ? videoGrid : grid)?.appendChild(button);
                 });
             if (typeof lucide !== 'undefined') lucide.createIcons();
         }
@@ -1726,6 +1733,7 @@
                         <span>Generate</span>
                     `;
                     lucide.createIcons();
+                    btn.querySelector('span').textContent = toolConfig[toolName]?.actionLabel || 'Generate';
                 }
             }
 
@@ -1763,27 +1771,46 @@
             } else {
                 uploadZones.classList.remove('h-12');
                 uploadZones.classList.add('h-28');
-                uploadZones.innerHTML = config.uploads.map(upload => `
-                    <div id="zone-${upload.id}" 
-                         class="upload-zone flex-1 rounded-xl flex flex-col items-center justify-center p-4 relative bg-black/20 overflow-hidden"
-                         onclick="triggerUpload('${upload.id}')" 
-                         ondragover="event.preventDefault(); this.classList.add('border-${config.color}-500/70', 'bg-${config.color}-500/10')"
-                         ondragleave="this.classList.remove('border-${config.color}-500/70', 'bg-${config.color}-500/10')"
-                         ondrop="handleDrop(event, '${upload.id}')">
-                        <input type="file" id="file-${upload.id}" class="hidden" accept="image/*" onchange="handleFileSelect(event, '${upload.id}')" />
-                        <div id="preview-${upload.id}" class="hidden absolute inset-0">
+                uploadZones.replaceChildren();
+                config.uploads.forEach(upload => {
+                    const zone = document.createElement('div');
+                    zone.id = `zone-${upload.id}`;
+                    zone.className = 'upload-zone flex-1 rounded-xl flex flex-col items-center justify-center p-4 relative bg-black/20 overflow-hidden';
+                    zone.tabIndex = 0;
+                    zone.setAttribute('role', 'button');
+                    zone.setAttribute('aria-label', upload.label);
+                    zone.onclick = () => triggerUpload(upload.id);
+                    zone.onkeydown = event => {
+                        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); triggerUpload(upload.id); }
+                    };
+                    zone.ondragover = event => event.preventDefault();
+                    zone.ondrop = event => handleDrop(event, upload.id);
+                    zone.innerHTML = `
+                        <input type="file" class="hidden" accept="image/*" />
+                        <div class="hidden absolute inset-0">
                             <img src="" alt="Preview" class="w-full h-full object-cover rounded-xl" />
-                            <button onclick="event.stopPropagation(); clearUpload('${upload.id}')" class="absolute top-2 right-2 p-1 bg-black/70 rounded-full hover:bg-red-500/80 z-10">
+                            <button type="button" aria-label="Remove image" class="absolute top-2 right-2 p-1 bg-black/70 rounded-full hover:bg-red-500/80 z-10">
                                 <i data-lucide="x" class="w-4 h-4 text-white"></i>
                             </button>
                         </div>
-                        <div id="placeholder-${upload.id}" class="flex flex-col items-center pointer-events-none">
-                            <i data-lucide="${upload.icon}" class="w-6 h-6 text-gray-400 mb-2"></i>
-                            <span class="text-xs font-bold uppercase text-gray-400">${upload.label}</span>
+                        <div class="flex flex-col items-center pointer-events-none">
+                            <i class="w-6 h-6 text-gray-400 mb-2"></i>
+                            <span class="text-xs font-bold uppercase text-gray-400"></span>
                             <span class="text-[10px] text-gray-600 mt-1">Click or Drop</span>
-                        </div>
-                    </div>
-                `).join('');
+                        </div>`;
+                    const input = zone.querySelector('input');
+                    input.id = `file-${upload.id}`;
+                    input.onclick = event => event.stopPropagation();
+                    input.onchange = event => handleFileSelect(event, upload.id);
+                    const preview = zone.children[1];
+                    preview.id = `preview-${upload.id}`;
+                    preview.querySelector('button').onclick = event => { event.stopPropagation(); clearUpload(upload.id); };
+                    const placeholder = zone.children[2];
+                    placeholder.id = `placeholder-${upload.id}`;
+                    placeholder.querySelector('i').setAttribute('data-lucide', upload.icon);
+                    placeholder.querySelector('span').textContent = upload.label;
+                    uploadZones.appendChild(zone);
+                });
             }
 
             // 重置畫布到 placeholder 狀態
@@ -1795,14 +1822,59 @@
             const multiAngleFields = document.getElementById('multiangle-fields');
             const promptInput = document.getElementById('prompt-input');
             const enhanceButton = document.getElementById('btn-enhance');
+            const generateButton = document.getElementById('btn-generate');
             const canvasPlaceholder = document.getElementById('canvas-placeholder');
+            const runtimeInputs = document.getElementById('runtime-inputs');
+            const usesSchema = config.requiredInputs.length + config.optionalInputs.length > 0;
+            document.getElementById('workspace-settings')?.classList.toggle('hidden', usesSchema);
+            if (usesSchema && document.getElementById('seed-input')) {
+                document.getElementById('seed-input').value = String(config.defaults.seed ?? -1);
+            }
             const isRegional = currentTool === 'ideogram4_regional_t2i';
             const isMultiAngle = currentTool === 'multi_angle';
+            const hasPrompt = config.requiredInputs.includes('prompt') || config.optionalInputs.includes('prompt');
+            const showPrompt = hasPrompt || config.requiredInputs.length === 0 && config.optionalInputs.length === 0;
             if (regionalFields) regionalFields.classList.toggle('hidden', !isRegional);
             if (regionalMount) regionalMount.classList.toggle('hidden', !isRegional);
             if (multiAngleFields) multiAngleFields.classList.toggle('hidden', !isMultiAngle);
-            if (promptInput) promptInput.classList.toggle('hidden', isMultiAngle);
-            if (enhanceButton) enhanceButton.classList.toggle('hidden', isMultiAngle);
+            if (promptInput) promptInput.classList.toggle('hidden', !showPrompt || isMultiAngle);
+            if (enhanceButton) enhanceButton.classList.toggle('hidden', !showPrompt || isMultiAngle || usesSchema);
+            if (generateButton?.querySelector('span')) {
+                generateButton.querySelector('span').textContent = config.actionLabel;
+            }
+            if (runtimeInputs) {
+                runtimeInputs.replaceChildren();
+                const names = [...new Set([...config.requiredInputs, ...config.optionalInputs])];
+                names.forEach((name) => {
+                    const inputType = config.inputTypes[name];
+                    if (['prompt', 'seed'].includes(name) || ['image', 'multi-image'].includes(inputType)) return;
+                    const choices = config.choices[name] || [];
+                    if (!['select', 'number', 'text'].includes(inputType)) return;
+
+                    const field = document.createElement('label');
+                    field.className = 'flex flex-col gap-2 text-sm text-gray-300';
+                    const label = document.createElement('span');
+                    label.textContent = name.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+                    const control = document.createElement(inputType === 'select' && choices.length ? 'select' : 'input');
+                    control.dataset.runtimeInput = name;
+                    control.className = 'custom-input rounded-xl px-4 py-3';
+                    if (control.tagName === 'SELECT') {
+                        const unit = config.units[name] || '';
+                        choices.forEach((choice) => {
+                            const option = document.createElement('option');
+                            option.value = String(choice);
+                            option.textContent = `${choice}${unit}`;
+                            control.appendChild(option);
+                        });
+                    } else {
+                        control.type = inputType === 'number' ? 'number' : 'text';
+                    }
+                    if (config.defaults[name] !== undefined) control.value = String(config.defaults[name]);
+                    field.append(label, control);
+                    runtimeInputs.appendChild(field);
+                });
+                runtimeInputs.classList.toggle('hidden', runtimeInputs.childElementCount === 0);
+            }
             uploadZones.classList.toggle('hidden', isRegional);
             if (canvasPlaceholder) canvasPlaceholder.classList.toggle('hidden', isRegional);
             if (isRegional && regionalMount) {
@@ -2740,18 +2812,27 @@
             const prompt = promptInput ? promptInput.value.trim() : '';
             const seed = seedInput ? (parseInt(seedInput.value) || -1) : -1;
             const model = modelSelect ? modelSelect.value : 'turbo_fp8';
+            const config = toolConfig[currentTool];
+            if (config?.supportedModes.length && uploadedImages.last_frame && !uploadedImages.first_frame && !config.supportedModes.includes('l2v')) {
+                showStatus('⚠️ Please upload the first frame before the last frame', 'warning');
+                return Promise.reject('Unsupported frame combination');
+            }
 
             // 驗證輸入
-            if (!prompt && currentTool === 'text_to_image') {
+            const promptRequired = currentTool === 'text_to_image' || config?.requiredInputs.includes('prompt');
+            if (!prompt && promptRequired) {
                 showStatus('⚠️ Please enter a prompt', 'warning');
                 return Promise.reject('No prompt');
             }
 
             // 驗證圖片上傳
-            const config = toolConfig[currentTool];
             if (config && config.uploads) {
                 for (const upload of config.uploads) {
-                    if (!uploadedImages[upload.id]) {
+                    const required = config.requiredInputs.length === 0 || config.requiredInputs.includes(upload.field);
+                    const hasImage = config.inputTypes[upload.field] === 'multi-image'
+                        ? config.uploads.some(slot => slot.field === upload.field && uploadedImages[slot.id])
+                        : uploadedImages[upload.id];
+                    if (required && !hasImage) {
                         showStatus(`⚠️ Please upload ${upload.label}`, 'warning');
                         return Promise.reject('Missing image upload');
                     }
@@ -2802,8 +2883,23 @@
                     model: model,
                     aspect_ratio: currentRatio,
                     batch_size: currentBatchSize,
-                    images: uploadedImages
+                    images: config.inputTypes.images === 'multi-image'
+                        ? config.uploads.filter(upload => upload.field === 'images').map(upload => uploadedImages[upload.id]).filter(Boolean)
+                        : uploadedImages
                 };
+
+                const extraParams = {};
+                document.querySelectorAll('#runtime-inputs [data-runtime-input]').forEach((control) => {
+                    const name = control.dataset.runtimeInput;
+                    if (control.value === '') return;
+                    if (control.type === 'number') {
+                        extraParams[name] = Number(control.value);
+                    } else {
+                        const choice = (config.choices[name] || []).find((item) => String(item) === control.value);
+                        extraParams[name] = choice === undefined ? control.value : choice;
+                    }
+                });
+                if (Object.keys(extraParams).length) payload.extra_params = extraParams;
 
                 // Ideogram4 Regional Prompt: 附加寬高、bbox 與風格欄位
                 if (currentTool === 'ideogram4_regional_t2i') {
@@ -2903,31 +2999,17 @@
                             const imageUrl = resolveOutputUrl(outputPath);
 
                             if (currentTool === toolName) {
-                                showResult(imageUrl);
+                                showResult(imageUrl, toolName);
                                 showStatus('✅ Generation complete!', 'success');
                                 restoreButton(btn, originalHTML);
                             } else {
                                 // 保存結果到該工具的狀態
-                                const tempCanvasHtml = `
-                                    <div class="relative group flex flex-col items-center">
-                                        <div class="relative overflow-hidden rounded-2xl border border-white/10 shadow-2xl">
-                                            <img src="${imageUrl}" alt="Generated Image" 
-                                                 class="max-w-full max-h-[60vh] object-contain" />
-                                            <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                                <a href="${imageUrl}" download class="px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-xl font-bold text-white flex items-center gap-2 hover:brightness-110 transition-all shadow-lg">
-                                                    <i data-lucide="download" class="w-5 h-5"></i>
-                                                    <span>下載圖片</span>
-                                                </a>
-                                            </div>
-                                        </div>
-                                    </div>
-                                `;
-                                window.toolStates[toolName].canvasHtml = tempCanvasHtml;
+                                window.toolStates[toolName].canvasHtml = createResultElement(imageUrl, toolName).outerHTML;
                                 window.toolStates[toolName].canvasHidden = false;
                             }
                         } else {
                             if (currentTool === toolName) {
-                                showStatus('⚠️ Finished but no image path returned', 'warning');
+                                showStatus('⚠️ Finished but no output path returned', 'warning');
                             }
                         }
 
@@ -2955,27 +3037,32 @@
         /**
          * 顯示生成結果
          */
-        function showResult(imageUrl) {
+        function createResultElement(url, toolName) {
+            const isVideo = toolConfig[toolName]?.outputType === 'video';
+            const wrapper = document.createElement('div');
+            wrapper.className = 'relative overflow-hidden rounded-2xl border border-white/10 shadow-2xl';
+            const media = document.createElement(isVideo ? 'video' : 'img');
+            media.src = url;
+            media.className = 'max-w-full max-h-[60vh] object-contain';
+            if (isVideo) { media.controls = true; media.preload = 'metadata'; }
+            else media.alt = 'Generated image';
+            const download = document.createElement('a');
+            download.href = url;
+            download.download = '';
+            download.className = 'absolute top-3 right-3 px-4 py-2 bg-black/70 rounded-xl text-white';
+            download.textContent = isVideo ? 'Download MP4' : 'Download image';
+            wrapper.append(media, download);
+            return wrapper;
+        }
+
+        function showResult(imageUrl, toolName = currentTool) {
             const canvasPlaceholder = document.getElementById('canvas-placeholder');
             const canvasResults = document.getElementById('canvas-results');
             const resultsGrid = document.getElementById('results-grid');
 
             if (!resultsGrid) return;
 
-            resultsGrid.innerHTML = `
-                <div class="relative group flex flex-col items-center">
-                    <div class="relative overflow-hidden rounded-2xl border border-white/10 shadow-2xl">
-                        <img src="${imageUrl}" alt="Generated Image" 
-                             class="max-w-full max-h-[60vh] object-contain" />
-                        <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                            <a href="${imageUrl}" download class="px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-xl font-bold text-white flex items-center gap-2 hover:brightness-110 transition-all shadow-lg">
-                                <i data-lucide="download" class="w-5 h-5"></i>
-                                <span>下載圖片</span>
-                            </a>
-                        </div>
-                    </div>
-                </div>
-            `;
+            resultsGrid.replaceChildren(createResultElement(imageUrl, toolName));
 
             if (canvasPlaceholder) canvasPlaceholder.classList.add('hidden');
             if (canvasResults) canvasResults.classList.remove('hidden');
