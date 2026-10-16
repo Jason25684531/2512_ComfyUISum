@@ -4,8 +4,8 @@ storage/*
 !storage/assets/
 !storage/outputs/
 !storage/temp/
-storage/assets/*
-storage/outputs/*
+storage/aossets/*
+storage/utputs/*
 storage/temp/*
 !storage/assets/.gitkeep
 !storage/outputs/.gitkeep
@@ -56,3 +56,4 @@ ComfyUIAPI_Backup/*
 ComfyUIworkflow/*
 ComfyUIworkflow_api/*
 logs/*
+storage/*

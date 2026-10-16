@@ -98,7 +98,7 @@ def collect_local_cleanup_targets(project_root: Path) -> list[str]:
 
     for path in project_root.rglob("*"):
         relative_path = path.relative_to(project_root)
-        if _has_skipped_part(relative_path, LOCAL_SKIP_PARTS):
+        if any(part in LOCAL_SKIP_PARTS for part in relative_path.parts):
             continue
 
         if _is_protected_path(relative_path):

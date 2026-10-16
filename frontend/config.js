@@ -3,11 +3,11 @@ const _API_ORIGIN_LOCAL = "http://localhost:5000";
 const _isLocalhost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
 const _currentPort = window.location.port;
 
-const _isServedByFlask = _isLocalhost && (_currentPort === "5000" || _currentPort === "");
-const _isServedByFastAPI = _isLocalhost && _currentPort === "8000";
-const _defaultApiOrigin = (_isServedByFlask || _isServedByFastAPI)
-    ? window.location.origin
-    : _API_ORIGIN_LOCAL;
+// Backend serves this page, so use the page origin (localhost, LAN, Cloudflare tunnel).
+// Only file:// or a separate localhost dev server falls back to the local Backend.
+const _isLocalDevServer = _isLocalhost && !["5000", "8000", ""].includes(_currentPort);
+const _isServedByFlask = window.location.protocol.startsWith("http") && !_isLocalDevServer;
+const _defaultApiOrigin = _isServedByFlask ? window.location.origin : _API_ORIGIN_LOCAL;
 
 window.API_URL = _defaultApiOrigin;
 window.API_BASE_URL = `${window.API_URL}/api`;

@@ -235,3 +235,9 @@ def test_unresponsive_comfyui_returns_safe_failure(monkeypatch, capsys):
     assert result["success"] is False and result["error"]
     safe = json.dumps(result) + capsys.readouterr().out
     assert "private-test-setting" not in safe and "private-endpoint" not in safe
+
+
+def test_minimax_resolution_choices_are_multiples_of_32(catalog):
+    # MiniMax patchifies the first-frame latent (1/16 scale) in pairs; 1080 fails I2V.
+    choices = catalog.resolve("video_minimax_h3").entry.choices
+    assert all(value % 32 == 0 for value in choices["width"] + choices["height"])
