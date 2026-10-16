@@ -167,7 +167,7 @@ def create_app() -> Flask:
         ip_address = request.headers.get("X-Forwarded-For", request.remote_addr or "unknown").split(",")[0].strip()
         g.user_id = f"IP#{ip_address}"
         g.request_id = new_request_id(request.headers.get("X-Request-ID"))
-        if time.monotonic() - _outbox_last_run > 5:
+        if request.path != "/api/history" and time.monotonic() - _outbox_last_run > 5:
             _outbox_last_run = time.monotonic()
             runtime.job_service.dispatch_pending_jobs()
         logger.debug("request %s %s", request.method, request.path)
@@ -194,7 +194,7 @@ def create_app() -> Flask:
             "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https: ws: wss:; font-src 'self' data:",
         )
         try:
-            queue_depth = runtime.redis_client.llen(REDIS_QUEUE_NAME) if runtime.redis_client else 0
+            queue_depth = runtime.redis_client.llen(REDIS_QUEUE_NAME) if request.path != "/api/history" and runtime.redis_client else 0
             logger.info("%s %s -> %s | queue=%s", request.method, request.path, response.status_code, queue_depth)
         except Exception:
             logger.info("%s %s -> %s", request.method, request.path, response.status_code)

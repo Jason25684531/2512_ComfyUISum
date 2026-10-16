@@ -303,6 +303,7 @@ class RegionalCanvasEditor {
 
             const del = document.createElement("button");
             del.textContent = "×";
+            del.setAttribute("aria-label", `刪除第 ${index + 1} 個區塊`);
             del.style.cssText = "color:#f87171;background:none;border:none;cursor:pointer;font-size:14px;";
             del.addEventListener("click", (e) => {
                 e.stopPropagation();
@@ -324,6 +325,7 @@ class RegionalCanvasEditor {
         ["obj", "text"].forEach((t) => {
             const btn = document.createElement("button");
             btn.textContent = t;
+            btn.setAttribute("aria-pressed", String(el.type === t));
             btn.style.cssText = `flex:1;padding:4px;font-size:12px;border-radius:6px;border:1px solid #374151;background:${el.type === t ? "#0891b2" : "transparent"};color:#e5e7eb;cursor:pointer;`;
             btn.addEventListener("click", () => {
                 el.type = t;
@@ -335,6 +337,7 @@ class RegionalCanvasEditor {
 
         const descInput = document.createElement("textarea");
         descInput.placeholder = "desc（obj 描述）";
+        descInput.setAttribute("aria-label", "區塊描述");
         descInput.value = el.desc;
         descInput.style.cssText = "width:100%;margin-top:6px;font-size:12px;padding:4px;background:#111827;border:1px solid #374151;border-radius:6px;color:#e5e7eb;";
         descInput.addEventListener("input", () => {
@@ -347,6 +350,7 @@ class RegionalCanvasEditor {
         if (el.type === "text") {
             const textInput = document.createElement("textarea");
             textInput.placeholder = "text（顯示文字）";
+            textInput.setAttribute("aria-label", "區塊顯示文字");
             textInput.value = el.text;
             textInput.style.cssText = descInput.style.cssText;
             textInput.addEventListener("input", () => {
@@ -366,6 +370,7 @@ class RegionalCanvasEditor {
             sw.style.cssText = `width:12px;height:12px;border-radius:2px;background:${sanitizeColor(color)};`;
             const rm = document.createElement("button");
             rm.textContent = "×";
+            rm.setAttribute("aria-label", `移除色彩 ${color}`);
             rm.style.cssText = "color:#f87171;background:none;border:none;cursor:pointer;font-size:11px;";
             rm.addEventListener("click", () => {
                 el.palette.splice(ci, 1);
@@ -377,6 +382,7 @@ class RegionalCanvasEditor {
         });
         const colorPicker = document.createElement("input");
         colorPicker.type = "color";
+        colorPicker.setAttribute("aria-label", "新增區塊色彩");
         colorPicker.style.cssText = "width:20px;height:20px;padding:0;border:none;";
         colorPicker.addEventListener("change", () => {
             if (HEX_COLOR_RE.test(colorPicker.value)) {

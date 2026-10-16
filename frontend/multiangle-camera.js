@@ -48,6 +48,7 @@
                 wrapper.textContent = label;
                 const input = document.createElement("input");
                 input.type = "number";
+                input.setAttribute("aria-label", label);
                 input.min = String(minimum);
                 input.max = String(maximum);
                 input.step = String(step);
@@ -56,6 +57,7 @@
                 wrapper.appendChild(input);
                 const slider = document.createElement("input");
                 slider.type = "range";
+                slider.setAttribute("aria-label", `${label}滑桿`);
                 slider.min = String(minimum);
                 slider.max = String(maximum);
                 slider.step = String(step);

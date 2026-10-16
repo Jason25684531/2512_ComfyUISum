@@ -7,6 +7,7 @@ import logging
 import os
 import threading
 import uuid
+from html import escape as html_escape
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -121,6 +122,40 @@ def _normalize_catalog_inputs(entry, data: dict[str, Any], prompt: str) -> tuple
 
 
 class JobService:
+    HISTORY_DEFAULT_LIMIT = 24
+    HISTORY_MAX_LIMIT = 100
+
+    def history(self, offset: int, limit: int, status: str) -> tuple[dict[str, Any], int]:
+        if not self.runtime.job_observability_enabled:
+            return {"error": "History unavailable"}, 503
+        statuses = {
+            "all": (), "completed": ("completed",),
+            "running": ("created", "queued", "running"), "failed": ("failed", "cancelled"),
+        }[status]
+        try:
+            repo = self.runtime.repository_provider()
+            rows = repo.list_history(offset, limit, statuses)
+            total = repo.count_history(statuses)
+            items = []
+            for row in rows:
+                filename = row.get("filename") or ""
+                safe_filename = secure_filename(Path(filename).name)
+                output_url = f"/outputs/{safe_filename}" if safe_filename and safe_filename == filename else ""
+                submitted = row.get("submitted_at")
+                item = {
+                    "job_id": row["job_id"], "workflow": row.get("workflow_id") or "",
+                    "status": "queued" if row["status"] == "created" else row["status"],
+                    "prompt": row.get("prompt") or "", "output_url": output_url,
+                    "output_type": row.get("output_type") if row.get("output_type") in {"image", "video"} else "",
+                    "created_at": iso_utc(submitted) if submitted else "",
+                    "error": row.get("sanitized_error_message") or "",
+                }
+                items.append({key: html_escape(str(value or "")) for key, value in item.items()})
+            return {"items": items, "total": total, "offset": offset, "limit": limit}, 200
+        except Exception:
+            self.logger.exception("history unavailable")
+            return {"error": "History unavailable"}, 503
+
     def __init__(self, runtime: BackendRuntime) -> None:
         self.runtime = runtime
 

@@ -10,6 +10,8 @@ function makeFakeElement(tag) {
         tagName: tag.toUpperCase(),
         style: {},
         children: [],
+        attributes: {},
+        setAttribute(name, value) { this.attributes[name] = String(value); },
         _listeners: {},
         classList: {
             _set: new Set(),
