@@ -24,7 +24,7 @@
       <a href="#/avatar" data-sec="avatar">數位人像</a>
       <a href="#/gallery" data-sec="gallery">作品庫</a>
     </nav>
-    <div id="system-status" class="right" role="status"><i class="dot offline"></i><span>檢查連線中…</span></div>
+    <div class="right"><button id="my-queue" class="btn sm" type="button" aria-haspopup="dialog">我的佇列</button><div id="system-status" role="status"><i class="dot offline"></i><span>檢查連線中…</span></div></div>
   </header>
   <nav class="m-bar" aria-label="手機主導覽">
     <a href="#/home" data-sec="home">探索</a>
@@ -45,9 +45,11 @@
           <label class="sr-only" for="hero-prompt">你的創作想法</label>
           <textarea id="hero-prompt" maxlength="1000" placeholder="描述你想創作的畫面…" rows="2"></textarea>
           <div class="row">
-            <label class="pill">創作工具 <select id="hero-tool"></select></label>
-            <span class="grow"></span><button class="btn primary" type="submit">開始生成 ↗</button>
+            <label class="pill"><span class="sr-only">創作工具</span><i data-lucide="sparkles" aria-hidden="true"></i><select id="hero-tool"></select></label>
+            <div id="hero-settings"></div>
           </div>
+          <button class="btn primary" type="submit">開始生成 ↗</button>
+          <p id="hero-uploads-hint" class="help" role="status"></p>
         </form>
       </div>
       <div class="sec-head"><h2>找到你的創作工具</h2><div id="tool-filters" class="tabs" aria-label="工具類別"></div></div>
@@ -62,16 +64,12 @@
         <div id="upload-zones" class="uploads"></div>
         <label id="prompt-field"><span class="lbl">提示詞 Prompt</span><textarea id="prompt-input" class="input" maxlength="1000" placeholder="描述你想要的畫面、風格與細節…"></textarea></label>
         <label id="model-field"><span class="lbl">模型</span><select id="model-select" class="input"><option value="">使用工作流程預設模型</option></select></label>
-        <div id="image-settings">
-          <span class="lbl">畫面比例</span><div id="ratio-controls" class="seg" aria-label="畫面比例"></div>
-          <span class="lbl batch-label">生成張數</span><div id="batch-controls" class="seg" aria-label="生成張數"></div>
-        </div>
+        <div id="image-settings"></div>
         <div id="multiangle-fields" hidden></div>
         <div id="regional-fields" hidden></div>
         <details id="advanced-settings"><summary>進階設定</summary>
           <label><span class="lbl">Seed</span><input id="seed-input" class="input" type="number" min="-1" step="1" value="-1"></label>
           <p class="help">-1 每次隨機；固定數值可重現相近構圖。</p>
-          <div id="runtime-inputs" class="runtime-inputs"></div>
         </details>
         <div class="note">作品對所有人可見，請勿輸入私人資訊。</div>
         <div class="gen-bar"><button id="btn-generate" class="btn primary" type="submit">開始生成 ↗</button><p id="status-message" class="msg" role="status" aria-live="polite"></p></div>
@@ -89,5 +87,6 @@
     </section>
   </main>
   <dialog id="tool-picker" aria-labelledby="picker-title"><div class="picker-head"><h2 id="picker-title">切換創作工具</h2><button id="close-picker" class="icon-btn" type="button" aria-label="關閉工具選單">✕</button></div><div id="picker-grid" class="tool-grid"></div></dialog>
+  <dialog id="queue-drawer" aria-labelledby="queue-title"><div class="picker-head"><h2 id="queue-title">我的佇列</h2><button id="close-queue" class="icon-btn" type="button" aria-label="關閉我的佇列">✕</button></div><p class="help">紀錄保存在此瀏覽器，顯示最近 24 小時最多 50 筆。清除 cookie 或更換瀏覽器後無法還原，作品仍在作品庫。</p><div id="queue-list" aria-live="polite"></div></dialog>
 </body>
 </html>

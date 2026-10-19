@@ -241,3 +241,26 @@ def test_minimax_resolution_choices_are_multiples_of_32(catalog):
     # MiniMax patchifies the first-frame latent (1/16 scale) in pairs; 1080 fails I2V.
     choices = catalog.resolve("video_minimax_h3").entry.choices
     assert all(value % 32 == 0 for value in choices["width"] + choices["height"])
+
+
+@pytest.mark.parametrize('workflow_id', ['image_gpt25_sunburst', 'video_minimax_h3'])
+def test_native_portrait_dimensions_reach_the_comfy_node(candidate_runtime, workflow_id):
+    entry = candidate_runtime.entries[workflow_id]
+    dimensions = {'size': '864x1536'} if entry.output_type == 'image' else {'width': 864, 'height': 1536}
+    extra, images, error = _normalize_catalog_inputs(entry, {'extra_params': dimensions}, 'vertical 9:16')
+    assert error is None
+    workflow = runtime.parse_workflow(workflow_id, prompt='vertical 9:16', image_files=images,
+        video_mode='t2v' if entry.output_type == 'video' else None, extra_params=extra)
+    if entry.output_type == 'image':
+        assert workflow['34']['inputs']['size'] == '864x1536'
+    else:
+        assert (workflow['105:104']['inputs']['width'], workflow['105:104']['inputs']['height']) == (864, 1536)
+
+
+def test_sunburst_mobile_dimensions_reach_the_comfy_node(candidate_runtime):
+    workflow = runtime.parse_workflow(
+        'image_gpt25_sunburst', prompt='phone wallpaper 9:20',
+        extra_params={'size': 'custom', 'custom_width': 576, 'custom_height': 1280},
+    )
+    inputs = workflow['34']['inputs']
+    assert (inputs['size'], inputs['custom_width'], inputs['custom_height']) == ('custom', 576, 1280)

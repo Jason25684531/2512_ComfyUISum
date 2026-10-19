@@ -6,6 +6,14 @@ const drafts = {};
 const jobs = [];
 const selectedJobs = {};
 const toolPollingIntervals = {};
+const RESOLUTIONS = {
+    '720p': {'16:9': {width: 1280, height: 720}, '9:16': {width: 720, height: 1280}, '2:3': {width: 720, height: 1088}},
+    '1080p': {'16:9': {width: 1920, height: 1088}, '9:16': {width: 1088, height: 1920}, '2:3': {width: 1088, height: 1632}}
+};
+let queueTimer;
+let queueError = false;
+let queueLoading = false;
+let tempcode = '';
 const statusLabels = {submitting: '正在提交…', queued: '排隊中', running: '生成中', completed: '已完成', failed: '失敗', cancelled: '已取消'};
 const categories = {all: '全部工具', image: '圖片', video: '影片', avatar: '數位人像'};
 const fieldLabels = {source: '來源圖片', target: '目標圖片', input: '參考圖片', image: '參考圖片', extra: '額外圖片', avatar: '頭像圖片', audio: '音訊', video: '影片', first_frame: '首幀圖片', last_frame: '尾幀圖片', size: '尺寸', background: '背景', scale: '放大倍率', width: '寬度', height: '高度', duration: '秒數', video_width: '影片寬度', video_height: '影片高度', video_duration: '影片秒數', retake_start: '開始秒數', retake_end: '結束秒數'};
@@ -31,9 +39,12 @@ function button(text, action, className = 'btn') {
     return node;
 }
 async function requestJSON(path, options = {}) {
-    const response = await fetch(`${window.API_URL || ''}${path}`, {signal: AbortSignal.timeout(15000), ...options});
+    const response = await fetch(`${window.API_URL || ''}${path}`, {credentials: 'include', signal: AbortSignal.timeout(15000), ...options});
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error || `服務暫時無法使用（${response.status}）`);
+    if (!response.ok) {
+        const error = new Error(data.error || `服務暫時無法使用（${response.status}）`);
+        error.status = response.status; throw error;
+    }
     return data;
 }
 function routeFor(tool) {
@@ -50,8 +61,8 @@ function parseRoute(hash = location.hash) {
     }
     return {section: 'home'};
 }
-function openTool(tool, prompt) {
-    if (prompt !== undefined) pendingPrompt = {tool: tool.id, prompt};
+function openTool(tool, prompt, autoSubmit = false) {
+    if (prompt !== undefined) pendingPrompt = {tool: tool.id, prompt, autoSubmit};
     const route = routeFor(tool);
     if (location.hash === route) render();
     else location.hash = route;
@@ -62,7 +73,7 @@ function saveToolState() {
     state.prompt = $('prompt-input').value;
     state.seed = $('seed-input').value;
     state.model = $('model-select').value;
-    document.querySelectorAll('[data-runtime-input]').forEach(control => {
+    $('workspace-form').querySelectorAll('[data-runtime-input]').forEach(control => {
         if (!control.closest('[hidden]')) state.values[control.dataset.runtimeInput] = control.value;
     });
 }
@@ -80,14 +91,22 @@ function render() {
     });
     currentTool = route.tool?.id || '';
     if (route.tool) {
-        if (!drafts[currentTool]) drafts[currentTool] = {prompt: '', seed: '-1', model: '', ratio: '1:1', batch: 1, files: {}, images: {}, values: {...toolConfig[currentTool].defaults}};
+        ensureDraft(currentTool);
+        let autoSubmit = false;
         if (pendingPrompt?.tool === currentTool) {
             drafts[currentTool].prompt = pendingPrompt.prompt;
+            autoSubmit = pendingPrompt.autoSubmit;
             pendingPrompt = null;
         }
         renderWorkspace(route.tool);
+        if (autoSubmit) {
+            const error = validateInputs(route.tool, drafts[currentTool], toolConfig[currentTool]);
+            if (error) $('status-message').textContent = error;
+            else if (['ideogram4_regional_t2i', 'multi_angle'].includes(currentTool)) $('status-message').textContent = '此工具需在工作區設定';
+            else handleGenerate();
+        }
     } else if (route.section === 'gallery') loadHistory();
-    else loadRecentWorks();
+    else { renderHeroSettings(); loadRecentWorks(); }
     syncHeroVideo();
 }
 function toolCard(tool, closePicker = false) {
@@ -116,14 +135,90 @@ function renderFilters(container, options, selected, onSelect) {
 function renderHomeFilters() {
     renderFilters($('tool-filters'), categories, homeCategory, value => { homeCategory = value; renderHomeFilters(); renderToolGrid(); });
 }
-function addField(container, name, type, value, choices = []) {
+function ensureDraft(toolId) {
+    return drafts[toolId] ||= {prompt: '', seed: '-1', model: '', ratio: '16:9', tier: '720p', batch: 1, files: {}, images: {}, values: {...toolConfig[toolId].defaults}};
+}
+function toolSize(toolId, ratio, tier) {
+    const choices = toolConfig[toolId].choices;
+    let candidates;
+    if (toolId === 'image_gpt25_sunburst') candidates = (choices.size || []).map(size => {
+        const [width, height] = size.split('x').map(Number); return {width, height, size};
+    });
+    else if (toolId === 'video_minimax_h3') candidates = (choices.width || []).flatMap(width => (choices.height || []).map(height => ({width, height})));
+    else return RESOLUTIONS[tier]?.[ratio];
+    const [w, h] = ratio.split(':').map(Number);
+    // Catalog sizes can be aligned to 16 pixels; accept at most 3% ratio error.
+    return candidates.filter(size => {
+        const long = Math.max(size.width, size.height);
+        return (tier === '720p' ? long <= 1344 : long >= 1536) && Math.abs(size.width / size.height / (w / h) - 1) < .03;
+    }).sort((a, b) => Math.abs(a.width / a.height - w / h) - Math.abs(b.width / b.height - w / h))[0];
+}
+function renderToolSettings(container, toolId) {
+    container.replaceChildren();
+    const tool = catalog.find(tool => tool.id === toolId);
+    const config = toolConfig[toolId], state = ensureDraft(toolId);
+    const derived = ['image_upscale_seedvr2', 'ltx_retake_v2v'].includes(toolId) || tool.category === 'avatar';
+    const ratios = tool.category === 'video' ? ['16:9', '9:16'] : ['16:9', '9:16', '2:3'];
+    const tiers = Object.keys(RESOLUTIONS).filter(tier => ratios.some(ratio => toolSize(toolId, ratio, tier)));
+    if (!tiers.includes(state.tier)) state.tier = tiers[0];
+    if (!ratios.includes(state.ratio) || !toolSize(toolId, state.ratio, state.tier)) state.ratio = ratios.find(ratio => toolSize(toolId, ratio, state.tier));
+    const segments = (name, label, options, selected, change, enabled = () => true) => {
+        const group = element('details', 'setting-chip');
+        const summary = element('summary');
+        const icon = element('i'); icon.dataset.lucide = {ratio: 'ratio', tier: 'scan-line', batch: 'layers'}[name];
+        icon.setAttribute('aria-hidden', 'true');
+        summary.append(icon, element('span', '', `${label} ${String(selected).toUpperCase()}`));
+        group.append(summary);
+        const row = element('div', 'seg'); row.dataset.setting = name; row.setAttribute('aria-label', label);
+        for (const value of options) {
+            const control = button(String(value).toUpperCase(), () => { change(value); renderToolSettings(container, toolId); });
+            control.setAttribute('aria-pressed', String(value === selected)); control.disabled = !enabled(value); row.append(control);
+        }
+        group.append(row); container.append(group);
+    };
+    if (!derived) {
+        segments('ratio', '畫面比例', ratios, state.ratio, value => {
+            state.ratio = value;
+            if (toolId === 'ideogram4_regional_t2i') {
+                const size = toolSize(toolId, state.ratio, state.tier); window.regionalCanvasEditor?.setAspect(size.width, size.height);
+            }
+        }, ratio => !!toolSize(toolId, ratio, state.tier));
+        if (tiers.length > 1) segments('tier', '解析度', Object.keys(RESOLUTIONS), state.tier, value => {
+            state.tier = value;
+            if (toolId === 'ideogram4_regional_t2i') {
+                const size = toolSize(toolId, state.ratio, state.tier); window.regionalCanvasEditor?.setAspect(size.width, size.height);
+            }
+        }, tier => !!toolSize(toolId, state.ratio, tier));
+    }
+    if (tool.category === 'image' && toolId !== 'image_upscale_seedvr2') segments('batch', '生成張數', [1, 2, 4], state.batch, value => { state.batch = value; });
+    const names = [...new Set([...config.requiredInputs, ...config.optionalInputs])].filter(name =>
+        !['prompt', 'seed', 'size', 'width', 'height', 'video_width', 'video_height'].includes(name) && ['select', 'number', 'text'].includes(config.inputTypes[name]));
+    if (['ltx_i2v', 'ltx_flf'].includes(toolId)) { names.push('video_duration'); state.values.video_duration ??= 5; }
+    if (toolId === 'ltx_retake_v2v') { names.push('retake_start', 'retake_end'); state.values.retake_start ??= 0; state.values.retake_end ??= 5; }
+    for (const name of names) {
+        const control = addField(container, name, config.inputTypes[name] === 'number' || !config.inputTypes[name] ? 'number' : 'text', state.values[name], config.choices[name] || [], toolId);
+        control.addEventListener('input', () => { state.values[name] = control.value; });
+        if (name === 'video_duration') { control.min = 1; control.max = 10; control.step = 1; }
+    }
+    window.lucide?.createIcons();
+}
+function renderHeroSettings() {
+    const id = $('hero-tool').value;
+    if (!toolConfig[id]) return;
+    const specialized = ['ideogram4_regional_t2i', 'multi_angle'].includes(id);
+    if (specialized) $('hero-settings').replaceChildren();
+    else renderToolSettings($('hero-settings'), id);
+    const uploads = toolConfig[id].uploads.filter(upload => !upload.optional).map(upload => upload.label);
+    $('hero-uploads-hint').textContent = specialized ? '此工具需在工作區設定' : uploads.length ? '需上傳：' + uploads.join('、') : '';
+}
+function addField(container, name, type, value, choices = [], toolId = currentTool) {
     const label = element('label', 'field');
     label.append(element('span', 'lbl', fieldLabels[name] || name.replaceAll('_', ' ')));
     const control = element(choices.length ? 'select' : 'input', 'input');
     control.dataset.runtimeInput = name;
-    control.id = `runtime-${name}`;
+    control.id = `${container.id}-${name}`;
     if (choices.length) choices.forEach(choice => {
-        const option = element('option', '', `${choice}${toolConfig[currentTool].units[name] || ''}`);
+        const option = element('option', '', `${choice}${toolConfig[toolId].units[name] || ''}`);
         option.value = String(choice); control.append(option);
     });
     else { control.type = type; if (type === 'number') control.step = 'any'; }
@@ -142,7 +237,6 @@ function renderWorkspace(tool) {
     $('prompt-input').value = state.prompt;
     $('seed-input').value = state.seed;
     $('prompt-field').hidden = tool.id === 'multi_angle' || (config.requiredInputs.length > 0 && ![...config.requiredInputs, ...config.optionalInputs].includes('prompt'));
-    $('image-settings').hidden = tool.category !== 'image' || tool.id === 'image_upscale_seedvr2';
     $('model-field').hidden = tool.id !== 'text_to_image';
     $('model-select').replaceChildren();
     const defaultOption = element('option', '', '使用工作流程預設模型'); defaultOption.value = '';
@@ -153,25 +247,7 @@ function renderWorkspace(tool) {
         option.value = value; $('model-select').append(option);
     });
     $('model-select').value = state.model;
-    renderFilters($('ratio-controls'), {'1:1': '1:1', '16:9': '16:9', '9:16': '9:16', '2:3': '2:3'}, state.ratio, value => { state.ratio = value; renderRatioControls(); });
-    renderFilters($('batch-controls'), {1: '1', 2: '2', 4: '4'}, String(state.batch), value => { state.batch = Number(value); renderRatioControls(); });
-    $('runtime-inputs').replaceChildren();
-    const names = [...new Set([...config.requiredInputs, ...config.optionalInputs])];
-    names.forEach(name => {
-        const type = config.inputTypes[name];
-        if (['prompt', 'seed'].includes(name) || !['select', 'number', 'text'].includes(type)) return;
-        addField($('runtime-inputs'), name, type === 'number' ? 'number' : 'text', state.values[name], config.choices[name] || []);
-    });
-    if (['ltx_i2v', 'ltx_flf'].includes(tool.id)) {
-        [['video_width', 1280, 512, 1920], ['video_height', 720, 512, 1920], ['video_duration', 5, 1, 10]].forEach(([name, value, min, max]) => {
-            const control = addField($('runtime-inputs'), name, 'number', state.values[name] ?? value);
-            control.min = min; control.max = max; control.step = '1';
-        });
-    }
-    if (tool.id === 'ltx_retake_v2v') {
-        addField($('runtime-inputs'), 'retake_start', 'number', state.values.retake_start ?? 0).min = '0';
-        addField($('runtime-inputs'), 'retake_end', 'number', state.values.retake_end ?? 5).min = '0';
-    }
+    renderToolSettings($('image-settings'), tool.id);
     $('advanced-settings').open = tool.category === 'video';
     $('upload-zones').replaceChildren(...config.uploads.map(upload => uploadControl(tool.id, upload)));
     $('multiangle-fields').hidden = tool.id !== 'multi_angle';
@@ -183,25 +259,16 @@ function renderWorkspace(tool) {
     if (regional) {
         if (!window.regionalCanvasEditor) window.regionalCanvasEditor = new RegionalCanvasEditor($('regional-canvas-mount'));
         $('regional-fields').replaceChildren();
-        [['background', ''], ['aesthetics', ''], ['lighting', ''], ['medium', 'Photograph'], ['width', 1080], ['height', 1920]].forEach(([name, fallback]) => {
-            const dimension = ['width', 'height'].includes(name);
-            const control = addField($('regional-fields'), name, dimension ? 'number' : 'text', state.values[name] ?? fallback);
-            if (dimension) {
-                control.min = '256'; control.max = '4096'; control.step = '1';
-                control.addEventListener('input', () => window.regionalCanvasEditor.setAspect(Number($('runtime-width').value), Number($('runtime-height').value)));
-            }
+        [['background', ''], ['aesthetics', ''], ['lighting', ''], ['medium', 'Photograph']].forEach(([name, fallback]) => {
+            const control = addField($('regional-fields'), name, 'text', state.values[name] ?? fallback);
+            control.addEventListener('input', () => { state.values[name] = control.value; });
         });
-        window.regionalCanvasEditor.setAspect(Number($('runtime-width').value), Number($('runtime-height').value));
+        const size = toolSize(tool.id, state.ratio, state.tier);
+        window.regionalCanvasEditor.setAspect(size.width, size.height);
     }
     $('status-message').textContent = '';
     renderStage(selectedJobs[currentTool]); renderHistoryStrip(currentTool);
     window.lucide?.createIcons();
-}
-function renderRatioControls() {
-    const state = drafts[currentTool];
-    for (const [id, selected] of [['ratio-controls', state.ratio], ['batch-controls', String(state.batch)]]) {
-        $(id).querySelectorAll('button').forEach(control => control.setAttribute('aria-pressed', String(control.textContent === selected)));
-    }
 }
 function uploadControl(tool, upload) {
     const state = drafts[tool];
@@ -275,28 +342,31 @@ async function handleGenerate() {
     const config = toolConfig[tool.id];
     const error = validateInputs(tool, state, config);
     if (error) { $('status-message').textContent = error; return; }
-    const job = {id: '', tool: tool.id, prompt: state.prompt.trim(), status: 'submitting', progress: 0, outputs: [], error: '', ratio: state.ratio, type: tool.category === 'image' ? 'image' : 'video'};
+    const job = {id: '', tool: tool.id, prompt: state.prompt.trim(), status: 'submitting', progress: 0, outputs: [], error: '', ratio: state.ratio, tier: state.tier, createdAt: new Date().toISOString(), name: `${tool.frontend.title} #${jobs.filter(job => job.tool === tool.id).length + 1}`, type: tool.category === 'image' ? 'image' : 'video'};
     jobs.unshift(job); selectedJobs[tool.id] = job;
     renderStage(job); renderHistoryStrip(tool.id);
     try {
         let payload = {
             workflow: tool.id, prompt: job.prompt, seed: Number(state.seed), model: state.model,
-            aspect_ratio: state.ratio, batch_size: state.batch,
+            aspect_ratio: state.ratio, resolution: state.tier, batch_size: state.batch,
             images: config.inputTypes.images === 'multi-image'
                 ? config.uploads.filter(upload => upload.field === 'images').map(upload => state.images[upload.id]).filter(Boolean)
                 : {...state.images}
         };
         const extraParams = {};
         for (const name of [...config.requiredInputs, ...config.optionalInputs]) {
-            if (['prompt', 'seed'].includes(name) || !['select', 'number', 'text'].includes(config.inputTypes[name])) continue;
+            if (['prompt', 'seed', 'size', 'width', 'height'].includes(name) || !['select', 'number', 'text'].includes(config.inputTypes[name])) continue;
             const value = state.values[name];
             if (value === undefined || value === '') continue;
             const choice = (config.choices[name] || []).find(item => String(item) === String(value));
             extraParams[name] = choice ?? (config.inputTypes[name] === 'number' ? Number(value) : value);
         }
+        const size = toolSize(tool.id, state.ratio, state.tier);
+        if (tool.id === 'image_gpt25_sunburst') extraParams.size = size.size;
+        if (tool.id === 'video_minimax_h3') Object.assign(extraParams, size);
         if (Object.keys(extraParams).length) payload.extra_params = extraParams;
         if (tool.id === 'ideogram4_regional_t2i') {
-            payload.width = Number(state.values.width); payload.height = Number(state.values.height);
+            payload.width = size.width; payload.height = size.height;
             payload.elements_data = window.regionalCanvasEditor.getElementsData();
             for (const field of ['background', 'aesthetics', 'lighting', 'medium']) payload[field] = state.values[field] || '';
         }
@@ -307,13 +377,15 @@ async function handleGenerate() {
         if (!data.job_id) throw new Error('生成服務暫時無回應，請重試');
         job.id = data.job_id; job.status = 'queued';
         pollStatus(job);
+        scheduleQueueRefresh();
     } catch (error) { job.status = 'failed'; job.error = error.message || '生成失敗，請重試'; }
     updateJob(job);
 }
 async function handleMotionGenerate(payload, currentVideoTool, state) {
     payload.workflow = currentVideoTool;
     if (currentVideoTool === 'ltx_i2v' || currentVideoTool === 'ltx_flf') {
-        for (const name of ['video_width', 'video_height', 'video_duration']) payload[name] = Number(state.values[name]);
+        const size = toolSize(currentVideoTool, state.ratio, state.tier);
+        Object.assign(payload, {video_width: size.width, video_height: size.height, video_duration: Number(state.values.video_duration)});
     } else if (currentVideoTool === 'ltx_retake_v2v') {
         payload.video = await uploadVideoFile(state.files.video);
         payload.retake_start = Number(state.values.retake_start);
@@ -347,11 +419,11 @@ function resolveOutputUrl(outputPath) {
     return /^[A-Za-z0-9_-][A-Za-z0-9_.-]*$/.test(filename) ? `/outputs/${filename}` : '';
 }
 function pollStatus(job) {
-    clearInterval(toolPollingIntervals[job.tool]);
+    clearInterval(toolPollingIntervals[job.id]);
     let pollCount = 0;
     let checking = false;
     const deadline = Date.now() + 40 * 60 * 1000;
-    toolPollingIntervals[job.tool] = setInterval(async () => {
+    toolPollingIntervals[job.id] = setInterval(async () => {
         if (Date.now() >= deadline || ++pollCount > 1200) {
             job.status = 'failed'; job.error = '生成逾時：已超過 40 分鐘，請重試';
             stopPolling(job); updateJob(job); return;
@@ -371,29 +443,90 @@ function pollStatus(job) {
                 if (!job.outputs.length) { job.status = 'failed'; job.error = '任務已完成，但沒有可用的輸出，請重試'; }
                 if (job.tool === 'ideogram4_regional_t2i' && job.outputs[0]) window.regionalCanvasEditor?.setBackgroundImage(job.outputs[0]);
             } else if (job.status === 'failed') job.error = data.error || '生成失敗，請重試';
-            if (['completed', 'failed', 'cancelled'].includes(job.status)) stopPolling(job);
+            if (['completed', 'failed', 'cancelled'].includes(job.status)) { job.cancelling = false; stopPolling(job); }
         } catch (_) { if (['queued', 'running'].includes(job.status)) job.reconnecting = true; }
         finally { checking = false; updateJob(job); }
     }, 2000);
 }
 function stopPolling(job) {
-    clearInterval(toolPollingIntervals[job.tool]);
-    delete toolPollingIntervals[job.tool];
+    clearInterval(toolPollingIntervals[job.id]);
+    delete toolPollingIntervals[job.id];
 }
 function updateJob(job) {
     if (currentTool === job.tool) {
         if (selectedJobs[currentTool] === job) renderStage(job);
         renderHistoryStrip(job.tool);
     }
+    renderQueue();
+}
+function scheduleQueueRefresh() {
+    clearTimeout(queueTimer);
+    if ($('queue-drawer').open || jobs.some(job => ['queued', 'running'].includes(job.status))) queueTimer = setTimeout(loadMyQueue, 5000);
+}
+async function loadMyQueue() {
+    if (queueLoading) return;
+    queueLoading = true;
+    try {
+        const data = await requestJSON('/api/queue/me');
+        tempcode = data.tempcode; queueError = false;
+        const counts = {};
+        for (const item of [...data.items].reverse()) {
+            const tool = catalog.find(tool => tool.id === item.workflow);
+            if (!tool) continue;
+            let job = jobs.find(job => job.id === item.job_id);
+            if (!job) {
+                job = {id: item.job_id, tool: item.workflow, outputs: [], ratio: '16:9', prompt: '', type: item.output_type || (tool.category === 'image' ? 'image' : 'video')};
+                jobs.push(job);
+            }
+            Object.assign(job, {status: normalizeJobStatus(item), progress: item.progress, position: item.position, error: item.error,
+                createdAt: item.created_at, name: `${tool.frontend.title} #${counts[item.workflow] = (counts[item.workflow] || 0) + 1}`});
+            if (!job.outputs.length && item.output_url) job.outputs = [resolveOutputUrl(item.output_url)].filter(Boolean);
+            if (['queued', 'running'].includes(job.status)) {
+                if (!toolPollingIntervals[job.id]) pollStatus(job);
+            } else { job.cancelling = false; stopPolling(job); }
+        }
+        jobs.sort((a, b) => (b.createdAt || 'z').localeCompare(a.createdAt || 'z'));
+        for (const job of jobs) selectedJobs[job.tool] ||= job;
+        if (currentTool) { renderHistoryStrip(currentTool); renderStage(selectedJobs[currentTool]); }
+    } catch (_) { queueError = true; }
+    finally { queueLoading = false; renderQueue(); scheduleQueueRefresh(); }
+}
+function renderQueue() {
+    const active = jobs.filter(job => ['queued', 'running'].includes(job.status)).length;
+    $('my-queue').textContent = `我的佇列 ${tempcode} · ${active}`;
+    const list = $('queue-list');
+    if (queueError) {
+        const notice = element('div', 'banner', '佇列暫不可用'); notice.append(button('重試', loadMyQueue));
+        list.replaceChildren(notice); return;
+    }
+    list.replaceChildren(...jobs.filter(job => job.id).map(job => {
+        const row = element('div', 'queue-item');
+        const select = button('', () => {
+            selectedJobs[job.tool] = job; $('queue-drawer').close();
+            openTool(catalog.find(tool => tool.id === job.tool));
+        }, 'queue-select');
+        const media = mediaElement(job.outputs[0] || '', job.type, '作品縮圖');
+        if (media) { if (job.type === 'video') media.controls = false; select.append(media); }
+        select.append(element('b', '', job.name || catalog.find(tool => tool.id === job.tool)?.frontend.title || job.tool),
+            element('span', 'help', `${statusLabels[job.status]} · ${job.status === 'queued' && job.position ? `第 ${job.position} 位` : `${job.progress}%`}`));
+        row.append(select);
+        if (['queued', 'running'].includes(job.status)) {
+            const cancel = button(job.cancelling ? '取消中…' : '取消', () => cancelJob(job), 'btn sm'); cancel.disabled = !!job.cancelling; row.append(cancel);
+        }
+        if (job.notice || job.error) row.append(element('p', 'err', job.notice || job.error));
+        return row;
+    }));
+    if (!list.childElementCount) list.append(element('p', 'help', '最近 24 小時沒有任務'));
 }
 async function cancelJob(job) {
     if (job.cancelling) return;
     job.cancelling = true; updateJob(job);
     try {
         await requestJSON(`/api/cancel/${encodeURIComponent(job.id)}`, {method: 'POST'});
-        job.status = 'cancelled'; job.error = ''; stopPolling(job);
-    } catch (error) { job.notice = `取消失敗：${error.message}`; }
-    finally { job.cancelling = false; updateJob(job); }
+        job.error = '';
+        if (!toolPollingIntervals[job.id]) pollStatus(job);
+    } catch (error) { job.cancelling = false; job.notice = error.status === 403 ? '只能取消自己送出的任務' : `取消失敗：${error.message}`; }
+    finally { updateJob(job); renderQueue(); }
 }
 function mediaElement(url, type, title) {
     if (!/^\/outputs\/[A-Za-z0-9_-][A-Za-z0-9_.-]*$/.test(url)) return null;
@@ -402,9 +535,7 @@ function mediaElement(url, type, title) {
     if (type === 'video') { media.controls = true; media.preload = 'metadata'; }
     else { media.alt = title; media.loading = 'lazy'; }
     media.addEventListener('error', () => {
-        media.closest('.g-item, .result')?.querySelectorAll('a[download]').forEach(link => {
-            if (link.href === media.src) link.replaceWith(element('span', 'help', '無法下載'));
-        });
+        media.closest('.g-item, .result')?.querySelectorAll('a[download], .fullscreen').forEach(control => control.remove());
         media.replaceWith(element('p', 'note missing-output', '檔案已清除或無法載入'));
     }, {once: true});
     return media;
@@ -432,16 +563,32 @@ function renderStage(job) {
         if (job.notice) content.append(element('p', 'err', job.notice));
         if (job.id) content.append(button(job.cancelling ? '取消中…' : '取消', () => cancelJob(job)));
     } else {
-        content.append(status);
-        for (const url of job.outputs) {
+        const toolbar = element('div', `result-toolbar${job.type === 'video' ? ' video-toolbar' : ''}`);
+        toolbar.append(status, button(job.status === 'completed' ? '再生成' : '重試', () => handleGenerate(), 'btn primary'));
+        if (job.focus !== undefined) toolbar.append(button('返回全部', () => { delete job.focus; renderStage(job); }));
+        const outputs = job.focus !== undefined ? [job.outputs[job.focus]] : job.outputs;
+        content.style.gridTemplateColumns = outputs.length > 1 ? 'repeat(2, minmax(0, 1fr))' : 'minmax(0, 1fr)';
+        content.style.gridTemplateRows = outputs.length > 2 ? 'repeat(2, minmax(0, 1fr))' : 'minmax(0, 1fr)';
+        for (const [index, url] of outputs.entries()) {
             const media = mediaElement(url, job.type, '生成結果');
             if (!media) continue;
             const figure = element('figure', 'result');
+            if (outputs.length > 1) {
+                const expand = button('放大', () => { job.focus = index; renderStage(job); }, 'btn sm expand');
+                expand.setAttribute('aria-label', `放大第 ${index + 1} 張`); figure.append(expand);
+                media.addEventListener('click', () => { job.focus = index; renderStage(job); });
+            }
+            const actions = element('div', 'media-actions');
             const download = element('a', 'btn sm', '下載'); download.href = `${window.API_URL || ''}${url}`; download.download = '';
-            figure.append(media, download); content.append(figure);
+            actions.append(download);
+            if (document.fullscreenEnabled) {
+                const fullscreen = button('全螢幕', () => media.requestFullscreen().catch(() => {}), 'btn sm fullscreen');
+                fullscreen.setAttribute('aria-label', '全螢幕檢視生成結果'); actions.append(fullscreen);
+            }
+            figure.append(media, actions); content.append(figure);
         }
-        if (job.error) content.append(element('p', 'err', job.error));
-        content.append(button(job.status === 'completed' ? '再生成' : '重試', () => handleGenerate(), 'btn primary'));
+        if (job.error) toolbar.append(element('p', 'err', job.error + (job.tier !== '720p' ? '。可改用 720P 重試' : '')));
+        stage.replaceChildren(content, toolbar); return;
     }
     stage.replaceChildren(content);
 }
@@ -545,7 +692,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     $('catalog-error').hidden = catalog.length > 0;
     renderHomeFilters(); renderToolGrid(); renderGalleryFilters();
     $('workspace-form').addEventListener('submit', event => { event.preventDefault(); handleGenerate(); });
-    $('hero-form').addEventListener('submit', event => { event.preventDefault(); const tool = catalog.find(item => item.id === $('hero-tool').value); if (tool) openTool(tool, $('hero-prompt').value); });
+    $('hero-tool').addEventListener('change', renderHeroSettings);
+    $('hero-form').addEventListener('submit', event => { event.preventDefault(); const tool = catalog.find(item => item.id === $('hero-tool').value); if (tool) openTool(tool, $('hero-prompt').value, true); });
+    $('my-queue').addEventListener('click', () => { $('queue-drawer').showModal(); loadMyQueue(); });
+    $('close-queue').addEventListener('click', () => $('queue-drawer').close());
+    $('queue-drawer').addEventListener('close', scheduleQueueRefresh);
     $('tool-switch').addEventListener('click', () => {
         const category = catalog.find(tool => tool.id === currentTool)?.category;
         $('picker-grid').replaceChildren(...catalog.filter(tool => tool.category === category).map(tool => toolCard(tool, true)));
@@ -568,7 +719,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     $('hero-video').addEventListener('play', () => { $('pause-hero').textContent = '暫停動畫'; $('pause-hero').setAttribute('aria-label', '暫停動畫'); });
     matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', syncHeroVideo);
     window.addEventListener('hashchange', render);
-    render(); checkHealth(); setInterval(checkHealth, 30000);
+    render(); loadMyQueue(); checkHealth(); setInterval(checkHealth, 30000);
     try {
         const data = await requestJSON('/api/models');
         models = data.by_task_type?.text_to_image || data.unet_models || data.models || [];

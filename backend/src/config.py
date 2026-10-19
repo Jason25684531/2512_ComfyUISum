@@ -4,6 +4,7 @@ Backend Configuration
 統一管理 Backend API 的配置參數。
 """
 
+import math
 import sys
 from pathlib import Path
 
@@ -23,7 +24,10 @@ from shared.config_base import (
     STORAGE_INPUT_DIR,
     STORAGE_OUTPUT_DIR,
     get_env_int,
+    get_env_bool,
+    get_env_float,
     get_env_str,
+    resolve_path_setting,
 )
 
 # Flask 配置
@@ -50,6 +54,25 @@ LINE_MAX_VIDEO_BYTES = 200 * 1024 * 1024
 LINE_MAX_PREVIEW_BYTES = 1024 * 1024
 LINE_API_TIMEOUT_SECONDS = max(1, get_env_int("LINE_API_TIMEOUT_SECONDS", 15))
 LINE_NOTIFICATION_RETRY_LIMIT = max(1, get_env_int("LINE_NOTIFICATION_RETRY_LIMIT", 3))
+
+
+def _music_bound(value, lower, upper):
+    if not math.isfinite(value) or value < lower:
+        return lower
+    if value > upper:
+        return upper
+    return value
+
+
+LINE_MUSIC_ENABLED = get_env_bool("LINE_MUSIC_ENABLED", False)
+LINE_MUSIC_LIBRARY_DIR = resolve_path_setting("LINE_MUSIC_LIBRARY_DIR", STORAGE_DIR / "music")
+LINE_MUSIC_STATE_TTL = _music_bound(get_env_int("LINE_MUSIC_STATE_TTL", 1200), 600, 1800)
+LINE_MUSIC_RESULT_LIMIT = _music_bound(get_env_int("LINE_MUSIC_RESULT_LIMIT", 3), 1, 5)
+LINE_MUSIC_ORIGINAL_VOLUME = _music_bound(get_env_float("LINE_MUSIC_ORIGINAL_VOLUME", 0.3), 0.0, 2.0)
+LINE_MUSIC_BGM_VOLUME = _music_bound(get_env_float("LINE_MUSIC_BGM_VOLUME", 0.7), 0.0, 2.0)
+LINE_MUSIC_FFMPEG_TIMEOUT = _music_bound(get_env_int("LINE_MUSIC_FFMPEG_TIMEOUT", 120), 10, 600)
+FFMPEG_BINARY = get_env_str("FFMPEG_BINARY", "ffmpeg") or "ffmpeg"
+FFPROBE_BINARY = get_env_str("FFPROBE_BINARY", "ffprobe") or "ffprobe"
 
 # ComfyUI 模型路徑（模型掃描用）
 COMFYUI_CHECKPOINTS_DIR = COMFYUI_MODELS_DIR / "checkpoints"

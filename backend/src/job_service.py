@@ -5,10 +5,11 @@ import base64
 import json
 import logging
 import os
+import re
 import threading
 import uuid
 from html import escape as html_escape
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable
 
@@ -17,7 +18,7 @@ from redis import RedisError
 from werkzeug.utils import secure_filename
 
 from shared.elements_data_validator import ElementsDataValidator
-from shared.job_contracts import JobStatus, iso_utc, public_status
+from shared.job_contracts import JobStatus, canonical_status, iso_utc, public_status
 from shared.job_tracker import JobTracker
 from shared.observability_runtime import job_repository
 from shared.runtime_services import build_job_data, resolve_workflow_request
@@ -214,7 +215,14 @@ class JobService:
             return {"error": "Upload directory not found"}, 500
         return {"filename": safe_filename, "original_name": escape(str(file_storage.filename))}, 200
 
-    def submit(self, data: dict[str, Any], *, request_id: str, user_label: str) -> tuple[dict[str, Any], int]:
+    def submit(
+        self,
+        data: dict[str, Any],
+        *,
+        request_id: str,
+        user_label: str,
+        internal_extra_params: dict[str, Any] | None = None,
+    ) -> tuple[dict[str, Any], int]:
         if not isinstance(data.get("prompt", ""), str):
             return {"error": "prompt must be a string"}, 400
         prompt = data.get("prompt", "").strip()
@@ -225,6 +233,8 @@ class JobService:
             return {"error": "Unsupported workflow"}, 400
 
         workflow = workflow_resolution.workflow_id
+        if 'resolution' in data and data['resolution'] not in ('720p', '1080p'):
+            return {'error': 'Unsupported resolution'}, 400
         catalog_extra_params, catalog_images, catalog_input_error = _normalize_catalog_inputs(
             workflow_resolution.entry, data, prompt
         )
@@ -357,6 +367,8 @@ class JobService:
                 extra_params[field] = value
 
         extra_params.update(catalog_extra_params)
+        if internal_extra_params:
+            extra_params.update(internal_extra_params)
 
         audio_value = data.get("audio", "")
         if audio_value and isinstance(audio_value, str) and audio_value.startswith("data:audio"):
@@ -449,20 +461,24 @@ class JobService:
             self.logger.exception("Redis enqueue failed")
             return {"error": "Operation failed"}, 500
 
-    def status(self, job_id: str) -> tuple[dict[str, Any], int]:
+    def _read_status(self, job_id: str, fallback: dict | None = None) -> dict | None:
         redis_client = self.runtime.redis_client
         if redis_client:
-            job_status = redis_client.hgetall(f"job:status:{job_id}")
+            try:
+                job_status = redis_client.hgetall(f"job:status:{job_id}")
+            except RedisError:
+                self.logger.warning('Redis status unavailable', exc_info=True)
+                job_status = None
             if job_status:
                 return {
-                    "job_id": str(escape(job_status.get("job_id", job_id))),
-                    "status": str(escape(job_status.get("status", "unknown"))),
+                    "job_id": job_status.get("job_id", job_id),
+                    "status": job_status.get("status", "unknown"),
                     "progress": int(job_status.get("progress", 0)),
-                    "image_url": str(escape(job_status.get("image_url", ""))),
-                    "error": str(escape(job_status.get("error", ""))),
+                    "image_url": job_status.get("image_url", ""),
+                    "error": job_status.get("error", ""),
                     "source": "redis",
-                }, 200
-        job = self.runtime.repository_provider().get_job(job_id)
+                }
+        job = fallback if fallback is not None else self.runtime.repository_provider().get_job(job_id)
         if job:
             return {
                 "job_id": job_id,
@@ -471,13 +487,67 @@ class JobService:
                 "image_url": "",
                 "error": job.get("sanitized_error_message") or "",
                 "source": "mysql",
-            }, 200
+            }
+        return None
+
+    def status(self, job_id: str) -> tuple[dict[str, Any], int]:
+        payload = self._read_status(job_id)
+        if payload is not None:
+            return payload, 200
         return {"error": "Job not found", "job_id": job_id}, 404
 
-    def cancel(self, job_id: str) -> tuple[dict[str, Any], int]:
+    def my_queue(self, user_label: str, limit: int = 50) -> tuple[dict[str, Any], int]:
+        if not self.runtime.job_observability_enabled:
+            return {'error': 'Queue unavailable'}, 503
+        if limit > 50:
+            limit = 50
+        try:
+            rows = self.runtime.repository_provider().list_history(
+                0, limit, (), source_label=user_label, since=datetime.now(timezone.utc) - timedelta(hours=24))
+            positions = {}
+            queue_length = None
+            redis_client = self.runtime.redis_client
+            if redis_client is not None:
+                try:
+                    # ponytail: O(n) LRANGE scan; use ZSET scores when queue exceeds ~1k.
+                    queue = redis_client.lrange(self.runtime.redis_queue_name, 0, -1)
+                    queue_length = len(queue)
+                    for index, raw in enumerate(queue, 1):
+                        try:
+                            positions.setdefault(json.loads(raw)['job_id'], index)
+                        except (ValueError, KeyError, TypeError):
+                            continue
+                except RedisError:
+                    self.logger.warning('Redis queue unavailable', exc_info=True)
+            items = []
+            for row in rows:
+                state = self._read_status(row['job_id'], row)
+                status = canonical_status(state['status'])
+                filename = row.get('filename') or ''
+                url = ''
+                if status == 'completed' and re.fullmatch(r'[A-Za-z0-9_-][A-Za-z0-9_.-]*', filename):
+                    url = '/outputs/' + filename
+                item = {
+                    'job_id': row['job_id'], 'workflow': row.get('workflow_id') or '', 'status': status,
+                    'output_url': url, 'output_type': row.get('output_type') if row.get('output_type') in {'image', 'video'} else '',
+                    'created_at': iso_utc(row['submitted_at']), 'error': state.get('error') or '',
+                }
+                item = {key: html_escape(str(value)) for key, value in item.items()}
+                item.update(progress=max(0, min(100, int(state.get('progress') or 0))),
+                            position=positions.get(row['job_id']) if status == 'queued' else None)
+                items.append(item)
+            return {'items': items, 'queue_length': queue_length}, 200
+        except Exception:
+            self.logger.exception('personal queue unavailable')
+            return {'error': 'Queue unavailable'}, 503
+
+    def cancel(self, job_id: str, requester_label: str) -> tuple[dict[str, Any], int]:
         job = self.runtime.repository_provider().get_job(job_id)
         if not job:
             return {"error": "Job not found"}, 404
+        owner = self.runtime.repository_provider().get_job_owner(job_id)
+        if not requester_label.startswith('TC#') or owner != requester_label:
+            return {'error': 'Forbidden'}, 403
         current = job["status"]
         if current in {"completed", "failed", "cancelled"}:
             return {"success": False, "message": "Job cannot be cancelled in its current state"}, 400

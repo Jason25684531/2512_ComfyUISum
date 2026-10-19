@@ -11,10 +11,6 @@ LOCAL_SKIP_PARTS = {".git", "node_modules", "venv", ".venv", "storage", "mysql_d
 LOCAL_CLEANUP_DIR_NAMES = {"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", "htmlcov"}
 LOCAL_CLEANUP_FILE_NAMES = {".coverage"}
 LOCAL_CLEANUP_SUFFIXES = {".pyc", ".pyo"}
-STATIC_DEPRECATED_ASSETS = (
-    Path(".env.example.backup"),
-    Path("openspec/specs/project.md"),
-)
 PROTECTED_PREFIXES = (
     Path("ComfyUIworkflow"),
     Path("ComfyUIworkflow_api"),
@@ -30,23 +26,11 @@ class MaintenanceError(RuntimeError):
     pass
 
 
-def _relative_path(path: Path, project_root: Path) -> Path:
-    return path.resolve().relative_to(project_root.resolve())
-
-
 def _is_protected_path(relative_path: Path) -> bool:
     if relative_path in PROTECTED_PATHS:
         return True
 
     return any(relative_path == prefix or prefix in relative_path.parents for prefix in PROTECTED_PREFIXES)
-
-
-def collect_deprecated_assets(project_root: Path) -> list[str]:
-    return sorted(
-        relative_path.as_posix()
-        for relative_path in STATIC_DEPRECATED_ASSETS
-        if (project_root / relative_path).exists()
-    )
 
 
 def detect_environment(
@@ -149,13 +133,11 @@ def run_maintenance(
         explicit_environment=explicit_environment,
         environ=environ,
     )
-    deprecated_assets = collect_deprecated_assets(project_root)
     local_targets = apply_local_cleanup(project_root, dry_run=dry_run)
     return {
         "environment": environment_name,
         "detected_by": detected_by,
         "dry_run": dry_run,
-        "deprecated_assets": deprecated_assets,
         "removed_paths": local_targets,
         "executed_commands": [],
     }
@@ -189,11 +171,6 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     print(f"[maintenance] environment={result['environment']} ({result['detected_by']})")
-    if result["deprecated_assets"]:
-        print("[maintenance] deprecated assets still present:")
-        for asset in result["deprecated_assets"]:
-            print(f"  - {asset}")
-
     if result["removed_paths"]:
         print("[maintenance] local cleanup targets:")
         for target in result["removed_paths"]:

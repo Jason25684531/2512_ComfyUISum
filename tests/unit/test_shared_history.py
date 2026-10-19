@@ -98,13 +98,13 @@ def test_repository_history_query_is_parameterized_and_uses_one_output():
     sql, parameters = cursor.execute.call_args.args
     assert parameters == ('line', 'failed', 'cancelled', 100, 24)
     assert 'MIN(first_output.output_id)' in sql
-    assert "JSON_EXTRACT(d.payload, '$.prompt')" in sql
+    assert 'd.prompt_text AS prompt' in sql
     assert 'ORDER BY j.submitted_at DESC, j.job_id' in sql
-    assert "COALESCE(JSON_UNQUOTE(JSON_EXTRACT(d.payload, '$.user_label')), '') <> %s" in sql
+    assert "COALESCE(d.source_label, '') <> %s" in sql
     assert repo.count_history(('completed',)) == 7
     count_sql, parameters = cursor.execute.call_args.args
     assert parameters == ('line', 'completed')
-    assert "COALESCE(JSON_UNQUOTE(JSON_EXTRACT(d.payload, '$.user_label')), '') <> %s" in count_sql
+    assert "COALESCE(d.source_label, '') <> %s" in count_sql
     repo.list_history(0, 24, ())
     assert cursor.execute.call_args.args[1] == ('line', 24, 0)
     repo.count_history(())

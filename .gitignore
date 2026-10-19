@@ -58,3 +58,4 @@ ComfyUIworkflow_api/*
 logs/*
 storage/*
 design/*
+.dockerignore/*

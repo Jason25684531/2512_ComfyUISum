@@ -34,6 +34,7 @@ def parse_workflow(
     retake_start: float = None,
     retake_end: float = None,
     extra_params: dict = None,
+    resolution: str = None,
     **kwargs,
 ) -> dict:
     """Build a ComfyUI API workflow payload from catalog metadata."""
@@ -71,6 +72,7 @@ def parse_workflow(
         prompts=prompts or [],
         seed=seed,
         aspect_ratio=aspect_ratio,
+        resolution=resolution,
         model=model,
         batch_size=batch_size,
         image_files=image_files or {},

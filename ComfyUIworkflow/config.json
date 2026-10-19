@@ -1,5 +1,17 @@
 {
   "_runtime": {
+    "resolution_tiers": {
+      "720p": {
+        "16:9": {"width": 1280, "height": 720},
+        "9:16": {"width": 720, "height": 1280},
+        "2:3": {"width": 720, "height": 1088}
+      },
+      "1080p": {
+        "16:9": {"width": 1920, "height": 1088},
+        "9:16": {"width": 1088, "height": 1920},
+        "2:3": {"width": 1088, "height": 1632}
+      }
+    },
     "model_aliases": {
       "turbo_fp8": "z-image\\z-image-turbo-fp8-e4m3fn.safetensors",
       "z_image_turbo": "z-image\\z-image-turbo-fp8-e4m3fn.safetensors"
@@ -609,6 +621,14 @@
           "node_id": "34",
           "input_key": "size"
         },
+        "custom_width": {
+          "node_id": "34",
+          "input_key": "custom_width"
+        },
+        "custom_height": {
+          "node_id": "34",
+          "input_key": "custom_height"
+        },
         "background": {
           "node_id": "34",
           "input_key": "background"
@@ -658,7 +678,9 @@
       "size": [
         "1024x1024",
         "1536x1024",
-        "1024x1536"
+        "1024x1536",
+        "864x1536",
+        "1536x864"
       ],
       "background": [
         "opaque",
@@ -783,13 +805,19 @@
         1024,
         1344,
         768,
-        1920
+        1920,
+        864,
+        1536,
+        576
       ],
       "height": [
         1024,
         768,
         1344,
-        1088
+        1088,
+        864,
+        1536,
+        1280
       ],
       "duration": [
         3,

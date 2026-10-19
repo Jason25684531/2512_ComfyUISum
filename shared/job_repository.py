@@ -134,15 +134,29 @@ class JobRepository:
             )
             return cursor.fetchall()
 
-    def list_history(self, offset: int, limit: int, statuses: tuple[str, ...]) -> list[dict[str, Any]]:
-        where = "WHERE COALESCE(JSON_UNQUOTE(JSON_EXTRACT(d.payload, '$.user_label')), '') <> %s"
+    def get_job_owner(self, job_id: str) -> str | None:
+        with self.transaction() as cursor:
+            cursor.execute('SELECT source_label FROM job_dispatches WHERE job_id=%s', (job_id,))
+            row = cursor.fetchone()
+            return row['source_label'] if row else None
+
+    def list_history(self, offset: int, limit: int, statuses: tuple[str, ...], *,
+                     source_label: str | None = None, since: datetime | None = None) -> list[dict[str, Any]]:
+        where = "WHERE COALESCE(d.source_label, '') <> %s"
+        parameters = ["line", *statuses]
         if statuses:
             where += f" AND j.status IN ({', '.join(['%s'] * len(statuses))})"
+        if source_label is not None:
+            where += ' AND d.source_label = %s'
+            parameters.append(source_label)
+        if since is not None:
+            where += ' AND j.submitted_at >= %s'
+            parameters.append(_database_value(since.isoformat().replace('+00:00', 'Z')))
         with self.transaction() as cursor:
             cursor.execute(
-                f"""SELECT j.job_id, j.workflow_id, j.status, j.submitted_at,
+                f"""SELECT j.job_id, j.workflow_id, j.status, j.progress, j.submitted_at,
                            j.sanitized_error_message, o.filename, o.output_type,
-                           JSON_UNQUOTE(JSON_EXTRACT(d.payload, '$.prompt')) AS prompt
+                           d.prompt_text AS prompt
                     FROM jobs j
                     LEFT JOIN job_outputs o ON o.output_id = (
                         SELECT MIN(first_output.output_id) FROM job_outputs first_output
@@ -150,12 +164,12 @@ class JobRepository:
                     )
                     LEFT JOIN job_dispatches d ON d.job_id = j.job_id
                     {where} ORDER BY j.submitted_at DESC, j.job_id LIMIT %s OFFSET %s""",
-                ("line", *statuses, limit, offset),
+                (*parameters, limit, offset),
             )
             return cursor.fetchall()
 
     def count_history(self, statuses: tuple[str, ...]) -> int:
-        where = "WHERE COALESCE(JSON_UNQUOTE(JSON_EXTRACT(d.payload, '$.user_label')), '') <> %s"
+        where = "WHERE COALESCE(d.source_label, '') <> %s"
         if statuses:
             where += f" AND j.status IN ({', '.join(['%s'] * len(statuses))})"
         with self.transaction() as cursor:

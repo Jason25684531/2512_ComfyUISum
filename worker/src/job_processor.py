@@ -354,6 +354,7 @@ class JobProcessor:
             prompt=prompt,
             seed=seed,
             aspect_ratio=aspect_ratio,
+            resolution=job_data.get('resolution'),
             model=model,
             batch_size=batch_size,
             image_files=image_files,
@@ -410,10 +411,6 @@ class JobProcessor:
                 tracker.event(job_id, "node_completed", resulting_status="running", stage=node_info["stage"], node_id=node_id, node_type=node_type)
             elif event_type == "execution_error":
                 tracker.event(job_id, "job_failed", resulting_status="running", stage="comfyui_execution", error_code="COMFYUI_NODE_ERROR", message=event.get("exception_message"))
-            elif event_type == "execution_interrupted":
-                current = tracker.repository.get_job(job_id) or {}
-                if current.get("cancel_requested_at") and tracker.transition(job_id, JobStatus.RUNNING, JobStatus.CANCELLED, error_stage="cancellation", error_code="CANCELLED_BY_CLIENT"):
-                    tracker.event(job_id, "job_cancelled", resulting_status="cancelled", stage="cancellation", error_code="CANCELLED_BY_CLIENT")
 
         def should_abort():
             current = tracker.repository.get_job(job_id) if tracker else None
@@ -425,16 +422,20 @@ class JobProcessor:
             on_progress=on_progress,
             on_event=on_event,
             should_abort=should_abort,
-            on_abort=lambda: job_logger.info("cancellation request observed"),
+            on_abort=lambda: self.comfy.cancel_prompt(prompt_id),
         )
-        if result.get("interrupted"):
-            current = tracker.repository.get_job(job_id) if tracker else None
-            if current and current.get("status") == JobStatus.CANCELLED.value:
-                update_job_status(self.redis, job_id, "cancelled", error="Task cancelled by user", public_error=True)
-                return
         if result.get("success"):
             self._persist_result(result, job_id, workflow_adapter, workflow, tracker, job_logger)
             return
+        if result.get("interrupted"):
+            current = tracker.repository.get_job(job_id) if tracker else None
+            if current and current.get('cancel_requested_at') and current.get('status') == 'running':
+                if tracker.transition(job_id, JobStatus.RUNNING, JobStatus.CANCELLED, error_stage='cancellation', error_code='CANCELLED_BY_CLIENT'):
+                    tracker.event(job_id, 'job_cancelled', resulting_status='cancelled', stage='cancellation', error_code='CANCELLED_BY_CLIENT')
+                current = tracker.repository.get_job(job_id)
+            if current and current.get("status") == JobStatus.CANCELLED.value:
+                update_job_status(self.redis, job_id, "cancelled", error="Task cancelled by user", public_error=True)
+                return
 
         error = result.get("error", "workflow execution failed")
         if "timeout" in error.lower():

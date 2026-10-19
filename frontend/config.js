@@ -135,7 +135,7 @@ window.STUDIO_RUNTIME_READY = (async () => {
             window.STUDIO_RUNTIME_CONFIG = {
                 ...window.STUDIO_RUNTIME_CONFIG,
                 ...payload,
-                api_origin: payload.api_origin || window.API_URL
+                api_origin: _isServedByFlask ? window.location.origin : (payload.api_origin || window.API_URL)
             };
             window.API_URL = window.STUDIO_RUNTIME_CONFIG.api_origin;
             window.API_BASE = window.API_URL;

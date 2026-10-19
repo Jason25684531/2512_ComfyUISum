@@ -8,7 +8,7 @@ from urllib.parse import parse_qs, urlsplit
 from playwright.sync_api import expect, sync_playwright
 
 BASE = os.getenv('PROMPT_HUB_TEST_URL', 'http://localhost:5000')
-ARTIFACTS = Path('openspec/changes/redesign-prompt-hub-ui/evidence')
+ARTIFACTS = Path(os.getenv('PROMPT_HUB_EVIDENCE', 'openspec/changes/redesign-prompt-hub-ui/evidence'))
 PNG = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=')
 TOOLS = ['text_to_image', 'image_gpt25_sunburst', 'image_edit', 'face_swap', 'sketch_to_image', 'multi_image_blend', 'ideogram4_regional_t2i', 'multi_angle', 'image_upscale_seedvr2', 'ltx_i2v', 'ltx_flf', 'ltx_retake_v2v', 'video_minimax_h3', 'virtual_human']
 
@@ -32,6 +32,8 @@ def main():
 
         def api(route):
             path = urlsplit(route.request.url).path
+            if path == '/api/queue/me':
+                return route.fulfill(json={'tempcode': 'U-ABC123', 'queue_length': 0, 'items': []})
             if path == '/api/runtime-config':
                 return route.continue_()
             if path == '/api/health':
@@ -60,8 +62,11 @@ def main():
                     return route.fulfill(status=503, json={'error': 'Redis service unavailable'})
                 return route.fulfill(json={'job_id': f'job-{len(payloads)}', 'status': 'queued'})
             if path.startswith('/api/cancel/'):
+                state['mode'] = 'cancelled'
                 return route.fulfill(status=202, json={'success': True})
             if path.startswith('/api/status/'):
+                if state['mode'] == 'cancelled':
+                    return route.fulfill(json={'status': 'cancelled', 'progress': 0})
                 state['poll'] += 1
                 if state['mode'] == 'network' and state['poll'] == 1:
                     return route.abort()
@@ -87,6 +92,7 @@ def main():
         page.locator('#hero-tool').select_option('text_to_image')
         page.locator('#hero-form button[type=submit]').click()
         expect(page.locator('#prompt-input')).to_have_value('一座海邊的未來城市')
+        expect(page.locator('#result-stage')).to_contain_text('已完成', timeout=12000)
 
         # Visit all fourteen tools with real browser uploads and intercepted existing API contracts.
         for tool in TOOLS:
@@ -126,7 +132,7 @@ def main():
             if tool == 'image_upscale_seedvr2':
                 assert payloads[-1]['extra_params']['scale'] == 2
             if tool == 'video_minimax_h3':
-                assert payloads[-1]['extra_params']['width'] == 1024
+                assert payloads[-1]['extra_params']['width'] == 1344
             # Reuse keeps files and prompt, and the failed job exposes a retry.
             state['mode'] = 'failed'
             page.locator('#result-stage').get_by_role('button', name='再生成', exact=True).click()

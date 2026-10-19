@@ -13,13 +13,14 @@ import struct
 import threading
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 import requests
 from flask import Blueprint, jsonify, request, send_file
 
+import config as line_config
 from config import (
     LINE_API_TIMEOUT_SECONDS,
     LINE_CHANNEL_ACCESS_TOKEN,
@@ -30,10 +31,12 @@ from config import (
     LINE_MAX_PREVIEW_BYTES,
     LINE_MAX_VIDEO_BYTES,
     LINE_MAX_WEBHOOK_BYTES,
+    LINE_MUSIC_ENABLED,
     LINE_NOTIFICATION_RETRY_LIMIT,
     LINE_PENDING_IMAGE_TTL,
     LINE_PUBLIC_BASE_URL,
 )
+from line_music_service import MUSIC_ID_RE, LineMusicService, MusicLibrary, normalize
 from shared.job_contracts import canonical_status
 from shared.runtime_services import resolve_workflow_request
 
@@ -60,6 +63,9 @@ REPLY_VIDEO_IMAGE_LIMIT = "影片最多接受 2 張圖片。"
 REPLY_GENERATION_FAILED = "生成失敗，請重新嘗試。"
 REPLY_IMAGE_FAILED = "圖片接收失敗，請重新傳送。"
 REPLY_UNAVAILABLE = "目前無法生成，請稍後再試。"
+REPLY_MUSIC_FALLBACK = "配樂失敗，先提供原始影片。"
+REPLY_MUSIC_TIMEOUT = "選曲已逾時，已開始生成不配樂影片。"
+REPLY_MUSIC_CHOOSE = "請先完成配樂選擇，或輸入「不要音樂」開始生成、「取消」取消本次請求。"
 
 
 def verify_line_signature(body: bytes, signature: str | None, secret: str) -> bool:
@@ -104,7 +110,7 @@ def _parse_created_at(value: Any) -> datetime | None:
 
 
 def _mp4_size(path: Path) -> tuple[int, int] | None:
-    """Read the first video track's display size from the MP4 tkhd box (no ffmpeg in Backend)."""
+    """Read the first video track's display size without spawning a media process."""
     try:
         with path.open("rb") as handle:
             end = path.stat().st_size
@@ -136,9 +142,41 @@ def _mp4_size(path: Path) -> tuple[int, int] | None:
     return None
 
 
+def _generation_dimensions(entry, prompt: str, paths: list[Path]) -> dict[str, Any]:
+    text = normalize(prompt)
+    ratio = re.search(r"(?<!\d)(9\s*[:/x×]\s*20|9\s*[:/x×]\s*16|16\s*[:/x×]\s*9|1\s*[:/x×]\s*1|2\s*[:/x×]\s*3|3\s*[:/x×]\s*2)(?!\d)", text)
+    if ratio:
+        width, height = map(int, re.split(r"\s*[:/x×]\s*", ratio.group(1)))
+    elif re.search(r"\bmobile\b|\bphone\b|手機(?:比例|版|直式|尺寸|畫面)?", text):
+        width, height = 9, 20
+    elif re.search(r"\bvertical\b|portrait orientation|直式|直向|縱向|竖版|竖屏", text):
+        width, height = 9, 16
+    elif re.search(r"\bhorizontal\b|landscape orientation|橫式|橫向|横版|横屏", text):
+        width, height = 16, 9
+    elif paths:
+        from PIL import Image, ImageOps
+
+        with Image.open(paths[0]) as image:
+            width, height = ImageOps.exif_transpose(image).size
+    else:
+        return {}
+    if entry.output_type == "image":
+        if width * 20 == height * 9:
+            # Sunburst requires 16-aligned dimensions and at least 655,360 pixels.
+            return {"size": "custom", "custom_width": 576, "custom_height": 1280}
+        sizes = [tuple(map(int, size.split("x"))) for size in entry.choices["size"]]
+    else:
+        sizes = [(w, h) for w in entry.choices["width"] for h in entry.choices["height"]]
+    chosen_width, chosen_height = min(sizes, key=lambda size: abs(size[0] / size[1] - width / height))
+    if entry.output_type == "image":
+        return {"size": f"{chosen_width}x{chosen_height}"}
+    return {"width": chosen_width, "height": chosen_height}
+
+
 class LineAdapter:
     def __init__(self, runtime):
         self.runtime = runtime
+        self.music: LineMusicService | None = None
 
     @property
     def redis(self):
@@ -249,15 +287,20 @@ class LineAdapter:
         if invalid_paths:
             self._delete_pending(user_id, state)
             return self._empty_session()
+        request_id = state.get("music_request_id")
         state = {"images": images, "prompt": prompt, "created_at": state["created_at"]}
-        self.redis.expire(key, LINE_PENDING_IMAGE_TTL)
+        if isinstance(request_id, str) and re.fullmatch(r"[a-f0-9]{32}", request_id):
+            state["music_request_id"] = request_id
+        ttl = LINE_JOB_MAPPING_TTL + line_config.LINE_MUSIC_STATE_TTL if "music_request_id" in state else LINE_PENDING_IMAGE_TTL
+        self.redis.expire(key, ttl)
         return state
 
     def _save_session(self, user_id: str, state: dict[str, Any]) -> None:
         if self.redis is None:
             raise RuntimeError("Redis unavailable")
         state.setdefault("created_at", _iso_now())
-        self.redis.setex(f"line:user:{user_id}", LINE_PENDING_IMAGE_TTL, json.dumps(state))
+        ttl = LINE_JOB_MAPPING_TTL + line_config.LINE_MUSIC_STATE_TTL if "music_request_id" in state else LINE_PENDING_IMAGE_TTL
+        self.redis.setex(f"line:user:{user_id}", ttl, json.dumps(state))
 
     def _line_request(self, method: str, url: str, payload: dict[str, Any]) -> bool:
         headers = {
@@ -292,19 +335,18 @@ class LineAdapter:
             {"to": user_id, "messages": [{"type": "text", "text": text}]},
         )
 
-    def push_video(self, user_id: str, video_url: str, preview_url: str) -> bool:
+    def push_video(self, user_id: str, video_url: str, preview_url: str, *, text: str | None = None) -> bool:
         if not user_id or not video_url.startswith("https://") or not preview_url.startswith("https://"):
             return False
+        messages = [{"type": "video", "originalContentUrl": video_url, "previewImageUrl": preview_url}]
+        if text:
+            messages.insert(0, {"type": "text", "text": text})
         return self._line_request(
             "POST",
             LINE_PUSH_URL,
             {
                 "to": user_id,
-                "messages": [{
-                    "type": "video",
-                    "originalContentUrl": video_url,
-                    "previewImageUrl": preview_url,
-                }],
+                "messages": messages,
             },
         )
 
@@ -344,7 +386,10 @@ class LineAdapter:
         mime = mimetypes.guess_type(path.name)[0] or "image/png"
         return f"data:{mime};base64,{base64.b64encode(data).decode('ascii')}"
 
-    def _store_job_mapping(self, job_id: str, user_id: str, output_type: str, workflow_id: str) -> None:
+    def _store_job_mapping(
+        self, job_id: str, user_id: str, output_type: str, workflow_id: str,
+        *, music_id: str | None = None, music_mode: str = "mix",
+    ) -> None:
         if self.redis is None:
             raise RuntimeError("Redis unavailable")
         self.redis.hset(
@@ -357,6 +402,7 @@ class LineAdapter:
                 "created_at": _iso_now(),
                 "notification_state": "pending",
                 "notification_attempts": "0",
+                **({"music_id": music_id, "music_mode": music_mode, "music_state": "pending"} if music_id else {}),
             },
         )
         self.redis.expire(f"line:job:{job_id}", LINE_JOB_MAPPING_TTL)
@@ -376,7 +422,13 @@ class LineAdapter:
                 return True
         return False
 
-    def submit_output(self, user_id: str, prompt: str, output_type: str, image_paths: list[str]) -> bool | None:
+    def submit_output(
+        self, user_id: str, prompt: str, output_type: str, image_paths: list[str],
+        *, music_id: str | None = None, music_mode: str = "mix",
+    ) -> bool | None:
+        if music_id is not None and (output_type != "video" or not self.music
+                or music_id not in self.music.library.tracks or music_mode not in {"mix", "replace"}):
+            return False
         workflow_id = IMAGE_WORKFLOW_ID if output_type == "image" else VIDEO_WORKFLOW_ID
         resolution = self._resolve_workflow(workflow_id)
         if resolution is None:
@@ -395,14 +447,18 @@ class LineAdapter:
                     images["first_frame"] = self._image_data_uri(paths[0])
                 if len(paths) == 2:
                     images["last_frame"] = self._image_data_uri(paths[1])
+            data = {"workflow": resolution.workflow_id, "prompt": prompt, "images": images}
+            dimensions = _generation_dimensions(resolution.entry, prompt, paths)
+            if output_type == "video":
+                dimensions["duration"] = 10
+            internal_extra_params = dimensions if dimensions.get("size") == "custom" else None
+            if dimensions and internal_extra_params is None:
+                data["extra_params"] = dimensions
             payload, status = self.runtime.job_service.submit(
-                {
-                    "workflow": resolution.workflow_id,
-                    "prompt": prompt,
-                    "images": images,
-                },
+                data,
                 request_id=str(uuid.uuid4()),
                 user_label="line",
+                internal_extra_params=internal_extra_params,
             )
         except Exception:
             self.logger.exception("LINE job submission failed")
@@ -411,7 +467,8 @@ class LineAdapter:
         if status >= 400 or not isinstance(job_id, str) or not job_id:
             return False
         try:
-            self._store_job_mapping(job_id, user_id, output_type, resolution.workflow_id)
+            self._store_job_mapping(job_id, user_id, output_type, resolution.workflow_id,
+                                    music_id=music_id, music_mode=music_mode)
         except Exception:
             self.logger.exception("LINE job mapping failed")
             return False
@@ -527,6 +584,13 @@ class LineAdapter:
             data = postback.get("data")
             if isinstance(data, str) and data in {"output=image", "output=video"}:
                 self._handle_output_choice(user_id, data.partition("=")[2], reply_token)
+            elif self.music and isinstance(data, str) and re.fullmatch(r"music=(yes|no):[a-f0-9]{32}", data):
+                choice, request_id = data.removeprefix("music=").split(":")
+                state = self._load_music_session(user_id)
+                if state and state["request_id"] == request_id:
+                    self._handle_music_text(user_id, "要配樂" if choice == "yes" else "不要音樂", reply_token)
+                else:
+                    self.reply(reply_token, "選曲已結束，請先輸入提示詞並選擇影片。")
             return
         if event.get("type") != "message":
             return
@@ -535,6 +599,9 @@ class LineAdapter:
         if message_type == "image":
             message_id = _safe_identifier(message.get("id"))
             session = self._load_session(user_id)
+            if self.music and self._load_music_session(user_id):
+                self.reply(reply_token, REPLY_MUSIC_CHOOSE)
+                return
             if len(session["images"]) >= MAX_PENDING_IMAGES:
                 if session["prompt"]:
                     self.reply_with_output_choice(reply_token, image_only=True, text=REPLY_IMAGE_LIMIT)
@@ -563,13 +630,154 @@ class LineAdapter:
             return
         session = self._load_session(user_id)
         if text == "取消":
+            state = self._load_music_session(user_id) if self.music else None
+            if state and self.redis.get(f"line:music:submit:{state['request_id']}"):
+                self.reply(reply_token, REPLY_GENERATING)
+                return
             self._delete_pending(user_id, session)
+            if self.music:
+                self.redis.delete(f"line:music:{user_id}")
             self.reply(reply_token, REPLY_CANCELLED)
             return
         text = text.strip()
+        if self.music and self._handle_music_text(user_id, text, reply_token):
+            return
+        session.pop("music_request_id", None)
         session["prompt"] = text
         self._save_session(user_id, session)
         self.reply_with_output_choice(reply_token, len(session["images"]) == MAX_PENDING_IMAGES)
+
+    def _job_mapping(self, job_id: str) -> dict:
+        return _normalize_hash(self.redis.hgetall(f"line:job:{job_id}"))
+
+    def _music_video(self, user_id: str, job_id: str) -> Path | None:
+        mapping = self._job_mapping(job_id)
+        if (not _safe_identifier(job_id) or mapping.get("job_id") != job_id
+                or mapping.get("user_id") != user_id or mapping.get("output_type") != "video"
+                or mapping.get("notification_state") in {"delivered", "failed", "notified_failure"}):
+            return None
+        status = self._status_record(job_id)
+        if canonical_status(status.get("status", "")) != "completed":
+            return None
+        path = self._output_path(self._output_name(status, job_id))
+        try:
+            return path if path and path.is_file() and 0 < path.stat().st_size <= LINE_MAX_VIDEO_BYTES else None
+        except OSError:
+            return None
+
+    def _load_music_session(self, user_id: str) -> dict | None:
+        key = f"line:music:{user_id}"
+        state = self._redis_json(key)
+        if state is None:
+            if self.redis.get(key) is not None:
+                self.redis.delete(key)
+            return None
+        candidates = state.get("candidates")
+        created = _parse_created_at(state.get("created_at"))
+        valid = (
+            isinstance(state.get("state"), str) and state["state"] in {"music_offer", "music_select"}
+            and isinstance(state.get("mode"), str) and state["mode"] in {"mix", "replace"}
+            and isinstance(state.get("request_id"), str) and re.fullmatch(r"[a-f0-9]{32}", state["request_id"])
+            and isinstance(candidates, list) and len(candidates) <= 5
+            and all(isinstance(item, str) and MUSIC_ID_RE.fullmatch(item) for item in candidates)
+            and isinstance(state.get("created_at"), str) and created is not None
+            and set(state) == {"state", "mode", "request_id", "candidates", "created_at"}
+        )
+        if not valid:
+            self.redis.delete(key)
+            return None
+        return state
+
+    def _save_music_session(self, user_id: str, state: dict) -> None:
+        # Keep data past the decision deadline so the monitor can submit without a new webhook.
+        ttl = self.music.settings.LINE_MUSIC_STATE_TTL + LINE_JOB_MAPPING_TTL
+        self.redis.setex(f"line:music:{user_id}", ttl, json.dumps(state))
+
+    def _music_expired(self, state: dict) -> bool:
+        settings = self.music.settings if self.music else line_config
+        return _now() >= _parse_created_at(state["created_at"]) + timedelta(seconds=settings.LINE_MUSIC_STATE_TTL)
+
+    def _reply_music_offer(self, reply_token, state: dict) -> None:
+        if not isinstance(reply_token, str) or not (1 <= len(reply_token) <= 2048):
+            return
+        items = [{"type": "action", "action": {
+            "type": "postback", "label": label, "displayText": label,
+            "data": f"music={choice}:{state['request_id']}",
+        }} for label, choice in (("要配樂", "yes"), ("不用配樂", "no"))]
+        self._line_request("POST", LINE_REPLY_URL, {"replyToken": reply_token, "messages": [{
+            "type": "text", "text": "是否加入配樂？逾時未完成選曲，將不配樂並開始生成。",
+            "quickReply": {"items": items},
+        }]})
+
+    def _finish_music_choice(self, user_id: str, state: dict, reply_token=None, music_id=None) -> None:
+        if self._load_music_session(user_id) != state:
+            return
+        # One decision, whether made by a webhook or the timeout monitor, submits at most once.
+        # ponytail: claim/submission are not transactional; check for an existing job before clearing a stranded claim.
+        if not self.redis.set(f"line:music:submit:{state['request_id']}", "1", nx=True, ex=LINE_JOB_MAPPING_TTL):
+            return
+        session = self._load_session(user_id)
+        if session.get("music_request_id") != state["request_id"] or not session["prompt"]:
+            self.redis.delete(f"line:music:{user_id}")
+            return
+        expired = self._music_expired(state)
+        if not self.music or music_id not in self.music.library.tracks:
+            music_id = None
+        self._submit_session(user_id, "video", session, reply_token,
+                             music_id=None if expired else music_id, music_mode=state["mode"], timed_out=expired)
+
+    def _expire_music_choices(self) -> None:
+        for raw_key in self.redis.scan_iter(match="line:music:*"):
+            user_id = _safe_identifier(str(_decode_redis(raw_key)).removeprefix("line:music:"))
+            if user_id:
+                state = self._load_music_session(user_id)
+                if state and self._music_expired(state):
+                    self._finish_music_choice(user_id, state)
+
+    def _handle_music_text(self, user_id: str, text: str, reply_token) -> bool:
+        state = self._load_music_session(user_id)
+        if state and self.redis.get(f"line:music:submit:{state['request_id']}"):
+            self.reply(reply_token, REPLY_GENERATING)
+            return True
+        if state and self._music_expired(state):
+            self._finish_music_choice(user_id, state, reply_token)
+            return True
+        playlist = text in {"音樂", "音樂清單", "配樂", "要配樂"}
+        search = text.startswith("找") and (state is not None or any(word in text for word in ("音樂", "配樂", "歌")))
+        number = normalize(text)
+        selection = state is not None and bool(re.fullmatch(r"[0-9]+", number))
+        mode = state is not None and text in {"原聲加音樂", "只要音樂"}
+        if state is not None and text in {"不要音樂", "不用配樂"}:
+            self._finish_music_choice(user_id, state, reply_token)
+            return True
+        if state is None:
+            if not (playlist or search):
+                return False
+            self.reply(reply_token, "請先輸入提示詞並選擇影片，再選擇配樂。")
+            return True
+        if not self.music.library.tracks:
+            self._finish_music_choice(user_id, state, reply_token)
+            return True
+        if playlist or search:
+            tracks = self.music.library.playlist() if playlist else self.music.library.search(text)
+            state.update(state="music_select", candidates=[track["id"] for track in tracks])
+            self._save_music_session(user_id, state)
+            listing = "\n".join(f"{i}. {t['title']}｜{t['genre']} / {t['mood']} / {t['tempo']}" for i, t in enumerate(tracks, 1))
+            self.reply(reply_token, (listing + "\n輸入序號選曲；可輸入「只要音樂」切換模式，或「不要音樂」直接生成。")
+                       if listing else "找不到符合的音樂，可輸入「音樂」查看全部。")
+        elif mode:
+            state["mode"] = "mix" if text == "原聲加音樂" else "replace"
+            self._save_music_session(user_id, state)
+            self.reply(reply_token, "已設定為原聲加音樂。" if state["mode"] == "mix" else "已設定為只要音樂。")
+        elif selection:
+            count = len(state["candidates"])
+            if len(number) > 2 or not 1 <= int(number) <= count:
+                self.reply(reply_token, f"請輸入 1～{count} 選擇音樂。" if count else "請重新輸入「音樂」選曲。")
+            else:
+                self._finish_music_choice(user_id, state, reply_token, state["candidates"][int(number) - 1])
+        else:
+            self.reply(reply_token, REPLY_MUSIC_CHOOSE)
+        return True
 
     def _handle_output_choice(self, user_id: str, output_type: str, reply_token: Any) -> None:
         session = self._load_session(user_id)
@@ -580,16 +788,39 @@ class LineAdapter:
         if output_type == "video" and len(session["images"]) > MAX_VIDEO_IMAGES:
             self.reply(reply_token, REPLY_VIDEO_IMAGE_LIMIT)
             return
+        if self.music:
+            state = self._load_music_session(user_id)
+            if state:
+                if self._music_expired(state):
+                    self._finish_music_choice(user_id, state, reply_token)
+                else:
+                    self.reply(reply_token, REPLY_MUSIC_CHOOSE)
+                return
+            if output_type == "video" and self.music.library.tracks:
+                request_id = secrets.token_hex(16)
+                state = {"state": "music_offer", "request_id": request_id, "candidates": [],
+                         "mode": "mix", "created_at": _iso_now()}
+                session["music_request_id"] = request_id
+                self._save_session(user_id, session)
+                self._save_music_session(user_id, state)
+                self._reply_music_offer(reply_token, state)
+                return
+        self._submit_session(user_id, output_type, session, reply_token)
+
+    def _submit_session(self, user_id, output_type, session, reply_token=None,
+                        *, music_id=None, music_mode="mix", timed_out=False) -> None:
+        notify = lambda text: self.reply(reply_token, text) if reply_token else self.push(user_id, text)
         busy = self.has_active_job(user_id)
-        submitted = self.submit_output(user_id, prompt, output_type, session["images"])
-        if submitted is None:
-            self.reply(reply_token, REPLY_UNAVAILABLE)
-            return
+        submitted = self.submit_output(user_id, session["prompt"], output_type, session["images"],
+                                       music_id=music_id, music_mode=music_mode)
+        self.redis.delete(f"line:music:{user_id}")
         if not submitted:
-            self.reply(reply_token, REPLY_GENERATION_FAILED)
+            session.pop("music_request_id", None)
+            self._save_session(user_id, session)
+            notify(REPLY_UNAVAILABLE if submitted is None else REPLY_GENERATION_FAILED)
             return
         self._delete_pending(user_id, session)
-        self.reply(reply_token, REPLY_QUEUED if busy else REPLY_GENERATING)
+        notify(REPLY_MUSIC_TIMEOUT if timed_out else REPLY_QUEUED if busy else REPLY_GENERATING)
 
     def process_webhook(self, raw_body: bytes, signature: str | None) -> tuple[dict[str, Any], int]:
         if len(raw_body) > LINE_MAX_WEBHOOK_BYTES:
@@ -729,9 +960,36 @@ class LineAdapter:
             return
         self._record_push_failure(key)
 
+    def _create_media_token(self, job_id: str, output_name: str, kind: str, output_path: Path):
+        token = secrets.token_urlsafe(32)
+        preview_name = f"line_preview_{token}.jpg"
+        preview_path = self._preview_path(preview_name)
+        try:
+            if preview_path is None or not self._create_preview(
+                preview_path, output_path if kind == "image" else None, output_path if kind == "video" else None,
+            ):
+                raise ValueError("preview_failed")
+            self.redis.setex(f"line:download:{token}", LINE_DOWNLOAD_TOKEN_TTL, json.dumps({
+                "job_id": job_id, "kind": kind, "output_name": output_name,
+                "preview_name": preview_name, "created_at": _iso_now(),
+            }))
+            # Downloads and previews require both records for the token's entire lifetime.
+            for key in (f"line:job:{job_id}", f"job:status:{job_id}"):
+                self.redis.expire(key, LINE_DOWNLOAD_TOKEN_TTL, gt=True)
+        except Exception:
+            if preview_path:
+                preview_path.unlink(missing_ok=True)
+            try:
+                self.redis.delete(f"line:download:{token}")
+            except Exception:
+                self.logger.warning("LINE media token cleanup unavailable")
+            raise
+        return token, preview_path
+
     def poll_once(self) -> int:
         if self.redis is None or not self.configured(require_public_url=True):
             return 0
+        self._expire_music_choices()
         keys = self.redis.scan_iter(match="line:job:*") if hasattr(self.redis, "scan_iter") else self.redis.keys("line:job:*")
         processed = 0
         for raw_key in keys:
@@ -757,38 +1015,58 @@ class LineAdapter:
                     output_type = str(mapping.get("output_type") or "video")
                     output_path = self._output_path(output_name, output_type)
                     size_limit = LINE_MAX_IMAGE_BYTES if output_type == "image" else LINE_MAX_VIDEO_BYTES
+                    original_name, original_path = output_name, output_path
+                    text = None
+                    if output_type == "video" and mapping.get("music_id"):
+                        music_state = mapping.get("music_state", "pending")
+                        if (self.music and music_state not in {"ready", "fallback"}
+                                and output_path and output_path.is_file()
+                                and 0 < output_path.stat().st_size <= size_limit):
+                            try:
+                                self.music.schedule(user_id, job_id)
+                            except Exception:
+                                self.logger.warning("LINE music scheduling failed")
+                                self.redis.hset(key, mapping={"music_state": "fallback"})
+                            continue
+                        music_path = self._output_path(mapping.get("music_output")) if music_state == "ready" else None
+                        if (music_path and music_path.is_file()
+                                and re.fullmatch(r"line_music_[a-f0-9]{24}\.mp4", music_path.name)
+                                and 0 < music_path.stat().st_size <= LINE_MAX_VIDEO_BYTES):
+                            output_name, output_path = mapping["music_output"], music_path
+                            text = "配樂影片已完成。"
+                        else:
+                            text = REPLY_MUSIC_FALLBACK
+                            self.redis.hset(key, mapping={"music_state": "fallback"})
                     if (
                         output_type in {"image", "video"}
                         and output_path
                         and output_path.is_file()
                         and 0 < output_path.stat().st_size <= size_limit
                     ):
-                        token = secrets.token_urlsafe(32)
-                        preview_name = f"line_preview_{token}.jpg"
-                        preview_path = self._preview_path(preview_name)
-                        image_path = output_path if output_type == "image" else None
-                        video_path = output_path if output_type == "video" else None
-                        if preview_path is None or not self._create_preview(preview_path, image_path, video_path):
-                            self._notify_failure(key, user_id)
-                            continue
-                        token_record = {
-                            "job_id": job_id,
-                            "kind": output_type,
-                            "output_name": output_name,
-                            "preview_name": preview_name,
-                            "created_at": _iso_now(),
-                        }
-                        self.redis.setex(
-                            f"line:download:{token}",
-                            LINE_DOWNLOAD_TOKEN_TTL,
-                            json.dumps(token_record),
-                        )
+                        try:
+                            token, preview_path = self._create_media_token(job_id, output_name, output_type, output_path)
+                        except (OSError, ValueError):
+                            if output_path == original_path:
+                                self._notify_failure(key, user_id)
+                                continue
+                            output_path.unlink(missing_ok=True)
+                            self.redis.hset(key, mapping={"music_state": "fallback", "music_output": ""})
+                            text = REPLY_MUSIC_FALLBACK
+                            if (not original_path or not original_path.is_file()
+                                    or not 0 < original_path.stat().st_size <= size_limit):
+                                self._notify_failure(key, user_id)
+                                continue
+                            try:
+                                token, preview_path = self._create_media_token(job_id, original_name, output_type, original_path)
+                            except (OSError, ValueError):
+                                self._notify_failure(key, user_id)
+                                continue
                         public_url = f"{LINE_PUBLIC_BASE_URL}/line/download/{token}"
                         preview_url = f"{LINE_PUBLIC_BASE_URL}/line/preview/{token}"
                         pushed = (
                             self.push_image(user_id, public_url, preview_url)
                             if output_type == "image"
-                            else self.push_video(user_id, public_url, preview_url)
+                            else self.push_video(user_id, public_url, preview_url, **({"text": text} if text else {}))
                         )
                         if pushed:
                             self._mark_terminal_notification(key, "delivered")
@@ -892,6 +1170,9 @@ class LineCompletionMonitor:
 
 def create_blueprint(runtime) -> Blueprint:
     adapter = LineAdapter(runtime)
+    if LINE_MUSIC_ENABLED:
+        library = MusicLibrary(line_config.LINE_MUSIC_LIBRARY_DIR, limit=line_config.LINE_MUSIC_RESULT_LIMIT, logger=runtime.logger)
+        adapter.music = LineMusicService(adapter, library, line_config)
     monitor = LineCompletionMonitor(adapter)
     bp = Blueprint("line", __name__)
     bp.line_adapter = adapter

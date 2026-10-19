@@ -40,6 +40,7 @@ class WorkflowRuntimeMetadata:
     aspect_ratios: dict[str, dict[str, int]]
     default_aspect_ratio: str
     default_resolution: dict[str, int]
+    resolution_tiers: dict[str, dict[str, dict[str, int]]]
 
 
 @dataclass(frozen=True)
@@ -375,11 +376,24 @@ class WorkflowCatalog:
         if default_resolution != normalized_ratios[default_aspect_ratio]:
             raise ValueError("_runtime.default_resolution must match default_aspect_ratio")
 
+        tiers = raw_runtime.get('resolution_tiers', {})
+        if not isinstance(tiers, dict) or any(tier not in {'720p', '1080p'} for tier in tiers):
+            raise ValueError('_runtime.resolution_tiers supports only 720p and 1080p')
+        for sizes in tiers.values():
+            if not isinstance(sizes, dict):
+                raise ValueError('resolution_tiers must contain ratio objects')
+            for ratio, size in sizes.items():
+                if ratio not in {'16:9', '9:16', '2:3'} or not isinstance(size, dict):
+                    raise ValueError('invalid resolution_tiers ratio')
+                if any(type(size.get(axis)) is not int or size[axis] <= 0 or size[axis] % 16 for axis in ('width', 'height')):
+                    raise ValueError('resolution_tiers dimensions must be positive integers divisible by 16')
+
         return WorkflowRuntimeMetadata(
             model_aliases=normalized_models,
             aspect_ratios=normalized_ratios,
             default_aspect_ratio=default_aspect_ratio,
             default_resolution=dict(default_resolution),
+            resolution_tiers=tiers,
         )
 
     @staticmethod

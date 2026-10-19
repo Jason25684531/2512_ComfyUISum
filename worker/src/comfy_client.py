@@ -268,15 +268,30 @@ class ComfyClient:
                     if abort_reason and not result["aborted"]:
                         result["aborted"] = True
                         result["abort_reason"] = str(abort_reason)
-                        # /interrupt is instance-wide in the deployed ComfyUI.
-                        # Record the request but keep observing this prompt until
-                        # ComfyUI confirms an interruption or another terminal event.
+                        # ComfyUI >= 0.34.2 accepts a targeted prompt_id interrupt.
                         if on_abort:
                             try:
                                 on_abort()
                             except Exception as abort_error:
                                 self._log("warning", "cancel callback failed: %s", abort_error)
                         self._log("info", "cancellation requested for prompt %s: %s", prompt_id, abort_reason)
+
+                if result['aborted'] and elapsed >= result.get('_queue_check_at', 0):
+                    # ponytail: /queue poll only after abort; at most one GET per polling interval.
+                    result['_queue_check_at'] = elapsed + COMFY_POLLING_INTERVAL
+                    try:
+                        response = requests.get(f'{self.http_url}/queue', timeout=COMFY_HTTP_TIMEOUT)
+                        response.raise_for_status()
+                        queue = response.json()
+                        if not any(item[1] == prompt_id for key in ('queue_running', 'queue_pending') for item in queue[key]):
+                            outputs = self.get_outputs_from_history(prompt_id)
+                            if any(outputs.values()):
+                                result.update(success=True, **outputs)
+                            else:
+                                result.update(interrupted=True, error='ComfyUI execution interrupted')
+                            break
+                    except (requests.RequestException, ValueError, KeyError, TypeError, IndexError):
+                        self._log('warning', 'Cancellation confirmation unavailable for prompt %s', prompt_id)
                 
                 # Phase 9: 每 60 秒輸出一次心跳日誌（保持連接存活，證明沒有卡死）
                 if elapsed - last_heartbeat >= 60:
@@ -394,6 +409,7 @@ class ComfyClient:
                             on_event("execution_interrupted", msg_data)
                         result["error"] = "ComfyUI execution interrupted"
                         result["interrupted"] = True
+                        break
                             
                 except websocket.WebSocketTimeoutException:
                     continue
@@ -411,6 +427,17 @@ class ComfyClient:
         
         return result
     
+    def cancel_prompt(self, prompt_id: str) -> bool:
+        success = True
+        for path, body in (('/queue', {'delete': [prompt_id]}), ('/interrupt', {'prompt_id': prompt_id})):
+            try:
+                response = requests.post(self.http_url + path, json=body, timeout=COMFY_HTTP_TIMEOUT)
+                response.raise_for_status()
+            except requests.RequestException:
+                self._log('warning', 'ComfyUI targeted cancellation failed: %s prompt=%s', path, prompt_id)
+                success = False
+        return success
+
     def get_outputs_from_history(self, prompt_id: str) -> dict:
         """
         從 ComfyUI History API 獲取任務輸出

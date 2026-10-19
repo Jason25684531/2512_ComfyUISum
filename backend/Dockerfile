@@ -2,6 +2,10 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
+# Backend-only CPU audio post-processing; Debian supplies ffprobe as well.
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
 # 安裝依賴（使用根目錄的統一 requirements.txt）
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
@@ -23,7 +27,7 @@ ENV PYTHONPATH=/app
 
 # 健康檢查
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:5000/health')" || exit 1
+    CMD python -c "import requests; r = requests.get('http://localhost:5000/health', timeout=4); r.raise_for_status(); assert r.json().get('status') == 'ok'" || exit 1
 
 # 啟動應用
 CMD ["sh", "-c", "python scripts/migrate_database.py && python backend/src/app.py"]

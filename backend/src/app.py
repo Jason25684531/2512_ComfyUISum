@@ -2,12 +2,16 @@
 from __future__ import annotations
 
 import json
+import hashlib
+import hmac
 import logging
+import re
+import secrets
 import sys
 import time
 from pathlib import Path
 
-from flask import Flask, g, jsonify, request
+from flask import Flask, current_app, g, jsonify, request
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -68,6 +72,17 @@ def _get_cookie_secure_setting() -> bool:
 
 
 COOKIE_SECURE = _get_cookie_secure_setting()
+
+
+def client_label(token: str) -> str:
+    digest = hmac.new(current_app.config['SECRET_KEY'].encode(), token.encode(), hashlib.sha256).hexdigest()
+    return 'TC#' + digest[:16]
+
+
+def tempcode_for(label: str) -> str:
+    return 'U-' + label[3:9].upper()
+
+
 REDIS_QUEUE_NAME = JOB_QUEUE
 UPLOAD_FOLDER = Path(STORAGE_INPUT_DIR)
 UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
@@ -164,13 +179,16 @@ def create_app() -> Flask:
     @application.before_request
     def before_request_handler():
         global _outbox_last_run
-        ip_address = request.headers.get("X-Forwarded-For", request.remote_addr or "unknown").split(",")[0].strip()
-        g.user_id = f"IP#{ip_address}"
+        token = request.cookies.get('studio_tc', '')
+        if not re.fullmatch(r'[A-Za-z0-9_-]{22}', token):
+            token = g.new_client_token = secrets.token_urlsafe(16)
+        g.user_id = client_label(token)
+        g.tempcode = tempcode_for(g.user_id)
         g.request_id = new_request_id(request.headers.get("X-Request-ID"))
-        if request.path != "/api/history" and time.monotonic() - _outbox_last_run > 5:
+        if request.path not in {"/api/history", "/api/queue/me"} and time.monotonic() - _outbox_last_run > 5:
             _outbox_last_run = time.monotonic()
             runtime.job_service.dispatch_pending_jobs()
-        logger.debug("request %s %s", request.method, request.path)
+        logger.debug("request %s %s remote_addr=%s", request.method, request.path, request.remote_addr)
 
     @application.before_request
     def handle_preflight():
@@ -181,6 +199,9 @@ def create_app() -> Flask:
 
     @application.after_request
     def after_request(response):
+        if hasattr(g, 'new_client_token'):
+            response.set_cookie('studio_tc', g.new_client_token, httponly=True, samesite='Lax',
+                                path='/', max_age=31536000, secure=COOKIE_SECURE)
         response = _sanitize_json_response(response)
         response = _apply_cors_headers(response)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")

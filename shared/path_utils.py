@@ -59,19 +59,3 @@ def resolve_storage_path(storage_root: str | Path, relative_path: str) -> Path:
     if not resolved.is_relative_to(root):
         raise InvalidStoragePathError("Resolved path escapes STORAGE_ROOT.")
     return resolved
-
-
-def ensure_storage_layout(
-    storage_root: str | Path,
-    *,
-    asset_root: str = "assets",
-    output_root: str = "outputs",
-) -> None:
-    root = Path(storage_root).resolve()
-    directories = [
-        root / validate_relative_storage_path(asset_root),
-        root / validate_relative_storage_path(output_root),
-        root / "temp",
-    ]
-    for directory in directories:
-        directory.mkdir(parents=True, exist_ok=True)

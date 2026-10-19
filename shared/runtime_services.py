@@ -46,6 +46,7 @@ def build_job_data(
         "user_label": user_label,
         "model": data.get("model", "turbo_fp8"),
         "aspect_ratio": data.get("aspect_ratio", "1:1"),
+        "resolution": data.get("resolution"),
         "batch_size": data.get("batch_size", 1),
         "images": data.get("images", {}),
         "audio": data.get("audio", ""),

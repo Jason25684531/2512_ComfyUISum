@@ -134,6 +134,8 @@ services:
     depends_on:
       redis:
         condition: service_started
+      mysql:
+        condition: service_healthy
     restart: always
     networks:
       - studio-net

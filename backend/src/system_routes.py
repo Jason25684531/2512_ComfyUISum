@@ -3,15 +3,14 @@ from __future__ import annotations
 
 import html
 import mimetypes
-import os
 from pathlib import Path
 
 from flask import Blueprint, abort, current_app, jsonify, redirect, send_from_directory
-from markupsafe import escape
 from werkzeug.utils import secure_filename
 
 from config import COMFYUI_CHECKPOINTS_DIR, COMFYUI_UNET_DIR
 from frontend_compat import resolve_legacy_redirect, resolve_root_document
+from shared.path_utils import InvalidStoragePathError, resolve_storage_path
 from shared.runtime_services import build_runtime_config_payload, build_runtime_diagnostics
 
 
@@ -114,10 +113,11 @@ def create_blueprint(limiter) -> Blueprint:
         if not safe_filename:
             return abort(400)
         outputs_dir = str(runtime.storage_output_dir)
-        file_path = os.path.abspath(os.path.join(outputs_dir, safe_filename))
-        if not file_path.startswith(outputs_dir):
+        try:
+            file_path = resolve_storage_path(outputs_dir, safe_filename)
+        except InvalidStoragePathError:
             return abort(403)
-        if not os.path.exists(file_path):
+        if not file_path.is_file():
             return abort(404)
         mimetype, _ = mimetypes.guess_type(file_path)
         if mimetype is None:
@@ -153,7 +153,7 @@ def create_blueprint(limiter) -> Blueprint:
                 return send_from_directory(logo.parent, logo.name, mimetype="image/png")
             return "", 204
         file_path = (frontend_dir / path).resolve()
-        if not str(file_path).startswith(str(frontend_dir.resolve()) + os.sep):
+        if not file_path.is_relative_to(frontend_dir.resolve()):
             return jsonify({"error": "Forbidden"}), 403
         if file_path.is_file():
             return send_from_directory(frontend_dir, path)

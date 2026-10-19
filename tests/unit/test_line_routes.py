@@ -16,6 +16,7 @@ sys.path.insert(0, str(BACKEND_SRC))
 
 import line_routes  # noqa: E402
 from line_routes import LineAdapter, create_blueprint, verify_line_signature  # noqa: E402
+from job_service import _normalize_catalog_inputs  # noqa: E402
 
 sys.path.remove(str(BACKEND_SRC))
 sys.modules.pop("config", None)
@@ -25,6 +26,7 @@ class FakeRedis:
     def __init__(self):
         self.values = {}
         self.hashes = {}
+        self.ttls = {}
         self.available = True
 
     def ping(self):
@@ -35,20 +37,33 @@ class FakeRedis:
     def get(self, key):
         return self.values.get(key)
 
-    def setex(self, key, _ttl, value):
+    def setex(self, key, ttl, value):
         self.values[key] = value
+        self.ttls[key] = ttl
 
     def set(self, key, value, ex=None, nx=False):
         if nx and (key in self.values or key in self.hashes):
             return False
         self.values[key] = value
+        if ex is not None:
+            self.ttls[key] = ex
         return True
 
     def delete(self, key):
         self.values.pop(key, None)
         self.hashes.pop(key, None)
+        self.ttls.pop(key, None)
 
-    def expire(self, _key, _ttl):
+    def ttl(self, key):
+        if key not in self.values and key not in self.hashes:
+            return -2
+        return self.ttls.get(key, -1)
+
+    def expire(self, key, ttl, gt=False):
+        current = self.ttl(key)
+        if current == -2 or (gt and (current == -1 or current >= ttl)):
+            return False
+        self.ttls[key] = ttl
         return True
 
     def hset(self, key, mapping=None, **kwargs):
@@ -182,7 +197,10 @@ def test_prompt_requires_postback_and_routes_text_only_video(monkeypatch, tmp_pa
 
     adapter.handle_event(_postback("output=video"))
     payload = runtime.job_service.calls[0][0]
-    assert payload == {"workflow": "video_minimax_h3", "prompt": "圖片", "images": {}}
+    assert payload == {
+        "workflow": "video_minimax_h3", "prompt": "圖片", "images": {},
+        "extra_params": {"duration": 10},
+    }
     assert "video_mode" not in payload
     assert runtime.redis_client.hgetall("line:job:job-line-1")["output_type"] == "video"
     assert runtime.redis_client.get("line:user:U123") is None
@@ -437,6 +455,53 @@ def test_video_completion_and_secure_download(monkeypatch, tmp_path):
     assert client.get("/line/preview/invalid-token").status_code == 404
 
 
+@pytest.mark.parametrize("kind", ["video", "image"])
+@pytest.mark.parametrize("existing_ttl", [3600, 8 * 86400, -1])
+def test_media_remains_accessible_until_seven_days(monkeypatch, tmp_path, kind, existing_ttl):
+    patch_line_config(monkeypatch)
+    sent = patch_line_api(monkeypatch)
+    monkeypatch.setattr(line_routes, "LINE_DOWNLOAD_TOKEN_TTL", 7 * 86400)
+    runtime = FakeRuntime(tmp_path)
+    adapter = LineAdapter(runtime)
+    redis = runtime.redis_client
+    adapter._store_job_mapping("job-line-1", "U123", kind, "test-workflow")
+    output = runtime.storage_output_dir / ("result.mp4" if kind == "video" else "result.png")
+    output.write_bytes(b"video bytes" if kind == "video" else _png())
+    redis.hset("job:status:job-line-1", mapping={"status": "completed", "image_url": f"/outputs/{output.name}"})
+    for key in ("line:job:job-line-1", "job:status:job-line-1"):
+        if existing_ttl == -1:
+            redis.ttls.pop(key, None)
+        else:
+            redis.expire(key, existing_ttl)
+    assert adapter.poll_once() == 1
+    payload = next(payload for url, payload in sent if url == line_routes.LINE_PUSH_URL)
+    token = payload["messages"][0]["originalContentUrl"].rsplit("/", 1)[1]
+    expected_ttl = -1 if existing_ttl == -1 else max(existing_ttl, 7 * 86400)
+    assert redis.ttl("line:job:job-line-1") == expected_ttl
+    assert redis.ttl("job:status:job-line-1") == expected_ttl
+    app = __import__("flask").Flask(__name__)
+    app.register_blueprint(create_blueprint(runtime))
+
+    def advance(seconds):
+        for key in list(redis.values) + list(redis.hashes):
+            ttl = redis.ttl(key)
+            if 0 <= ttl <= seconds:
+                redis.delete(key)
+            elif ttl > seconds:
+                redis.expire(key, ttl - seconds)
+
+    with app.test_client() as client:
+        # No database fallback: both Redis dependencies must outlive the token.
+        for seconds in (3601, 86400, 7 * 86400 - 1 - 3601 - 86400):
+            advance(seconds)
+            assert client.get(f"/line/download/{token}").status_code == 200
+            assert client.get(f"/line/preview/{token}").status_code == 200
+            assert adapter.poll_once() == 0
+        advance(1)
+        assert client.get(f"/line/download/{token}").status_code == 404
+        assert client.get(f"/line/preview/{token}").status_code == 404
+
+
 def _mp4_header(width, height):
     import struct
 
@@ -457,6 +522,82 @@ def test_video_preview_matches_video_aspect_ratio(tmp_path):
     assert adapter._create_preview(preview, video_path=video)
     with Image.open(preview) as image:
         assert image.size == (1280, 1280)
+
+
+@pytest.mark.parametrize('output_type', ['image', 'video'])
+@pytest.mark.parametrize(('prompt', 'dimensions'), [
+    ('A city, vertical 9:16', (864, 1536)),
+    ('請用直式 ９：１６生成', (864, 1536)),
+    ('A vertical city video', (864, 1536)),
+    ('手機壁紙', (576, 1280)),
+    ('A phone wallpaper, 9:20', (576, 1280)),
+    ('風景，16:9 橫式', (1536, 864)),
+    ('Square 1:1', (1024, 1024)),
+])
+def test_line_prompt_dimensions_reach_the_generation_payload(monkeypatch, tmp_path, output_type, prompt, dimensions):
+    patch_line_config(monkeypatch)
+    runtime = FakeRuntime(tmp_path)
+    adapter = LineAdapter(runtime)
+    assert adapter.submit_output('U123', prompt, output_type, []) is True
+    data, kwargs = runtime.job_service.calls[-1]
+    entry = adapter._resolve_workflow(data['workflow']).entry
+    width, height = dimensions
+    if output_type == 'image':
+        if dimensions == (576, 1280):
+            assert kwargs['internal_extra_params'] == {
+                'size': 'custom', 'custom_width': width, 'custom_height': height,
+            }
+        else:
+            extra, _, error = _normalize_catalog_inputs(entry, data, prompt)
+            assert error is None
+            assert extra['size'] == f'{width}x{height}'
+    else:
+        extra, _, error = _normalize_catalog_inputs(entry, data, prompt)
+        assert error is None
+        assert (extra['width'], extra['height']) == dimensions
+        assert extra['duration'] == 10
+        assert width % 32 == height % 32 == 0
+
+
+@pytest.mark.parametrize('output_type', ['image', 'video'])
+def test_line_uses_reference_orientation_and_explicit_prompt_wins(monkeypatch, tmp_path, output_type):
+    patch_line_config(monkeypatch)
+    runtime = FakeRuntime(tmp_path)
+    adapter = LineAdapter(runtime)
+    path = runtime.upload_folder / 'portrait.jpg'
+    # Stored landscape pixels with EXIF rotation represent a portrait reference.
+    image = Image.new('RGB', (160, 90), 'blue')
+    exif = image.getexif()
+    exif[274] = 6
+    image.save(path, exif=exif)
+    for prompt, expected in [('Animate this image', (864, 1536)), ('Use 16:9', (1536, 864))]:
+        assert adapter.submit_output('U123', prompt, output_type, [path.name]) is True
+        extra = runtime.job_service.calls[-1][0]['extra_params']
+        if output_type == 'image':
+            assert extra['size'] == f'{expected[0]}x{expected[1]}'
+        else:
+            assert (extra['width'], extra['height']) == expected
+
+
+@pytest.mark.parametrize(('width', 'height', 'expected'), [(864, 1536, (720, 1280)), (1536, 864, (1280, 720))])
+def test_line_video_preview_preserves_portrait_and_landscape(tmp_path, width, height, expected):
+    runtime = FakeRuntime(tmp_path)
+    video = tmp_path / 'video.mp4'
+    video.write_bytes(_mp4_header(width, height))
+    preview = tmp_path / 'preview.jpg'
+    assert LineAdapter(runtime)._create_preview(preview, video_path=video)
+    with Image.open(preview) as image:
+        assert image.size == expected
+
+
+def test_line_image_preview_does_not_stretch_portrait(tmp_path):
+    runtime = FakeRuntime(tmp_path)
+    image_path = tmp_path / 'portrait.png'
+    Image.new('RGB', (864, 1536), 'blue').save(image_path)
+    preview = tmp_path / 'preview.jpg'
+    assert LineAdapter(runtime)._create_preview(preview, image_path=image_path)
+    with Image.open(preview) as image:
+        assert image.size == (576, 1024)
 
 
 def test_image_completion_preview_push_and_download(monkeypatch, tmp_path):

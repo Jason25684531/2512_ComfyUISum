@@ -180,6 +180,7 @@ def apply_workflow_injections(
     video_file: str = None,
     video_mode: str = None,
     extra_params: dict = None,
+    resolution: str = None,
 ) -> dict:
     config_data = registry.raw_config
     workflow_config = config_data.get(workflow_entry.workflow_id, {})
@@ -195,9 +196,11 @@ def apply_workflow_injections(
         print(f"[Parser] Warning: failed to read config.json; using fallback: {e}")
 
     runtime = registry.runtime
-    resolution = runtime.aspect_ratios.get(aspect_ratio, runtime.default_resolution)
-    width = resolution["width"]
-    height = resolution["height"]
+    size = runtime.resolution_tiers.get(resolution, {}).get(aspect_ratio)
+    if size is None:
+        size = runtime.aspect_ratios.get(aspect_ratio, runtime.default_resolution)
+    width = size["width"]
+    height = size["height"]
 
     if seed == -1:
         seed = random.randint(0, 2**32 - 1)

@@ -13,6 +13,13 @@ def _runtime():
 def create_blueprint(limiter) -> Blueprint:
     bp = Blueprint("api", __name__)
 
+    @bp.get('/api/queue/me')
+    def my_queue():
+        payload, code = _runtime().job_service.my_queue(g.user_id)
+        if code == 200:
+            payload['tempcode'] = g.tempcode
+        return jsonify(payload), code
+
     @bp.get("/api/history")
     def history():
         service = _runtime().job_service
@@ -71,7 +78,7 @@ def create_blueprint(limiter) -> Blueprint:
     @bp.post("/api/cancel/<job_id>")
     def cancel_job(job_id: str):
         try:
-            payload, code = _runtime().job_service.cancel(job_id)
+            payload, code = _runtime().job_service.cancel(job_id, g.user_id)
             return jsonify(payload), code
         except Exception:
             _runtime().logger.exception("cancel failed")

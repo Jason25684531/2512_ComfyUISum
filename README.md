@@ -102,8 +102,9 @@ docker compose --env-file .env.local up -d --build backend worker
 | 影片 | 0 / 1 / 2 | `video_minimax_h3`（T2V / I2V 首幀 / FL2V 首尾幀） |
 
 - 輸入「取消」清除已上傳的圖片與提示詞；已上傳 3 張時只提供「圖片」選項。
-- 參數一律使用 catalog `defaults`，LINE 端不提供調整。
-- 完成後由 Backend 推送 LINE `image` 或 `video` 訊息，媒體透過 `/line/download/<token>`、`/line/preview/<token>` 以 opaque token 提供，預設 7 天有效（`LINE_DOWNLOAD_TOKEN_TTL=604800`）；輸出檔本身保留 30 天。
+- LINE 提示詞可指定 `9:20`／`手機比例`（576×1280）、`9:16`／`直式`（864×1536）、`16:9`／`橫式`（1536×864）或 `1:1`（1024×1024），圖片與影片使用原生尺寸，不拉伸輸出。未指定比例且有參考圖時沿用第一張圖的比例（含 EXIF 旋轉）；其他參數與無參考圖的預設值仍使用 catalog `defaults`。Sunburst 的 9:20 使用自訂尺寸；MiniMax 影片寬高維持 32 的倍數。
+- 完成後由 Backend 推送 LINE `image` 或 `video` 訊息，媒體透過 `/line/download/<token>`、`/line/preview/<token>` 以 opaque token 提供，token 預設 7 天有效（`LINE_DOWNLOAD_TOKEN_TTL=604800`）；建立連結時同步延長 LINE 任務 mapping 與任務狀態至至少相同期限，下載或預覽不會續期。Worker 每小時清理超過 30 天的輸出檔。此期限是本服務媒體網址的有效期，LINE App 內的快取與保存行為由 LINE 決定。
+- LINE 本機配樂預設關閉；啟用且曲庫可用時，選影片後先詢問是否配樂，選曲或略過後才開始生成。選曲逾時自動不配樂；後製失敗交付原影片；只推送最終影片。曲庫、啟用與 rollback 見 [操作說明](docs/line-local-music.md)。所有媒體交付（含配樂／配樂回退）均使用上述 7 天期限。
 
 ## Workflow
 
@@ -141,15 +142,20 @@ catalog 中標示 enabled 的其他 workflow（`text_to_image`、`ltx_i2v` 等�
 | --- | --- | --- |
 | GET | `/api/health`、`/health` | Backend、Redis、MySQL、Worker 健康狀態 |
 | GET | `/api/runtime-config` | runtime 與 enabled workflow catalog（不含憑證） |
-| POST | `/api/generate` | 建立並排入 job |
+| POST | `/api/generate` | 建立並排入 job；選填 `resolution: "720p" \| "1080p"` |
+| GET | `/api/queue/me` | 此瀏覽器最近 24 小時最多 50 筆任務、進度、排隊位置與縮圖 |
 | GET | `/api/status/<job_id>` | 查詢 job（完成狀態為 `finished`） |
-| POST | `/api/cancel/<job_id>` | 取消 job |
+| POST | `/api/cancel/<job_id>` | 限送出任務的瀏覽器取消，非本人回 403 |
 | POST | `/api/upload` | 上傳輸入檔案 |
 | GET | `/outputs/<path>` | 取得輸出檔案 |
 | GET | `/api/models`、`/api/metrics` | 模型清單、metrics |
 | POST | `/line/webhook` | LINE webhook（HMAC-SHA256 簽章驗證） |
 | GET | `/line/download/<token>`、`/line/preview/<token>` | LINE 媒體下載與縮圖 |
 | GET | `/admin`、`/api/admin/*` | 管理與觀測頁面 |
+
+Web 首次請求自動取得 `studio_tc`（HttpOnly、SameSite=Lax、一年有效），MySQL／Redis 只存其 HMAC 標籤。清除 cookie 或換瀏覽器後無法存取原佇列；舊 `IP#` 任務仍在作品庫，但無法從網頁取消。輪替 `SECRET_KEY` 會使既有佇列對應失效。Phase 2 的 HTTPS 環境需設定 `SESSION_COOKIE_SECURE=true`。
+
+套用 `004_dispatch_source_label_index.sql` 後，先部署 worker 再部署 backend／frontend；worker 依 catalog `resolution_tiers` 換算尺寸，未傳 `resolution` 的 LINE／API 呼叫維持舊預設。指定 prompt 取消要求 ComfyUI **0.34.2 以上**，只停止該任務，不卸載模型。回滾索引可用 `DROP INDEX idx_dispatch_source_label ON job_dispatches`。
 
 ## Repository 結構
 
