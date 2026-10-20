@@ -147,9 +147,9 @@ def test_credential_submission_with_disabled_metadata(monkeypatch, capsys):
 
 def test_canonical_card_titles_preserve_utf8(catalog):
     expected = {
-        "image_gpt25_sunburst": "圖像生成",
+        "image_gpt25_sunburst": "GPT圖像生成",
         "image_upscale_seedvr2": "圖像放大",
-        "video_minimax_h3": "影像生成",
+        "video_minimax_h3": "MinMax影像生成",
     }
     assert {name: catalog.entries[name].frontend.title for name in expected} == expected
 
@@ -264,3 +264,14 @@ def test_sunburst_mobile_dimensions_reach_the_comfy_node(candidate_runtime):
     )
     inputs = workflow['34']['inputs']
     assert (inputs['size'], inputs['custom_width'], inputs['custom_height']) == ('custom', 576, 1280)
+
+
+def test_sunburst_dashboard_tier_sizes_pass_catalog_validation(candidate_runtime):
+    entry = candidate_runtime.entries['image_gpt25_sunburst']
+    dims = {'size': 'custom', 'custom_width': 1280, 'custom_height': 720}
+    extra, images, error = _normalize_catalog_inputs(entry, {'extra_params': dims}, '16:9')
+    assert error is None and extra['custom_width'] == 1280
+    workflow = runtime.parse_workflow('image_gpt25_sunburst', prompt='16:9', image_files=images, extra_params=extra)
+    inputs = workflow['34']['inputs']
+    assert (inputs['size'], inputs['custom_width'], inputs['custom_height']) == ('custom', 1280, 720)
+    assert _normalize_catalog_inputs(entry, {'extra_params': {**dims, 'custom_width': 99999}}, 'x')[2] == 'invalid custom_width'

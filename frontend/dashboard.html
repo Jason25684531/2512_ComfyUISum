@@ -24,7 +24,7 @@
       <a href="#/avatar" data-sec="avatar">數位人像</a>
       <a href="#/gallery" data-sec="gallery">作品庫</a>
     </nav>
-    <div class="right"><button id="my-queue" class="btn sm" type="button" aria-haspopup="dialog">我的佇列</button><div id="system-status" role="status"><i class="dot offline"></i><span>檢查連線中…</span></div></div>
+    <div class="right"><button id="workflow-guide-btn" class="btn sm" type="button" aria-haspopup="dialog" hidden><i data-lucide="book-open" aria-hidden="true"></i>工作流說明</button><button id="my-queue" class="btn sm" type="button" aria-haspopup="dialog">我的佇列</button><div id="system-status" role="status"><i class="dot offline"></i><span>檢查連線中…</span></div></div>
   </header>
   <nav class="m-bar" aria-label="手機主導覽">
     <a href="#/home" data-sec="home">探索</a>
@@ -88,5 +88,7 @@
   </main>
   <dialog id="tool-picker" aria-labelledby="picker-title"><div class="picker-head"><h2 id="picker-title">切換創作工具</h2><button id="close-picker" class="icon-btn" type="button" aria-label="關閉工具選單">✕</button></div><div id="picker-grid" class="tool-grid"></div></dialog>
   <dialog id="queue-drawer" aria-labelledby="queue-title"><div class="picker-head"><h2 id="queue-title">我的佇列</h2><button id="close-queue" class="icon-btn" type="button" aria-label="關閉我的佇列">✕</button></div><p class="help">紀錄保存在此瀏覽器，顯示最近 24 小時最多 50 筆。清除 cookie 或更換瀏覽器後無法還原，作品仍在作品庫。</p><div id="queue-list" aria-live="polite"></div></dialog>
+  <dialog id="workflow-guide" aria-labelledby="guide-title" closedby="any"><div class="picker-head"><div><div class="eyebrow">WORKFLOW GUIDE</div><h2 id="guide-title"></h2></div><button id="close-guide" class="icon-btn" type="button" aria-label="關閉工作流說明">✕</button></div><p id="guide-intro" class="help"></p><div id="guide-items" class="guide-grid"></div><button id="guide-start" class="btn primary" type="button">開始創作 ↗</button></dialog>
+  <div id="work-menu" class="work-menu" popover><button id="delete-work" class="btn sm" type="button"><i data-lucide="trash-2" aria-hidden="true"></i>刪除作品</button></div>
 </body>
 </html>

@@ -597,7 +597,7 @@
       "custom_dimensions": {}
     },
     "frontend": {
-      "title": "圖像生成",
+      "title": "GPT圖像生成",
       "description": "Prompt with up to three optional reference images.",
       "icon": "sparkles",
       "color": "amber",
@@ -663,12 +663,16 @@
     "optional_inputs": [
       "images",
       "size",
+      "custom_width",
+      "custom_height",
       "background"
     ],
     "input_types": {
       "prompt": "text",
       "images": "multi-image",
       "size": "select",
+      "custom_width": "select",
+      "custom_height": "select",
       "background": "select"
     },
     "max_items": {
@@ -680,8 +684,11 @@
         "1536x1024",
         "1024x1536",
         "864x1536",
-        "1536x864"
+        "1536x864",
+        "custom"
       ],
+      "custom_width": [720, 1088, 1280, 1920],
+      "custom_height": [720, 1088, 1280, 1632, 1920],
       "background": [
         "opaque",
         "transparent"
@@ -730,7 +737,7 @@
       "custom_dimensions": {}
     },
     "frontend": {
-      "title": "影像生成",
+      "title": "MinMax影像生成",
       "description": "Prompt with optional first and last frames.",
       "icon": "video",
       "color": "violet",

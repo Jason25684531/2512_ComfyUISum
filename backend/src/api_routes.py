@@ -35,7 +35,13 @@ def create_blueprint(limiter) -> Blueprint:
                 raise ValueError
         except (TypeError, ValueError):
             return jsonify({"error": "Invalid history query"}), 400
-        payload, code = service.history(offset, limit, status)
+        payload, code = service.history(offset, limit, status, getattr(g, "user_id", "") or "")
+        return jsonify(payload), code
+
+    @bp.delete("/api/history/<job_id>")
+    @limiter.limit("30 per minute")
+    def delete_history(job_id: str):
+        payload, code = _runtime().job_service.delete_history(job_id, getattr(g, "user_id", "") or "")
         return jsonify(payload), code
 
     @bp.post("/api/upload")

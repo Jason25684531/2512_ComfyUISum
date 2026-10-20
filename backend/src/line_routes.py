@@ -164,7 +164,7 @@ def _generation_dimensions(entry, prompt: str, paths: list[Path]) -> dict[str, A
         if width * 20 == height * 9:
             # Sunburst requires 16-aligned dimensions and at least 655,360 pixels.
             return {"size": "custom", "custom_width": 576, "custom_height": 1280}
-        sizes = [tuple(map(int, size.split("x"))) for size in entry.choices["size"]]
+        sizes = [tuple(map(int, size.split("x"))) for size in entry.choices["size"] if size != "custom"]
     else:
         sizes = [(w, h) for w in entry.choices["width"] for h in entry.choices["height"]]
     chosen_width, chosen_height = min(sizes, key=lambda size: abs(size[0] / size[1] - width / height))

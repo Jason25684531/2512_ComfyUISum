@@ -25,6 +25,20 @@ let galleryOffset = 0;
 let galleryRequest = 0;
 let pendingPrompt = null;
 let models = [];
+let menuTarget = null;
+const NEW_TOOLS = new Set(['image_gpt25_sunburst', 'video_minimax_h3', 'image_upscale_seedvr2']);
+// Presentation-only guide copy; workflow metadata stays in the runtime catalog.
+const WORKFLOW_GUIDES = {
+    image_gpt25_sunburst: {intro: '一個工作流，四種玩法：依上傳的參考圖數量與提示詞自動切換。', items: [
+        ['square-pen', '單圖編輯', '上傳一張圖片，用提示詞描述要修改的地方。'],
+        ['images', '多圖融合', '最多上傳三張參考圖，把人物、物件與風格融合成一張。'],
+        ['type', '文生圖', '不上傳圖片，只用提示詞生成全新畫面。'],
+        ['scan-face', '圖生圖換臉', '上傳人物照與目標圖，提示詞寫明「把圖 1 的臉換到圖 2」。']]},
+    video_minimax_h3: {intro: '首幀、尾幀皆為選填，依上傳內容決定生成方式。', items: [
+        ['film', '首尾幀', '上傳首幀與尾幀，生成兩個畫面之間的連續影片。'],
+        ['clapperboard', '文生影', '不上傳圖片，只用提示詞直接生成影片。'],
+        ['image-play', '圖生影', '只上傳首幀，讓靜態圖片動起來。']]}
+};
 
 function element(tag, className = '', text = '') {
     const node = document.createElement(tag);
@@ -99,6 +113,7 @@ function render() {
             pendingPrompt = null;
         }
         renderWorkspace(route.tool);
+        if (WORKFLOW_GUIDES[currentTool] && !guideSeen(currentTool)) openGuide();
         if (autoSubmit) {
             const error = validateInputs(route.tool, drafts[currentTool], toolConfig[currentTool]);
             if (error) $('status-message').textContent = error;
@@ -107,7 +122,28 @@ function render() {
         }
     } else if (route.section === 'gallery') loadHistory();
     else { renderHeroSettings(); loadRecentWorks(); }
+    $('workflow-guide-btn').hidden = !WORKFLOW_GUIDES[currentTool];
     syncHeroVideo();
+}
+function guideSeen(toolId) {
+    try { return localStorage.getItem(`studio-guide-seen:${toolId}`) === '1'; } catch (_) { return false; }
+}
+function openGuide() {
+    const guide = WORKFLOW_GUIDES[currentTool];
+    const dialog = $('workflow-guide');
+    if (!guide || dialog.open) return;
+    dialog.dataset.tool = currentTool;
+    $('guide-title').textContent = catalog.find(tool => tool.id === currentTool).frontend.title;
+    $('guide-intro').textContent = guide.intro;
+    $('guide-items').replaceChildren(...guide.items.map(([icon, title, text]) => {
+        const card = element('div', 'guide-item');
+        const ic = element('span', 'ic'), glyph = element('i');
+        glyph.dataset.lucide = icon; glyph.setAttribute('aria-hidden', 'true'); ic.append(glyph);
+        card.append(ic, element('b', '', title), element('small', '', text));
+        return card;
+    }));
+    window.lucide?.createIcons();
+    dialog.showModal();
 }
 function toolCard(tool, closePicker = false) {
     const node = button('', () => {
@@ -119,6 +155,7 @@ function toolCard(tool, closePicker = false) {
     const icon = element('span', 'ic');
     const glyph = element('i'); glyph.dataset.lucide = tool.frontend.icon || 'sparkles'; icon.append(glyph);
     node.append(element('span', 'tag', categories[tool.category]), icon, element('b', '', tool.frontend.title), element('small', '', tool.frontend.description));
+    if (NEW_TOOLS.has(tool.id)) node.append(element('span', 'new-badge', 'New'));
     return node;
 }
 function renderToolGrid() {
@@ -141,10 +178,7 @@ function ensureDraft(toolId) {
 function toolSize(toolId, ratio, tier) {
     const choices = toolConfig[toolId].choices;
     let candidates;
-    if (toolId === 'image_gpt25_sunburst') candidates = (choices.size || []).map(size => {
-        const [width, height] = size.split('x').map(Number); return {width, height, size};
-    });
-    else if (toolId === 'video_minimax_h3') candidates = (choices.width || []).flatMap(width => (choices.height || []).map(height => ({width, height})));
+    if (toolId === 'video_minimax_h3') candidates = (choices.width || []).flatMap(width => (choices.height || []).map(height => ({width, height})));
     else return RESOLUTIONS[tier]?.[ratio];
     const [w, h] = ratio.split(':').map(Number);
     // Catalog sizes can be aligned to 16 pixels; accept at most 3% ratio error.
@@ -192,7 +226,7 @@ function renderToolSettings(container, toolId) {
     }
     if (tool.category === 'image' && toolId !== 'image_upscale_seedvr2') segments('batch', '生成張數', [1, 2, 4], state.batch, value => { state.batch = value; });
     const names = [...new Set([...config.requiredInputs, ...config.optionalInputs])].filter(name =>
-        !['prompt', 'seed', 'size', 'width', 'height', 'video_width', 'video_height'].includes(name) && ['select', 'number', 'text'].includes(config.inputTypes[name]));
+        !['prompt', 'seed', 'size', 'width', 'height', 'custom_width', 'custom_height', 'video_width', 'video_height'].includes(name) && ['select', 'number', 'text'].includes(config.inputTypes[name]));
     if (['ltx_i2v', 'ltx_flf'].includes(toolId)) { names.push('video_duration'); state.values.video_duration ??= 5; }
     if (toolId === 'ltx_retake_v2v') { names.push('retake_start', 'retake_end'); state.values.retake_start ??= 0; state.values.retake_end ??= 5; }
     for (const name of names) {
@@ -355,14 +389,14 @@ async function handleGenerate() {
         };
         const extraParams = {};
         for (const name of [...config.requiredInputs, ...config.optionalInputs]) {
-            if (['prompt', 'seed', 'size', 'width', 'height'].includes(name) || !['select', 'number', 'text'].includes(config.inputTypes[name])) continue;
+            if (['prompt', 'seed', 'size', 'width', 'height', 'custom_width', 'custom_height'].includes(name) || !['select', 'number', 'text'].includes(config.inputTypes[name])) continue;
             const value = state.values[name];
             if (value === undefined || value === '') continue;
             const choice = (config.choices[name] || []).find(item => String(item) === String(value));
             extraParams[name] = choice ?? (config.inputTypes[name] === 'number' ? Number(value) : value);
         }
         const size = toolSize(tool.id, state.ratio, state.tier);
-        if (tool.id === 'image_gpt25_sunburst') extraParams.size = size.size;
+        if (tool.id === 'image_gpt25_sunburst') Object.assign(extraParams, {size: 'custom', custom_width: size.width, custom_height: size.height});
         if (tool.id === 'video_minimax_h3') Object.assign(extraParams, size);
         if (Object.keys(extraParams).length) payload.extra_params = extraParams;
         if (tool.id === 'ideogram4_regional_t2i') {
@@ -619,7 +653,37 @@ function historyCard(item) {
     if (media) { const link = element('a', 'btn sm', '下載'); link.href = media.src; link.download = ''; actions.append(link); }
     if (tool) actions.append(button('再生成', () => reuseJob(item), 'btn sm'));
     info.append(actions); card.append(info);
+    if (item.mine) {
+        card.tabIndex = 0;
+        card.setAttribute('aria-label', `${tool?.frontend.title || '作品'}，按右鍵或選單鍵可刪除`);
+        card.addEventListener('contextmenu', event => {
+            event.preventDefault();
+            const box = card.getBoundingClientRect();
+            const menu = $('work-menu');
+            menuTarget = {item, card};
+            menu.style.left = `${event.clientX || box.left + 12}px`;
+            menu.style.top = `${event.clientY || box.top + 12}px`;
+            menu.showPopover(); $('delete-work').focus();
+        });
+    }
     return card;
+}
+async function deleteWork() {
+    $('work-menu').hidePopover();
+    if (!menuTarget || !confirm('確定要刪除這件作品？刪除後無法復原。')) return;
+    const {item, card} = menuTarget;
+    try {
+        await requestJSON(`/api/history/${encodeURIComponent(item.job_id)}`, {method: 'DELETE'});
+        if (card.parentElement === $('gallery-grid') && galleryOffset > 0) galleryOffset--;
+        card.remove();
+        const index = jobs.findIndex(job => job.id === item.job_id);
+        if (index >= 0) {
+            const [job] = jobs.splice(index, 1); stopPolling(job);
+            if (selectedJobs[job.tool] === job) delete selectedJobs[job.tool];
+            renderQueue();
+        }
+    } catch (error) { alert(error.status === 403 ? '只能刪除自己的作品' : error.status === 409 ? '任務仍在進行中，請先取消' : `刪除失敗：${error.message}`); }
+    finally { menuTarget = null; }
 }
 function historyError(container, retry) {
     const banner = element('div', 'banner', '作品載入失敗');
@@ -696,6 +760,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     $('hero-form').addEventListener('submit', event => { event.preventDefault(); const tool = catalog.find(item => item.id === $('hero-tool').value); if (tool) openTool(tool, $('hero-prompt').value, true); });
     $('my-queue').addEventListener('click', () => { $('queue-drawer').showModal(); loadMyQueue(); });
     $('close-queue').addEventListener('click', () => $('queue-drawer').close());
+    $('workflow-guide-btn').addEventListener('click', openGuide);
+    $('close-guide').addEventListener('click', () => $('workflow-guide').close());
+    $('guide-start').addEventListener('click', () => $('workflow-guide').close());
+    $('workflow-guide').addEventListener('close', () => {
+        try { localStorage.setItem(`studio-guide-seen:${$('workflow-guide').dataset.tool}`, '1'); } catch (_) { /* Guide reopens next visit. */ }
+    });
+    $('delete-work').addEventListener('click', deleteWork);
     $('queue-drawer').addEventListener('close', scheduleQueueRefresh);
     $('tool-switch').addEventListener('click', () => {
         const category = catalog.find(tool => tool.id === currentTool)?.category;

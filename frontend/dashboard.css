@@ -248,7 +248,20 @@ progress::-webkit-progress-value { background: var(--accent); border-radius: 99p
 .regional-editor button[aria-pressed="true"] { background: var(--accent) !important; color: var(--accent-ink) !important; }
 .regional-editor { color: var(--muted); }
 #multiangle-fields input { color: var(--text); background: var(--bg); min-height: 32px; }
+.tool-card .new-badge { position: absolute; top: 12px; right: 12px; padding: 2px 8px; border-radius: 99px; background: var(--accent); color: var(--accent-ink); font-size: 10px; font-weight: 700; letter-spacing: .06em; }
+.tool-card:has(.new-badge) .tag { right: 64px; }
+#workflow-guide { width: min(640px, calc(100vw - 32px)); }
+#workflow-guide h2 { font-size: 22px; margin-top: 4px; }
+.guide-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; margin: 16px 0 18px; }
+.guide-item { display: flex; flex-direction: column; gap: 6px; padding: 14px; border-radius: var(--r); background: var(--raised); border: 1px solid var(--line); }
+.guide-item .ic { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: var(--accent-dim); color: var(--accent); margin-bottom: 4px; }
+.guide-item small { color: var(--muted); font-size: 12px; }
+#guide-start { width: 100%; }
+.g-item[tabindex]:focus-visible { outline: 2px solid var(--accent); }
+.work-menu { position: fixed; inset: auto; margin: 0; padding: 6px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface); color: var(--text); box-shadow: 0 12px 32px #000a; }
+.work-menu .btn { border-color: transparent; color: var(--err); }
 @media (max-width: 900px) {
+  #workflow-guide-btn { font-size: 10px; padding: 6px; }
   .top .right span { display: inline; }
   .top .right { font-size: 11px; }
   .brand { font-size: 13px; }

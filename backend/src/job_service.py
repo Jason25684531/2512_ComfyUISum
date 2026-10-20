@@ -126,7 +126,7 @@ class JobService:
     HISTORY_DEFAULT_LIMIT = 24
     HISTORY_MAX_LIMIT = 100
 
-    def history(self, offset: int, limit: int, status: str) -> tuple[dict[str, Any], int]:
+    def history(self, offset: int, limit: int, status: str, requester_label: str = '') -> tuple[dict[str, Any], int]:
         if not self.runtime.job_observability_enabled:
             return {"error": "History unavailable"}, 503
         statuses = {
@@ -151,11 +151,43 @@ class JobService:
                     "created_at": iso_utc(submitted) if submitted else "",
                     "error": row.get("sanitized_error_message") or "",
                 }
-                items.append({key: html_escape(str(value or "")) for key, value in item.items()})
+                item = {key: html_escape(str(value or "")) for key, value in item.items()}
+                item["mine"] = requester_label.startswith("TC#") and row.get("source_label") == requester_label
+                items.append(item)
             return {"items": items, "total": total, "offset": offset, "limit": limit}, 200
         except Exception:
             self.logger.exception("history unavailable")
             return {"error": "History unavailable"}, 503
+
+    def delete_history(self, job_id: str, requester_label: str) -> tuple[dict[str, Any], int]:
+        if not self.runtime.job_observability_enabled:
+            return {"error": "History unavailable"}, 503
+        try:
+            repo = self.runtime.repository_provider()
+            job = repo.get_job(job_id)
+            if not job:
+                return {"error": "Job not found"}, 404
+            if not requester_label.startswith("TC#") or repo.get_job_owner(job_id) != requester_label:
+                return {"error": "Forbidden"}, 403
+            if job["status"] not in {"completed", "failed", "cancelled"}:
+                return {"error": "Job is still running"}, 409
+            filenames = repo.delete_job(job_id)
+        except Exception:
+            self.logger.exception("history delete unavailable")
+            return {"error": "History unavailable"}, 503
+        root = Path(self.runtime.storage_output_dir).resolve()
+        for filename in filenames:
+            if not filename or secure_filename(filename) != filename:
+                continue
+            path = (root / filename).resolve()
+            if path.parent != root:
+                continue
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                # ponytail: orphan file stays on disk; maintenance cleanup covers it.
+                self.logger.warning("output file delete failed", exc_info=True)
+        return {"success": True}, 200
 
     def __init__(self, runtime: BackendRuntime) -> None:
         self.runtime = runtime

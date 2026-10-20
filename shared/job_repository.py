@@ -149,7 +149,7 @@ class JobRepository:
             cursor.execute(
                 f"""SELECT j.job_id, j.workflow_id, j.status, j.progress, j.submitted_at,
                            j.sanitized_error_message, o.filename, o.output_type,
-                           d.prompt_text AS prompt
+                           d.prompt_text AS prompt, d.source_label
                     FROM jobs j
                     LEFT JOIN job_outputs o ON o.output_id = (
                         SELECT MIN(first_output.output_id) FROM job_outputs first_output
@@ -160,6 +160,15 @@ class JobRepository:
                 (*parameters, limit, offset),
             )
             return cursor.fetchall()
+
+    def delete_job(self, job_id: str) -> list[str]:
+        """Remove a job and its children in FK order; returns stored output filenames."""
+        with self.transaction() as cursor:
+            cursor.execute("SELECT filename FROM job_outputs WHERE job_id=%s", (job_id,))
+            filenames = [row["filename"] for row in cursor.fetchall() if row.get("filename")]
+            for table in ("job_events", "job_outputs", "job_dispatches", "jobs"):
+                cursor.execute(f"DELETE FROM {table} WHERE job_id=%s", (job_id,))
+            return filenames
 
     def count_history(self, statuses: tuple[str, ...]) -> int:
         where = "WHERE COALESCE(d.source_label, '') <> %s"
