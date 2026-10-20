@@ -12,21 +12,6 @@ class InvalidStoragePathError(ValueError):
     """Raised when a path violates the Linux-first storage contract."""
 
 
-def validate_linux_first_path(value: str, *, key: str) -> str:
-    cleaned = value.strip()
-    if not cleaned:
-        raise InvalidStoragePathError(f"{key} must not be empty.")
-    if "\x00" in cleaned:
-        raise InvalidStoragePathError(f"{key} must not contain null bytes.")
-    if "\\" in cleaned:
-        raise InvalidStoragePathError(f"{key} must use forward slashes.")
-    if WINDOWS_DRIVE_PATTERN.match(cleaned):
-        raise InvalidStoragePathError(f"{key} must not use a Windows absolute path.")
-    if WINDOWS_UNC_PATTERN.match(cleaned):
-        raise InvalidStoragePathError(f"{key} must not use UNC paths.")
-    return cleaned
-
-
 def validate_relative_storage_path(value: str) -> str:
     cleaned = value.strip()
     if not cleaned:

@@ -1,5 +1,13 @@
 # Architecture Cleanup Inventory
 
+## 2026-10-20 repository audit
+
+本次 `audit-runtime-cleanup` 移除 5 個經全倉引用掃描確認無呼叫端的 helper，保留服務封裝、provider 注入、框架繼承與所有活躍路徑驗證。Python 236 passed／2 skipped、前端 Node 6 passed，Compose 檢查與桌機／手機 Chromium 檢查通過。9 個可重建快取目錄已可回復封存。
+
+Backend、Worker、Redis、MySQL 已重啟且健康。原生 ComfyUI 仍健康，但其重啟指令被自動審核拒絕；因此本 change 保持未完成，不能宣稱全端重啟驗收通過。詳見 [驗證紀錄](../openspec/changes/audit-runtime-cleanup/verification.md) 與 [架構稽核](../openspec/changes/audit-runtime-cleanup/audit.md)。OpenSpec 目錄依現有 `.gitignore` 保留在本地，未強制加入 Git。
+
+目前符合單機服務分層的基本封裝與可替換設計；多實例限流、共享儲存與單點故障仍需 Phase 2 設計，不能視為已達高可用。
+
 本文件記錄 001-simplify-deployment 的 active runtime inventory。它不是新的 runtime contract；實際操作契約以 docker-compose.yml 與 .env.local 為準。
 
 ## 保留項目

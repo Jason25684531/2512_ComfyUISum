@@ -102,19 +102,3 @@ WARMUP_PRIORITY_HANDOFF_SECONDS = get_env_float("WARMUP_PRIORITY_HANDOFF_SECONDS
 WARMUP_PROFILE_NAMES = parse_csv_env("WARMUP_PROFILES", "default-image")
 WARMUP_PROFILE_TIMEOUTS = parse_key_int_map("WARMUP_PROFILE_TIMEOUTS")
 WARMUP_VIDEO_WORKFLOW_PATH = get_env_str("WARMUP_VIDEO_WORKFLOW_PATH", "")
-
-
-def print_config() -> None:
-    """輸出目前配置 (用於除錯)"""
-    print("=" * 50)
-    print("[Config] Worker 配置")
-    print("=" * 50)
-    print(f"PROJECT_ROOT: {PROJECT_ROOT}")
-    print(f"WORKFLOW_DIR: {WORKFLOW_DIR}")
-    print(f"WORKFLOW_CONFIG_PATH: {WORKFLOW_CONFIG_PATH}")
-    print(f"COMFYUI_SERVER_URL: {COMFYUI_SERVER_URL}")
-    print(f"COMFYUI_INPUT_DIR: {COMFYUI_INPUT_DIR}")
-    print(f"COMFYUI_OUTPUT_DIR: {COMFYUI_OUTPUT_DIR}")
-    print(f"STORAGE_MODELS_DIR: {STORAGE_MODELS_DIR}")
-    print(f"WORKER_TIMEOUT: {WORKER_TIMEOUT}")
-    print(f"WARMUP_MODE: {WARMUP_MODE}")

@@ -34,9 +34,6 @@ class WorkflowAdapter:
                 break
         return {"node_id": key, "node_type": node_type, "stage": stage}
 
-    def is_important(self, node_id: object) -> bool:
-        return any(str(item.get("node_id")) == str(node_id) for item in self.meta.get("important_nodes", []))
-
     def expected_output_nodes(self) -> tuple[str, ...]:
         output = self.meta.get("output", {})
         return tuple(str(value) for value in output.get("node_ids", []) if str(value))

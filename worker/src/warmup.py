@@ -214,9 +214,6 @@ class WarmupController:
         self._last_status: dict[str, str] = {}
         self._last_abort_reason = ""
 
-    def is_running(self) -> bool:
-        return self._thread is not None and self._thread.is_alive()
-
     def get_status(self) -> dict[str, str]:
         with self._status_lock:
             return dict(self._last_status)

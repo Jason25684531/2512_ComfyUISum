@@ -44,13 +44,6 @@ class JobRepository:
             now = job["created_at"]
             cursor.execute("INSERT INTO job_dispatches (job_id, payload, created_at, updated_at) VALUES (%s, %s, %s, %s)", (job["job_id"], json.dumps(payload, ensure_ascii=False), _database_value(now), _database_value(now)))
 
-    def create_dispatch(self, job_id: str, payload: dict[str, Any], created_at: Any) -> None:
-        with self.transaction() as cursor:
-            cursor.execute(
-                "INSERT INTO job_dispatches (job_id, payload, created_at, updated_at) VALUES (%s, %s, %s, %s)",
-                (job_id, json.dumps(payload, ensure_ascii=False), _database_value(created_at), _database_value(created_at)),
-            )
-
     def pending_dispatches(self, limit: int = 50) -> list[dict[str, Any]]:
         with self.transaction() as cursor:
             cursor.execute("SELECT job_id, payload, attempts FROM job_dispatches WHERE state='pending' ORDER BY created_at LIMIT %s", (limit,))
