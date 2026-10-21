@@ -18,10 +18,11 @@ for (const forbidden of ['/login.html', '/profile.html', '登入', '註冊', '�
     assert.ok(!(html + js).includes(forbidden), `Forbidden legacy UI: ${forbidden}`);
 }
 assert.ok(!fs.existsSync(path.join(root, 'frontend/profile.html')));
-// View state lives in the hash router; localStorage only remembers dismissed workflow guides.
+// View state lives in the hash router; localStorage only remembers dismissed workflow guides and cleared queue items.
 assert.deepEqual([...js.matchAll(/localStorage\.(\w+)\(`([^$]+)/g)].map(match => match[1] + ' ' + match[2]),
     ['getItem studio-guide-seen:', 'setItem studio-guide-seen:']);
-assert.equal(js.split('localStorage').length - 1, 2);
+assert.equal(js.split('localStorage').length - 1, 4);
+assert.equal(js.split("'studio-queue-cleared'").length - 1, 2);
 
 // Exercise the same conversion functions used by Hero and workspace payloads.
 const context = vm.createContext({document: {addEventListener() {}}});
@@ -36,6 +37,10 @@ vm.runInContext(`
 const evaluate = code => JSON.parse(JSON.stringify(vm.runInContext(code, context)));
 assert.deepEqual(evaluate('RESOLUTIONS'), config._runtime.resolution_tiers);
 assert.deepEqual(evaluate("toolSize('image_gpt25_sunburst', '16:9', '720p')"), {width: 1280, height: 720});
+// MiniMax canvas follows the first frame's ratio at the same pixel count, snapped to 32.
+assert.deepEqual(evaluate('minimaxFrameSize(1344, 768, 1080, 1920)'), {width: 768, height: 1344});
+assert.deepEqual(evaluate('minimaxFrameSize(1344, 768, 1000, 1000)'), {width: 1024, height: 1024});
+assert.deepEqual(evaluate('minimaxFrameSize(1344, 768, 1920, 1080)'), {width: 1344, height: 768});
 assert.deepEqual(evaluate("toolSize('image_gpt25_sunburst', '9:16', '1080p')"), {width: 1088, height: 1920});
 for (const tier of Object.values(config._runtime.resolution_tiers)) for (const {width, height} of Object.values(tier)) {
     assert.ok(config.image_gpt25_sunburst.choices.custom_width.includes(width) && config.image_gpt25_sunburst.choices.custom_height.includes(height));

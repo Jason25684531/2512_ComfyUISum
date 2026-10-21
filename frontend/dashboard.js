@@ -182,6 +182,20 @@ function minimaxDimensionError(values) {
     return ['width', 'height'].every(name => Number.isSafeInteger(Number(values[name])) && Number(values[name]) > 0 && Number(values[name]) % 32 === 0)
         ? '' : 'MiniMax 寬度與高度必須是 32 的正整數倍，無法送出此解析度。';
 }
+// MiniMax stretches first_frame onto width×height (comfy_extras/nodes_minimax_h3.py), so the canvas follows the frame's ratio at the same pixel count.
+function minimaxFrameSize(width, height, imageWidth, imageHeight) {
+    const area = width * height, ratio = imageWidth / imageHeight;
+    const snap = value => Math.max(32, Math.round(value / 32) * 32);
+    return {width: snap(Math.sqrt(area * ratio)), height: snap(Math.sqrt(area / ratio))};
+}
+async function fitMinimaxToFrame(state, image, name) {
+    await image.decode();
+    const size = minimaxFrameSize(Number(state.values.width) || 1344, Number(state.values.height) || 768, image.naturalWidth, image.naturalHeight);
+    Object.assign(state.values, size, {minimax_resolution: 'custom'});
+    if (currentTool !== 'video_minimax_h3') return;
+    renderToolSettings($('image-settings'), currentTool);
+    $('status-message').textContent = `已依${name}比例調整為 ${size.width} × ${size.height}`;
+}
 function renderMinimaxSettings(container, state, config) {
     const presets = config.choices.resolution_presets || [];
     const sizeKey = size => `${size.width}x${size.height}`;
@@ -365,6 +379,7 @@ function uploadControl(tool, upload) {
             state.files[upload.id] = file;
             if (data) { state.images[upload.id] = data; preview.src = data; preview.hidden = false; }
             caption.textContent = file.name; clear.hidden = false;
+            if (tool === 'video_minimax_h3' && data && (upload.id === 'first_frame' || !state.images.first_frame)) await fitMinimaxToFrame(state, preview, name);
         } catch (error) { if (currentTool === tool) $('status-message').textContent = error.message; }
     };
     input.addEventListener('change', () => accept(input.files[0]));
@@ -406,7 +421,8 @@ function validateInputs(tool, state, config) {
 // Payload fields retain the legacy generate contract and specialised controls.
 async function handleGenerate() {
     const tool = catalog.find(item => item.id === currentTool);
-    if (!tool || jobs.some(job => job.tool === tool.id && ['submitting', 'queued', 'running'].includes(job.status))) return;
+    // Queued/running jobs no longer block: each submission lands in 我的佇列 and the Redis queue runs them in order.
+    if (!tool || jobs.some(job => job.tool === tool.id && job.status === 'submitting')) return;
     saveToolState();
     const state = drafts[tool.id];
     const config = toolConfig[tool.id];
@@ -446,6 +462,8 @@ async function handleGenerate() {
         const data = await requestJSON('/api/generate', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)});
         if (!data.job_id) throw new Error('生成服務暫時無回應，請重試');
         job.id = data.job_id; job.status = 'queued';
+        if (currentTool === tool.id) $('status-message').textContent = '已加入我的佇列';
+        // ponytail: one 2s poll per active job; >12 active jobs can hit the 6/s /api/status limit, batch via /api/queue/me if that happens.
         pollStatus(job);
         scheduleQueueRefresh();
     } catch (error) { job.status = 'failed'; job.error = error.message || '生成失敗，請重試'; }
@@ -561,6 +579,13 @@ async function loadMyQueue() {
     } catch (_) { queueError = true; }
     finally { queueLoading = false; renderQueue(); scheduleQueueRefresh(); }
 }
+// Hides finished items from 我的佇列 only; works stay in the gallery. ponytail: keeps the last 100 ids, /api/queue/me returns at most 50.
+const clearedJobs = (() => { try { return new Set(JSON.parse(localStorage.getItem('studio-queue-cleared')) || []); } catch (_) { return new Set(); } })();
+function clearQueue() {
+    for (const job of jobs) if (job.id && !['submitting', 'queued', 'running'].includes(job.status)) clearedJobs.add(job.id);
+    try { localStorage.setItem('studio-queue-cleared', JSON.stringify([...clearedJobs].slice(-100))); } catch (_) { /* Cleared items return after reload. */ }
+    renderQueue();
+}
 function renderQueue() {
     const active = jobs.filter(job => ['queued', 'running'].includes(job.status)).length;
     $('my-queue').textContent = `我的佇列 ${tempcode} · ${active}`;
@@ -569,7 +594,7 @@ function renderQueue() {
         const notice = element('div', 'banner', '佇列暫不可用'); notice.append(button('重試', loadMyQueue));
         list.replaceChildren(notice); return;
     }
-    list.replaceChildren(...jobs.filter(job => job.id).map(job => {
+    list.replaceChildren(...jobs.filter(job => job.id && !clearedJobs.has(job.id)).map(job => {
         const row = element('div', 'queue-item');
         const select = button('', () => {
             selectedJobs[job.tool] = job; $('queue-drawer').close();
@@ -616,9 +641,9 @@ function reuseJob(job) {
 }
 function renderStage(job) {
     const stage = $('result-stage');
-    const active = jobs.some(item => item.tool === currentTool && ['submitting', 'queued', 'running'].includes(item.status));
-    $('btn-generate').disabled = active;
-    $('btn-generate').textContent = active ? '生成中…' : '開始生成 ↗';
+    const submitting = jobs.some(item => item.tool === currentTool && item.status === 'submitting');
+    $('btn-generate').disabled = submitting;
+    $('btn-generate').textContent = submitting ? '送出中…' : '開始生成 ↗';
     if (!job) { stage.replaceChildren(element('div', 'stage-empty', '你的下一件作品，從這裡開始。\n完成左側設定後，開始生成。')); return; }
     const busy = ['submitting', 'queued', 'running'].includes(job.status);
     const content = element('div', busy ? 'run' : 'results');
@@ -651,6 +676,7 @@ function renderStage(job) {
             const actions = element('div', 'media-actions');
             const download = element('a', 'btn sm', '下載'); download.href = `${window.API_URL || ''}${url}`; download.download = '';
             actions.append(download);
+            if (job.status === 'completed' && job.id) actions.append(workMenuButton({jobId: job.id, url, card: null}));
             if (document.fullscreenEnabled) {
                 const fullscreen = button('全螢幕', () => media.requestFullscreen().catch(() => {}), 'btn sm fullscreen');
                 fullscreen.setAttribute('aria-label', '全螢幕檢視生成結果'); actions.append(fullscreen);
@@ -690,32 +716,48 @@ function historyCard(item) {
     if (tool) actions.append(button('再生成', () => reuseJob(item), 'btn sm'));
     info.append(actions); card.append(info);
     if (item.mine) {
+        const target = {jobId: item.job_id, url: media ? item.output_url : '', card};
+        actions.append(workMenuButton(target));
         card.tabIndex = 0;
-        card.setAttribute('aria-label', `${tool?.frontend.title || '作品'}，按右鍵或選單鍵可刪除`);
+        card.setAttribute('aria-label', `${tool?.frontend.title || '作品'}，按 ⋯、右鍵或選單鍵可刪除`);
         card.addEventListener('contextmenu', event => {
             event.preventDefault();
             const box = card.getBoundingClientRect();
-            const menu = $('work-menu');
-            menuTarget = {item, card};
-            menu.style.left = `${event.clientX || box.left + 12}px`;
-            menu.style.top = `${event.clientY || box.top + 12}px`;
-            menu.showPopover(); $('delete-work').focus();
+            openWorkMenu(target, event.clientX || box.left + 12, event.clientY || box.top + 12);
         });
     }
     return card;
 }
+// Shared by the visible ⋯ button and the card context menu; native <video> menus cannot be extended.
+function openWorkMenu(target, x, y) {
+    const menu = $('work-menu');
+    if (menu.matches(':popover-open')) menu.hidePopover();
+    menuTarget = target;
+    // target.url already passed mediaElement()'s /outputs/ allow-list.
+    $('download-work').hidden = !target.url;
+    $('download-work').href = target.url ? `${window.API_URL || ''}${target.url}` : '';
+    menu.style.left = `${Math.min(x, innerWidth - 180)}px`;
+    menu.style.top = `${y}px`;
+    menu.showPopover(); $('delete-work').focus();
+}
+function workMenuButton(target) {
+    const more = button('⋯', event => { const box = event.currentTarget.getBoundingClientRect(); openWorkMenu(target, box.left, box.bottom + 4); }, 'btn sm');
+    more.setAttribute('aria-label', '作品選項'); more.setAttribute('aria-haspopup', 'menu');
+    return more;
+}
 async function deleteWork() {
     $('work-menu').hidePopover();
     if (!menuTarget || !confirm('確定要刪除這件作品？刪除後無法復原。')) return;
-    const {item, card} = menuTarget;
+    const {jobId, card} = menuTarget;
     try {
-        await requestJSON(`/api/history/${encodeURIComponent(item.job_id)}`, {method: 'DELETE'});
-        if (card.parentElement === $('gallery-grid') && galleryOffset > 0) galleryOffset--;
-        card.remove();
-        const index = jobs.findIndex(job => job.id === item.job_id);
+        await requestJSON(`/api/history/${encodeURIComponent(jobId)}`, {method: 'DELETE'});
+        if (card?.parentElement === $('gallery-grid') && galleryOffset > 0) galleryOffset--;
+        card?.remove();
+        const index = jobs.findIndex(job => job.id === jobId);
         if (index >= 0) {
             const [job] = jobs.splice(index, 1); stopPolling(job);
-            if (selectedJobs[job.tool] === job) delete selectedJobs[job.tool];
+            if (selectedJobs[job.tool] === job) selectedJobs[job.tool] = jobs.find(item => item.tool === job.tool);
+            if (currentTool === job.tool) { renderStage(selectedJobs[job.tool]); renderHistoryStrip(job.tool); }
             renderQueue();
         }
     } catch (error) { alert(error.status === 403 ? '只能刪除自己的作品' : error.status === 409 ? '任務仍在進行中，請先取消' : `刪除失敗：${error.message}`); }
@@ -796,6 +838,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     $('hero-form').addEventListener('submit', event => { event.preventDefault(); const tool = catalog.find(item => item.id === $('hero-tool').value); if (tool) openTool(tool, $('hero-prompt').value, true); });
     $('my-queue').addEventListener('click', () => { $('queue-drawer').showModal(); loadMyQueue(); });
     $('close-queue').addEventListener('click', () => $('queue-drawer').close());
+    $('clear-queue').addEventListener('click', clearQueue);
     $('workflow-guide-btn').addEventListener('click', openGuide);
     $('close-guide').addEventListener('click', () => $('workflow-guide').close());
     $('guide-start').addEventListener('click', () => $('workflow-guide').close());

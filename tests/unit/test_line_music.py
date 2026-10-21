@@ -276,6 +276,18 @@ def test_offer_playlist_search_modes_and_input_isolation(monkeypatch, tmp_path):
     adapter.music.executor.shutdown()
 
 
+def test_full_playlist_selection_submits_instead_of_reasking_output(monkeypatch, tmp_path):
+    adapter, runtime, sent = music_adapter(monkeypatch, tmp_path)
+    adapter.music.library = library(tmp_path / "music", [track(f"t{i:02d}") for i in range(10)])
+    begin_choice(adapter)
+    adapter.handle_event(_message(text="音樂"))
+    assert len(adapter._load_music_session("U123")["candidates"]) == 10
+    adapter.handle_event(_message(text="10"))
+    assert adapter._job_mapping("job-line-1")["music_id"] == "t09"
+    assert "quickReply" not in sent[-1][1]["messages"][0]
+    adapter.music.executor.shutdown()
+
+
 @pytest.mark.parametrize("tamper", [{"request_id": "../x"}, {"state": []}, {"mode": {}},
                                    {"candidates": ["../fake"]}, {"path": "/secret"},
                                    {"created_at": None}, {"created_at": 20261016}])

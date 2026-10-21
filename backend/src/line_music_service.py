@@ -95,7 +95,8 @@ class MusicLibrary:
         return self._path(track) if track else None
 
     def playlist(self) -> list[dict]:
-        return [self.tracks[key] for key in sorted(self.tracks)[:self.limit]]
+        # 「音樂」列出全部曲目（最多 99 首，對齊兩位數選號）；limit 只限制搜尋結果數量
+        return [self.tracks[key] for key in sorted(self.tracks)[:99]]
 
     def search(self, query: str) -> list[dict]:
         query = normalize(query)

@@ -684,7 +684,8 @@ class LineAdapter:
             isinstance(state.get("state"), str) and state["state"] in {"music_offer", "music_select"}
             and isinstance(state.get("mode"), str) and state["mode"] in {"mix", "replace"}
             and isinstance(state.get("request_id"), str) and re.fullmatch(r"[a-f0-9]{32}", state["request_id"])
-            and isinstance(candidates, list) and len(candidates) <= 5
+            # 「音樂」會列出整個歌單；上限對齊兩位數選號
+            and isinstance(candidates, list) and len(candidates) <= 99
             and all(isinstance(item, str) and MUSIC_ID_RE.fullmatch(item) for item in candidates)
             and isinstance(state.get("created_at"), str) and created is not None
             and set(state) == {"state", "mode", "request_id", "candidates", "created_at"}
