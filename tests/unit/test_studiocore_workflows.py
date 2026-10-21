@@ -237,10 +237,26 @@ def test_unresponsive_comfyui_returns_safe_failure(monkeypatch, capsys):
     assert "private-test-setting" not in safe and "private-endpoint" not in safe
 
 
-def test_minimax_resolution_choices_are_multiples_of_32(catalog):
-    # MiniMax patchifies the first-frame latent (1/16 scale) in pairs; 1080 fails I2V.
-    choices = catalog.resolve("video_minimax_h3").entry.choices
-    assert all(value % 32 == 0 for value in choices["width"] + choices["height"])
+def test_minimax_resolution_presets_and_custom_dimensions(candidate_runtime):
+    entry = candidate_runtime.entries["video_minimax_h3"]
+    presets = entry.choices["resolution_presets"]
+    assert len(presets) == 20
+    assert (presets[-1]["width"], presets[-1]["height"]) == (1920, 1088)
+    for size in [*presets, {"width": 1024, "height": 576}, {"width": 1920, "height": 1088}]:
+        dimensions = {name: size[name] for name in ("width", "height")}
+        extra, images, error = _normalize_catalog_inputs(entry, {"extra_params": dimensions}, "sea")
+        assert error is None
+        workflow = runtime.parse_workflow("video_minimax_h3", prompt="sea", image_files=images,
+            video_mode="t2v", extra_params=extra)
+        assert all(workflow["105:104"]["inputs"][name] == value for name, value in dimensions.items())
+
+
+@pytest.mark.parametrize("name", ["width", "height"])
+@pytest.mark.parametrize("value", [0, -32, 31, 608.5, 1080, "608", None, "", True, False])
+def test_minimax_invalid_dimensions_are_rejected(catalog, name, value):
+    entry = catalog.entries["video_minimax_h3"]
+    for data in ({name: value}, {"extra_params": {name: value}}):
+        assert "32" in _normalize_catalog_inputs(entry, data, "sea")[2]
 
 
 @pytest.mark.parametrize('workflow_id', ['image_gpt25_sunburst', 'video_minimax_h3'])

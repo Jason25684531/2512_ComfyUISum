@@ -196,23 +196,24 @@ summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
 .queue-select { flex: 1; min-width: 0; text-align: left; display: flex; flex-direction: column; gap: 4px; }
 .queue-select img, .queue-select video { width: 64px; height: 64px; object-fit: contain; }
 .queue-item .err { flex-basis: 100%; }
-#hero-settings, #image-settings { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; padding: 0; }
-#hero-settings { flex: 0 0 auto; }
-#image-settings { overflow-x: auto; padding-bottom: 4px; }
-.setting-chip { display: flex; flex: 0 0 auto; align-items: center; gap: 6px; min-width: max-content; }
+#hero-settings, #image-settings { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0; min-width: 0; max-width: 100%; }
+#hero-settings { flex: 1 1 240px; }
+.setting-chip { display: flex; flex: 0 1 auto; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; max-width: 100%; }
 .setting-chip summary { display: flex; flex: 0 0 auto; align-items: center; gap: 6px; min-height: 32px; padding: 4px 9px; border: 1px solid #ffffff20; border-radius: 7px; background: #08080aaa; font-size: 11px; font-weight: 400; white-space: nowrap; list-style: none; }
 .setting-chip summary::-webkit-details-marker { display: none; }
 .setting-chip summary svg.lucide, .prompt-bar svg.lucide { width: 14px; height: 14px; flex: 0 0 14px; }
 .setting-chip[open] summary { border-color: var(--accent); }
-.setting-chip .seg { display: flex; flex: 0 0 auto; flex-wrap: nowrap; align-items: center; width: max-content; padding: 3px; border: 1px solid var(--line-strong); border-radius: 8px; background: #08080acc; }
+.setting-chip .seg { display: flex; flex: 0 1 auto; flex-wrap: wrap; align-items: center; max-width: 100%; padding: 3px; border: 1px solid var(--line-strong); border-radius: 8px; background: #08080acc; }
 .setting-chip:not([open]) .seg { display: none; }
 .setting-chip .seg button { flex: none; min-width: 42px; min-height: 32px; padding: 4px 7px; font-size: 11px; }
 #hero-settings .field, #image-settings .field { flex: 0 0 120px; margin-top: 0; max-width: 150px; }
+#hero-settings .resolution-field, #image-settings .resolution-field { flex: 1 1 100%; max-width: 100%; }
+.resolution-help { flex-basis: 100%; margin: 0; overflow-wrap: anywhere; }
 #hero-settings .field .lbl, #image-settings .field .lbl { font-size: 10px; margin-bottom: 3px; }
 #hero-settings .input, #image-settings .input { min-height: 32px; padding: 4px 8px; border-radius: 7px; font-size: 11px; }
 .prompt-bar { display: grid; grid-template-columns: minmax(0, 1fr) 96px; gap: 6px 10px; padding: 10px; border-radius: 14px; background: #0A0A0Cdd; backdrop-filter: blur(12px); }
 .prompt-bar textarea { grid-column: 1; min-width: 0; min-height: 46px; padding: 4px 2px; font-size: 13px; }
-.prompt-bar .row { grid-column: 1; min-width: 0; flex-wrap: nowrap; align-items: center; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+.prompt-bar .row { grid-column: 1; min-width: 0; flex-wrap: wrap; align-items: center; gap: 8px; }
 .prompt-bar > button[type="submit"] { grid-column: 2; grid-row: 1 / span 2; align-self: stretch; padding: 10px; border-radius: 10px; font-size: 11px; }
 .prompt-bar .pill { flex: 0 0 auto; min-height: 32px; padding: 4px 8px; gap: 6px; border-radius: 7px; background: #08080aaa; font-size: 11px; }
 .prompt-bar .pill select { max-width: 170px; font-size: 11px; }

@@ -41,10 +41,20 @@ for (const tier of Object.values(config._runtime.resolution_tiers)) for (const {
     assert.ok(config.image_gpt25_sunburst.choices.custom_width.includes(width) && config.image_gpt25_sunburst.choices.custom_height.includes(height));
     assert.ok(width % 16 === 0 && height % 16 === 0 && width * height >= 655360, `Sunburst rejects ${width}x${height}`);
 }
-assert.deepEqual(evaluate("toolSize('video_minimax_h3', '16:9', '1080p')"), {width: 1536, height: 864});
-assert.deepEqual(evaluate("toolSize('video_minimax_h3', '9:16', '720p')"), {width: 576, height: 1024});
-vm.runInContext("toolConfig.video_minimax_h3.choices = {width:[1920],height:[1088]}", context);
-assert.equal(vm.runInContext("toolSize('video_minimax_h3', '9:16', '1080p')", context), undefined);
+const presets = config.video_minimax_h3.choices.resolution_presets;
+assert.equal(presets.length, 20);
+for (const size of [...presets, {width: 1024, height: 576}, {width: 1920, height: 1088}]) {
+    const error = vm.runInContext(`minimaxDimensionError(${JSON.stringify(size)})`, context);
+    assert.equal(error, '', JSON.stringify(size));
+}
+assert.deepEqual({width: presets.at(-1).width, height: presets.at(-1).height}, {width: 1920, height: 1088});
+for (const value of ['', 0, -32, 31, 608.5, 1080, 'bad', null, true]) {
+    for (const name of ['width', 'height']) {
+        assert.match(vm.runInContext(`minimaxDimensionError(${JSON.stringify({width: 608, height: 352, [name]: value})})`, context), /32/);
+    }
+}
+assert.equal(evaluate("ensureDraft('video_minimax_h3').values.width"), 1344);
+assert.equal(evaluate("ensureDraft('video_minimax_h3').values.height"), 768);
 assert.equal(evaluate("ensureDraft('text_to_image').ratio"), '16:9');
 assert.equal(evaluate("ensureDraft('text_to_image').tier"), '720p');
 console.log('Dashboard parse and navigation smoke checks passed.');

@@ -51,6 +51,9 @@ IMAGE_WORKFLOW_ID = "image_gpt25_sunburst"
 VIDEO_WORKFLOW_ID = "video_minimax_h3"
 MAX_PENDING_IMAGES = 3
 MAX_VIDEO_IMAGES = 2
+# Pre-preset MiniMax size lists; order matters (first exact ratio match wins).
+LINE_VIDEO_WIDTHS = (1024, 1344, 768, 1920, 864, 1536, 576)
+LINE_VIDEO_HEIGHTS = (1024, 768, 1344, 1088, 864, 1536, 1280)
 
 REPLY_GENERATING = "已開始生成。"
 REPLY_QUEUED = "目前有工作正在生成，這次請求已排入佇列，會在前一個完成後執行。"
@@ -166,7 +169,10 @@ def _generation_dimensions(entry, prompt: str, paths: list[Path]) -> dict[str, A
             return {"size": "custom", "custom_width": 576, "custom_height": 1280}
         sizes = [tuple(map(int, size.split("x"))) for size in entry.choices["size"] if size != "custom"]
     else:
-        sizes = [(w, h) for w in entry.choices["width"] for h in entry.choices["height"]]
+        # MiniMax now takes free-form 32-aligned width/height (choices only hold 16:9 presets),
+        # so LINE keeps its own orientation-aware list.
+        widths = entry.choices.get("width") or LINE_VIDEO_WIDTHS
+        sizes = [(w, h) for w in widths for h in entry.choices.get("height") or LINE_VIDEO_HEIGHTS]
     chosen_width, chosen_height = min(sizes, key=lambda size: abs(size[0] / size[1] - width / height))
     if entry.output_type == "image":
         return {"size": f"{chosen_width}x{chosen_height}"}

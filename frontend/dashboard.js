@@ -176,16 +176,50 @@ function ensureDraft(toolId) {
     return drafts[toolId] ||= {prompt: '', seed: '-1', model: '', ratio: '16:9', tier: '720p', batch: 1, files: {}, images: {}, values: {...toolConfig[toolId].defaults}};
 }
 function toolSize(toolId, ratio, tier) {
-    const choices = toolConfig[toolId].choices;
-    let candidates;
-    if (toolId === 'video_minimax_h3') candidates = (choices.width || []).flatMap(width => (choices.height || []).map(height => ({width, height})));
-    else return RESOLUTIONS[tier]?.[ratio];
-    const [w, h] = ratio.split(':').map(Number);
-    // Catalog sizes can be aligned to 16 pixels; accept at most 3% ratio error.
-    return candidates.filter(size => {
-        const long = Math.max(size.width, size.height);
-        return (tier === '720p' ? long <= 1344 : long >= 1536) && Math.abs(size.width / size.height / (w / h) - 1) < .03;
-    }).sort((a, b) => Math.abs(a.width / a.height - w / h) - Math.abs(b.width / b.height - w / h))[0];
+    return RESOLUTIONS[tier]?.[ratio];
+}
+function minimaxDimensionError(values) {
+    return ['width', 'height'].every(name => Number.isSafeInteger(Number(values[name])) && Number(values[name]) > 0 && Number(values[name]) % 32 === 0)
+        ? '' : 'MiniMax 寬度與高度必須是 32 的正整數倍，無法送出此解析度。';
+}
+function renderMinimaxSettings(container, state, config) {
+    const presets = config.choices.resolution_presets || [];
+    const sizeKey = size => `${size.width}x${size.height}`;
+    const selected = state.values.minimax_resolution ?? (presets.some(size => sizeKey(size) === sizeKey(state.values)) ? sizeKey(state.values) : 'custom');
+    const preset = addField(container, 'minimax_resolution', 'text', selected, [...presets.map(sizeKey), 'custom'], 'video_minimax_h3');
+    preset.closest('label').classList.add('resolution-field');
+    preset.closest('label').querySelector('.lbl').textContent = '解析度預設（16:9 參考表）';
+    [...preset.options].forEach((option, index) => {
+        const size = presets[index];
+        option.textContent = size ? `${size.label} · ${size.width} × ${size.height}` : '自訂解析度';
+    });
+    const hint = element('p', 'help resolution-help');
+    hint.id = `${container.id}-resolution-hint`;
+    hint.setAttribute('role', 'status');
+    const updateHint = () => {
+        const error = minimaxDimensionError(state.values);
+        hint.textContent = error || '寬、高皆須為 32 的正整數倍；1080p 級使用 1920 × 1088。';
+        hint.classList.toggle('err', !!error);
+    };
+    const dimensions = ['width', 'height'].map(name => {
+        const control = addField(container, name, 'number', state.values[name], [], 'video_minimax_h3');
+        control.required = true; control.min = 32; control.step = 32;
+        control.setAttribute('aria-describedby', hint.id);
+        control.addEventListener('input', () => {
+            state.values[name] = control.value;
+            preset.value = state.values.minimax_resolution = 'custom';
+            updateHint();
+        });
+        return control;
+    });
+    preset.addEventListener('change', () => {
+        state.values.minimax_resolution = preset.value;
+        const size = presets.find(size => sizeKey(size) === preset.value);
+        if (size) ['width', 'height'].forEach((name, index) => { dimensions[index].value = state.values[name] = size[name]; });
+        updateHint();
+    });
+    container.append(hint);
+    updateHint();
 }
 function renderToolSettings(container, toolId) {
     container.replaceChildren();
@@ -210,7 +244,8 @@ function renderToolSettings(container, toolId) {
         }
         group.append(row); container.append(group);
     };
-    if (!derived) {
+    if (toolId === 'video_minimax_h3') renderMinimaxSettings(container, state, config);
+    else if (!derived) {
         segments('ratio', '畫面比例', ratios, state.ratio, value => {
             state.ratio = value;
             if (toolId === 'ideogram4_regional_t2i') {
@@ -358,6 +393,7 @@ function validateInputs(tool, state, config) {
         if (!upload.optional && !state.files[upload.id]) return `請先上傳『${upload.label}』`;
     }
     if (config.promptRequired && !state.prompt.trim()) return '請輸入提示詞';
+    if (tool.id === 'video_minimax_h3' && minimaxDimensionError(state.values)) return minimaxDimensionError(state.values);
     if (!$('workspace-form').checkValidity()) return '請檢查數值範圍與格式';
     if (tool.id === 'ltx_retake_v2v' && !(Number(state.values.retake_start) >= 0 && Number(state.values.retake_end) > Number(state.values.retake_start))) return '開始秒數需 ≥ 0 且小於結束秒數';
     if (tool.id === 'ideogram4_regional_t2i') {
@@ -397,7 +433,7 @@ async function handleGenerate() {
         }
         const size = toolSize(tool.id, state.ratio, state.tier);
         if (tool.id === 'image_gpt25_sunburst') Object.assign(extraParams, {size: 'custom', custom_width: size.width, custom_height: size.height});
-        if (tool.id === 'video_minimax_h3') Object.assign(extraParams, size);
+        if (tool.id === 'video_minimax_h3') Object.assign(extraParams, {width: Number(state.values.width), height: Number(state.values.height)});
         if (Object.keys(extraParams).length) payload.extra_params = extraParams;
         if (tool.id === 'ideogram4_regional_t2i') {
             payload.width = size.width; payload.height = size.height;

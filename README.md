@@ -1,6 +1,6 @@
 # ComfyUI Studio
 
-ComfyUI Studio 是以 Flask、Redis、MySQL、Python Worker 與本機 ComfyUI 組成的影像／影片生成服務，提供網頁介面與 LINE Bot 兩個入口。
+ComfyUI Studio 是以 Flask、Redis、MySQL、Python Worker 與本機 ComfyUI 組成的影像／影片生成服務，提供網頁介面（Prompt Hub）與 LINE Bot 兩個入口。
 
 ## 架構
 
@@ -25,7 +25,9 @@ ComfyUI Studio 是以 Flask、Redis、MySQL、Python Worker 與本機 ComfyUI �
                                storage/outputs
 ~~~
 
-- Compose 服務：`backend`、`worker`、`redis`、`mysql`，皆為 `restart: always`。
+- Compose 服務：`backend`、`worker`、`redis`、`mysql`，皆為 `restart: always`；backend 與 worker 都等 MySQL healthcheck 通過才啟動。
+- Backend Docker healthcheck 要求 `/health` 回 HTTP 200 且 `status == "ok"`，否則判定不健康。
+- `.dockerignore` 排除本機 secrets、資料 volume、虛擬環境與開發產物。
 - ComfyUI 在 Windows 原生執行，不在 Compose 內。
 - 唯一的設定契約是 `docker-compose.yml` + `.env.local`。
 
@@ -86,6 +88,19 @@ docker compose --env-file .env.local up -d --build backend worker
 | `--cache-ram 32` | 保留 32 GB 可用 RAM。預設只保留 10 GB，模型快取會佔滿 RAM，導致 MiniMax 出現 `HostBuffer.read_file_slice failed` |
 | `--verbose ERROR` | 避免 INFO log 輸出設定的 endpoint |
 
+## 網頁介面（Prompt Hub）
+
+入口 `frontend/dashboard.html`（邏輯在 `dashboard.js`、樣式在 `dashboard.css`），黑底＋螢光綠 `#D7FF3F` 視覺，不需登入、沒有會員 UI。
+
+- **導覽**：上方水平導覽（探索／圖片／影片／數位人像／作品庫）；手機版改為 Pill 導覽，生成按鈕固定在底部。
+- **Hash 路由**：`#/home`、`#/image/<tool>`、`#/video/<tool>`、`#/avatar`、`#/gallery`，支援上一頁、重新整理與深層連結。
+- **首頁 Hero**：選工具後直接在 prompt 下方設定比例、解析度、張數等參數，與工作區共用草稿；條件齊全時直接送出，缺少上傳檔時開啟工作區並提示。
+- **解析度**：比例只有 16:9（預設）、9:16、2:3，解析度 720P（預設）／1080P，由 catalog `_runtime.resolution_tiers` 換算寬高；前端不顯示寬×高數字。1080P 約為 720P 的兩倍像素，VRAM 與時間隨之增加。
+- **結果舞台**：媒體滿版（`object-fit: contain`），下載／再生成／全螢幕為浮動工具列；多張輸出以格狀排列。生成中顯示骨架、進度、取消與失敗重試。
+- **我的佇列**：頂列按鈕顯示 tempcode（如 `U-7F3A2C`）與進行中數量，抽屜列出最近 24 小時任務，可取消排隊中／生成中的任務；取消會以 `prompt_id` 精準中斷 ComfyUI，不影響其他任務。
+- **作品庫**：全站共享，所有人都看得到所有人的 prompt 與作品；支援狀態篩選、下載、再生成，載入失敗會顯示錯誤與重試。需要 `JOB_OBSERVABILITY_ENABLED=true`（Compose 已設定），否則 `/api/history` 回 503。
+- 舊網址 `login.html`／`profile.html` 302 導向 dashboard。
+
 ## LINE Bot
 
 在 LINE Developers Console 將 Webhook URL 設為 `<LINE_PUBLIC_BASE_URL>/line/webhook`。Quick Tunnel 每次重新建立時網址都會改變，需要同步更新。
@@ -143,11 +158,12 @@ catalog 中標示 enabled 的其他 workflow（`text_to_image`、`ltx_i2v` 等�
 | GET | `/api/health`、`/health` | Backend、Redis、MySQL、Worker 健康狀態 |
 | GET | `/api/runtime-config` | runtime 與 enabled workflow catalog（不含憑證） |
 | POST | `/api/generate` | 建立並排入 job；選填 `resolution: "720p" \| "1080p"` |
+| GET | `/api/history` | 全站共享作品庫；`offset`、`limit`、`status`（`all`／`completed`／`running`／`failed`，預設 `completed`） |
 | GET | `/api/queue/me` | 此瀏覽器最近 24 小時最多 50 筆任務、進度、排隊位置與縮圖 |
 | GET | `/api/status/<job_id>` | 查詢 job（完成狀態為 `finished`） |
 | POST | `/api/cancel/<job_id>` | 限送出任務的瀏覽器取消，非本人回 403 |
 | POST | `/api/upload` | 上傳輸入檔案 |
-| GET | `/outputs/<path>` | 取得輸出檔案 |
+| GET | `/outputs/<path>` | 取得輸出檔案；resolve 後位於輸出根目錄外（含 symlink）回 403 |
 | GET | `/api/models`、`/api/metrics` | 模型清單、metrics |
 | POST | `/line/webhook` | LINE webhook（HMAC-SHA256 簽章驗證） |
 | GET | `/line/download/<token>`、`/line/preview/<token>` | LINE 媒體下載與縮圖 |
@@ -178,10 +194,11 @@ worker/src/
   workflow/                loader、runtime、injectors
 
 shared/                    config、workflow catalog、job contract、path safety
-frontend/                  dashboard.html（主入口）、admin、靜態資源
+frontend/                  dashboard.html／.js／.css（Prompt Hub）、admin、靜態資源
 ComfyUIworkflow/           config.json 與 UI workflow
 ComfyUIworkflow_api/       API 格式 workflow
-scripts/                   repair-services.ps1、驗證與維護工具
+migrations/                MySQL 加法式 migration（001–004）
+scripts/                   repair-services.ps1、validate_local_startup.py、維護工具
 openspec/                  規格（specs/）與變更紀錄（changes/archive/）
 tests/                     unit、integration 測試
 ~~~
@@ -215,6 +232,8 @@ bash scripts/maintenance.sh --dry-run
 **Sunburst 回傳 `HTTP 408`**：Azure 端逾時，重試即可。
 
 **LINE 沒有回應**：確認 Tunnel 網址與 LINE 後台的 Webhook URL 一致（`logs/cloudflared.stdout.log`、`.env.local` 的 `LINE_PUBLIC_BASE_URL`）。
+
+**作品庫顯示「暫不可用」**：`/api/history` 回 503，確認 `JOB_OBSERVABILITY_ENABLED=true` 且 MySQL 正常；已套用 `003`、`004` migration。
 
 **輸出檔案不存在**：確認 `storage/outputs/` 存在，且 backend 與 worker mount 同一個 `storage/`。
 

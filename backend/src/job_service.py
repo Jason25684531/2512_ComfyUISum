@@ -89,6 +89,10 @@ def _normalize_catalog_inputs(entry, data: dict[str, Any], prompt: str) -> tuple
         else:
             value = extra.get(name, data.get(name, entry.defaults.get(name)))
 
+        if name in {"width", "height"} and entry.workflow_id == "video_minimax_h3":
+            if isinstance(value, bool) or not isinstance(value, int) or value <= 0 or value % 32:
+                return {}, {}, "MiniMax 寬度與高度必須是 32 的正整數倍，無法送出此解析度。"
+
         if name in required and value in (None, "", []):
             return {}, {}, f"{name} is required"
         if input_type == "multi-image":

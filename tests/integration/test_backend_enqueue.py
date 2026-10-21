@@ -272,6 +272,19 @@ def test_studiocore_enqueue_contracts(monkeypatch):
         assert job["video_mode"] == mode
         assert job["seed"] == 112
         assert job["extra_params"]["duration"] == 5
+    for dimensions in ({"width": 608, "height": 352}, {"width": 1024, "height": 576}, {"width": 1920, "height": 1088}):
+        response = client.post("/api/generate", json={
+            "workflow": "video_minimax_h3", "prompt": "sea", "extra_params": dimensions,
+        })
+        assert response.status_code == 200
+        assert all(json.loads(queue[-1])["extra_params"][key] == value for key, value in dimensions.items())
+    queued = len(queue)
+    for dimensions in ({"width": 1920, "height": 1080}, {"width": 607, "height": 352}):
+        response = client.post("/api/generate", json={
+            "workflow": "video_minimax_h3", "prompt": "sea", "extra_params": dimensions,
+        })
+        assert response.status_code == 400 and "32" in response.json["error"]
+        assert len(queue) == queued
     last_only = client.post("/api/generate", json={
         "workflow": "video_minimax_h3", "prompt": "sea", "images": {"last_frame": image},
     })

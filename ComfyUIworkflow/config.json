@@ -802,29 +802,33 @@
       "prompt": "text",
       "first_frame": "image",
       "last_frame": "image",
-      "width": "select",
-      "height": "select",
+      "width": "number",
+      "height": "number",
       "duration": "select",
       "seed": "number"
     },
     "choices": {
-      "width": [
-        1024,
-        1344,
-        768,
-        1920,
-        864,
-        1536,
-        576
-      ],
-      "height": [
-        1024,
-        768,
-        1344,
-        1088,
-        864,
-        1536,
-        1280
+      "resolution_presets": [
+        {"label": "0.2 MP", "width": 608, "height": 352},
+        {"label": "0.3 MP", "width": 736, "height": 416},
+        {"label": "0.4 MP", "width": 864, "height": 480},
+        {"label": "0.5 MP", "width": 960, "height": 544},
+        {"label": "0.6 MP", "width": 1056, "height": 608},
+        {"label": "0.7 MP", "width": 1152, "height": 640},
+        {"label": "0.8 MP", "width": 1216, "height": 672},
+        {"label": "0.9 MP", "width": 1280, "height": 736},
+        {"label": "0.98 MP（官方 768p）", "width": 1344, "height": 768},
+        {"label": "1.1 MP", "width": 1408, "height": 800},
+        {"label": "1.2 MP", "width": 1472, "height": 832},
+        {"label": "1.3 MP", "width": 1504, "height": 864},
+        {"label": "1.4 MP", "width": 1568, "height": 896},
+        {"label": "1.5 MP", "width": 1632, "height": 928},
+        {"label": "1.6 MP", "width": 1696, "height": 960},
+        {"label": "1.7 MP", "width": 1728, "height": 992},
+        {"label": "1.8 MP", "width": 1792, "height": 992},
+        {"label": "1.9 MP", "width": 1856, "height": 1024},
+        {"label": "2.0 MP", "width": 1888, "height": 1056},
+        {"label": "2.09 MP（1080p 級，32 倍數對齊）", "width": 1920, "height": 1088}
       ],
       "duration": [
         3,
@@ -833,8 +837,8 @@
       ]
     },
     "defaults": {
-      "width": 1024,
-      "height": 1024,
+      "width": 1344,
+      "height": 768,
       "duration": 5,
       "seed": -1
     },
