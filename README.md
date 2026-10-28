@@ -1,242 +1,369 @@
 # ComfyUI Studio
 
-ComfyUI Studio 是以 Flask、Redis、MySQL、Python Worker 與本機 ComfyUI 組成的影像／影片生成服務，提供網頁介面（Prompt Hub）與 LINE Bot 兩個入口。
+以 **Flask + Redis + MySQL + Python Worker + 本機 ComfyUI** 組成的影像／影片生成服務，提供兩個入口：
 
-## 架構
+| 入口 | 說明 |
+| --- | --- |
+| 網頁 Prompt Hub | `http://localhost:5000/`，免登入，以 tempcode cookie 區分使用者 |
+| LINE Bot | 經 Cloudflare Quick Tunnel 對外，Webhook `/line/webhook` |
 
-~~~
- Browser ──────────────┐            LINE App
-                       │               │ HTTPS
-                       │        Cloudflare Quick Tunnel
-                       ▼               ▼
-              Backend :5000（Flask, Docker）
-               ├── api_routes / system_routes / admin_routes
-               ├── line_routes（webhook、下載、縮圖、完成通知）
-               ├── job_service ──► Redis（queue、job status、LINE session）
-               └── MySQL（job history、observability）
-                                       │
-                                       ▼
-                         Worker（Docker）── 憑證只在記憶體注入
-                                       │ HTTP + WebSocket
-                                       ▼
-                 ComfyUI :8188（Windows 原生，host.docker.internal）
-                                       │
-                                       ▼
-                               storage/outputs
-~~~
+---
 
-- Compose 服務：`backend`、`worker`、`redis`、`mysql`，皆為 `restart: always`；backend 與 worker 都等 MySQL healthcheck 通過才啟動。
-- Backend Docker healthcheck 要求 `/health` 回 HTTP 200 且 `status == "ok"`，否則判定不健康。
-- `.dockerignore` 排除本機 secrets、資料 volume、虛擬環境與開發產物。
-- ComfyUI 在 Windows 原生執行，不在 Compose 內。
-- 唯一的設定契約是 `docker-compose.yml` + `.env.local`。
+## 1. 系統架構
 
-## 快速開始（Windows）
+```mermaid
+flowchart TB
+    subgraph Client["使用者端"]
+        B["Browser<br/>Prompt Hub"]
+        L["LINE App"]
+    end
 
-需求：
+    CF["Cloudflare Quick Tunnel<br/>(HTTPS 公開網址)"]
 
-- Docker Desktop
-- Portable ComfyUI，預設路徑 `C:\ComfyUI_windows_portable_Multi_Workflows`（可用 `COMFYUI_DIR` 覆寫）
-- `cloudflared`（LINE 需要公開網址時）
-- Python 3.11（執行測試與本機驗證時）
+    subgraph Docker["Docker Compose（studio-net）"]
+        BE["Backend :5000<br/>Flask"]
+        R[("Redis<br/>queue / job status / LINE session")]
+        M[("MySQL<br/>job history / observability")]
+        W["Worker<br/>Azure 憑證僅於記憶體注入"]
+    end
 
-建立 local env：
+    subgraph Host["Windows 主機（原生）"]
+        C["ComfyUI :8188"]
+        S[("storage/outputs")]
+    end
 
-~~~powershell
-Copy-Item .env.local.example .env.local
-~~~
+    B -->|HTTP| BE
+    L -->|HTTPS| CF --> BE
+    BE --> R
+    BE --> M
+    R -->|取出 job| W
+    W --> M
+    W -->|HTTP + WebSocket<br/>host.docker.internal| C
+    C --> S
+    BE -->|/outputs、/line/download| S
+```
 
-編輯 `.env.local`，至少替換 Redis、MySQL、`SECRET_KEY` 的 placeholder；使用 StudioCore 或 LINE 時另需填入 `STUDIOCORE_AZURE_*`、`LINE_CHANNEL_*`。
+| 元件 | 執行位置 | 職責 | 主要程式 |
+| --- | --- | --- | --- |
+| Backend | Docker（`studio-backend`） | API、前端靜態檔、LINE adapter、輸入驗證與排入 job | `backend/src/` |
+| Worker | Docker（`studio-worker`） | 取出 job、注入參數、送 ComfyUI、收集輸出、更新狀態 | `worker/src/` |
+| Redis | Docker（`studio-redis`） | job 佇列、job 狀態、LINE 對話 session | — |
+| MySQL | Docker（`studio-mysql`） | job 歷史、dispatch、observability（作品庫來源） | `migrations/` |
+| ComfyUI | Windows 原生 | 實際執行 workflow 推論 | 不在 Compose 內 |
+| Shared | Backend／Worker 共用 | 設定、workflow catalog、job contract、路徑安全 | `shared/` |
 
-**一鍵啟動**：雙擊根目錄的 `start-vwe.bat`，依序：
+- Compose 四個服務皆 `restart: always`；Backend 與 Worker 等 MySQL healthcheck 通過才啟動。
+- Backend healthcheck 要求 `/health` 回 200 且 `status == "ok"`。
+- 唯一設定契約：`docker-compose.yml` + `.env.local`。
 
-1. 啟動 Docker Desktop 與四個 Compose 服務，等待 backend 健康檢查通過。
-2. 啟動（或沿用健康的）Cloudflare Quick Tunnel，把網址寫回 `.env.local` 的 `LINE_PUBLIC_BASE_URL`；網址有變時才重建 backend。
-3. ComfyUI 沒在跑時，在同一視窗以 `--disable-metadata --cache-ram 32 --verbose ERROR` 啟動。**視窗不要關閉**，關閉即停止 ComfyUI。
+---
 
-腳本只會「啟動缺少的服務」，不會重啟執行中的服務。要重啟 ComfyUI，請先關閉它的視窗再執行。
+## 2. 任務流程
 
-開啟網頁：`http://localhost:5000/`
+### 2.1 生成請求（網頁）
 
-檢查狀態：
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as Browser
+    participant BE as Backend
+    participant R as Redis
+    participant DB as MySQL
+    participant W as Worker
+    participant C as ComfyUI
 
-~~~powershell
-Invoke-RestMethod http://localhost:5000/api/health
-docker compose --env-file .env.local ps
-docker compose --env-file .env.local logs -f backend worker
-~~~
+    U->>BE: POST /api/generate（workflow、prompt、resolution…）
+    BE->>BE: job_service 驗證輸入
+    BE->>DB: 建立 job（created）
+    BE->>R: RPUSH 佇列（queued）
+    BE-->>U: job_id
+    W->>R: 取出 job
+    W->>DB: running
+    W->>W: 載入 workflow + 注入參數 / 憑證
+    W->>C: POST /prompt
+    C-->>W: WebSocket 進度
+    W->>R: 更新進度
+    C-->>W: 輸出檔（storage/outputs）
+    W->>DB: completed / failed
+    loop 輪詢
+        U->>BE: GET /api/status/<job_id>
+    end
+    U->>BE: GET /outputs/<path>
+```
 
-停止 Docker 服務：
+### 2.2 Job 狀態機
 
-~~~powershell
-docker compose --env-file .env.local down
-~~~
+```mermaid
+stateDiagram-v2
+    [*] --> created
+    created --> queued
+    created --> failed
+    queued --> running
+    queued --> failed
+    queued --> cancelled
+    running --> completed
+    running --> failed
+    running --> cancelled
+    completed --> [*]
+    failed --> [*]
+    cancelled --> [*]
+```
 
-修改 `backend/src`、`worker/src`、`shared/` 或 `ComfyUIworkflow_api/` 後需重建映像：
+| 內部狀態 | 對外 API 狀態 | 說明 |
+| --- | --- | --- |
+| `created` | `queued` | 已寫入 DB，尚未進佇列 |
+| `queued` | `queued` | 已在 Redis 佇列等待 |
+| `running` | `processing` | Worker 執行中 |
+| `completed` | `finished` | 完成，有輸出檔 |
+| `failed` | `failed` | 失敗（含錯誤碼） |
+| `cancelled` | `cancelled` | 使用者取消；以 `prompt_id` 精準中斷 ComfyUI |
 
-~~~powershell
-docker compose --env-file .env.local up -d --build backend worker
-~~~
+### 2.3 LINE Bot 對話流程
 
-`ComfyUIworkflow/config.json` 以唯讀方式 mount，每次請求重新讀取，修改後不需重建。
+```mermaid
+flowchart LR
+    A["上傳 0–3 張圖<br/>（可選）"] --> B["輸入提示詞"]
+    B --> C{"Quick Reply"}
+    C -->|圖片| D["image_gpt25_sunburst"]
+    C -->|影片| E{"配樂啟用？"}
+    E -->|否| F["video_minimax_h3"]
+    E -->|是| G["選曲 / 略過 / 逾時"] --> F
+    D --> H["Worker 生成"]
+    F --> H
+    H --> I["Backend 推送 LINE<br/>image / video 訊息"]
+```
 
-### ComfyUI 啟動參數
+| 選擇 | 圖片數 | Workflow | 模式 |
+| --- | --- | --- | --- |
+| 圖片 | 0–3 | `image_gpt25_sunburst` | 文生圖／參考圖 |
+| 影片 | 0 | `video_minimax_h3` | T2V |
+| 影片 | 1 | `video_minimax_h3` | I2V（首幀） |
+| 影片 | 2 | `video_minimax_h3` | FL2V（首尾幀） |
+
+| 規則 | 說明 |
+| --- | --- |
+| 取消 | 輸入「取消」清除已上傳圖片與提示詞 |
+| 比例關鍵字 | `9:20`／`手機比例`（576×1280）、`9:16`／`直式`（864×1536）、`16:9`／`橫式`（1536×864）、`1:1`（1024×1024） |
+| 未指定比例 | 有參考圖時沿用第一張圖比例（含 EXIF 旋轉），否則用 catalog `defaults` |
+| 媒體連結 | `/line/download/<token>`、`/line/preview/<token>`，token 預設 7 天（`LINE_DOWNLOAD_TOKEN_TTL=604800`），下載不續期 |
+| 輸出清理 | Worker 每小時清理超過 30 天的輸出檔 |
+| 本機配樂 | 預設關閉；後製失敗則交付原影片，詳見 [docs/line-local-music.md](docs/line-local-music.md) |
+
+> Webhook URL 設為 `<LINE_PUBLIC_BASE_URL>/line/webhook`。Quick Tunnel 每次重建網址都會改變，需同步更新 LINE 後台。
+
+---
+
+## 3. 快速開始（Windows）
+
+### 3.1 需求
+
+| 項目 | 說明 |
+| --- | --- |
+| Docker Desktop | 執行 Compose 服務 |
+| Portable ComfyUI | 預設 `C:\ComfyUI_windows_portable_Multi_Workflows`，可用 `COMFYUI_DIR` 覆寫；需 **0.34.2 以上**（精準取消） |
+| cloudflared | LINE 需要公開網址時 |
+| Python 3.11 | 執行測試與本機驗證 |
+
+### 3.2 啟動流程
+
+```powershell
+Copy-Item .env.local.example .env.local   # 填入 Redis、MySQL、SECRET_KEY；需要時填 STUDIOCORE_AZURE_*、LINE_CHANNEL_*
+```
+
+接著雙擊 `start-vwe.bat`：
+
+```mermaid
+flowchart TD
+    S["start-vwe.bat"] --> E{".env.local 存在？"}
+    E -->|否| X["中止"]
+    E -->|是| P["repair-services.ps1"]
+    P --> D["啟動 Docker Desktop + 4 個 Compose 服務<br/>等待 backend 健康"]
+    D --> T["啟動 / 沿用 Cloudflare Tunnel<br/>網址寫回 LINE_PUBLIC_BASE_URL<br/>（有變才重建 backend）"]
+    T --> Q{"ComfyUI :8188 已在跑？"}
+    Q -->|是| OK["完成"]
+    Q -->|否| C["同視窗啟動 ComfyUI<br/>⚠ 視窗不可關閉"]
+```
+
+> 腳本只啟動「缺少的服務」，不會重啟執行中的服務。要重啟 ComfyUI 請先關閉其視窗再執行。
+
+### 3.3 ComfyUI 啟動參數
 
 | 參數 | 原因 |
 | --- | --- |
-| `--disable-metadata` | StudioCore workflow 在執行期注入 Azure 憑證，輸出檔不可嵌入 prompt metadata；未啟用時 Worker 會拒絕送出 |
-| `--cache-ram 32` | 保留 32 GB 可用 RAM。預設只保留 10 GB，模型快取會佔滿 RAM，導致 MiniMax 出現 `HostBuffer.read_file_slice failed` |
-| `--verbose ERROR` | 避免 INFO log 輸出設定的 endpoint |
+| `--disable-metadata` | StudioCore workflow 在執行期注入 Azure 憑證，輸出不可嵌入 prompt metadata；未啟用時 Worker 拒絕送出 |
+| `--cache-ram 32` | 保留 32 GB 可用 RAM，避免模型快取佔滿導致 MiniMax `HostBuffer.read_file_slice failed` |
+| `--verbose ERROR` | 避免 INFO log 輸出 endpoint |
 
-## 網頁介面（Prompt Hub）
+### 3.4 常用指令
 
-入口 `frontend/dashboard.html`（邏輯在 `dashboard.js`、樣式在 `dashboard.css`），黑底＋螢光綠 `#D7FF3F` 視覺，不需登入、沒有會員 UI。
-
-- **導覽**：上方水平導覽（探索／圖片／影片／數位人像／作品庫）；手機版改為 Pill 導覽，生成按鈕固定在底部。
-- **Hash 路由**：`#/home`、`#/image/<tool>`、`#/video/<tool>`、`#/avatar`、`#/gallery`，支援上一頁、重新整理與深層連結。
-- **首頁 Hero**：選工具後直接在 prompt 下方設定比例、解析度、張數等參數，與工作區共用草稿；條件齊全時直接送出，缺少上傳檔時開啟工作區並提示。
-- **解析度**：比例只有 16:9（預設）、9:16、2:3，解析度 720P（預設）／1080P，由 catalog `_runtime.resolution_tiers` 換算寬高；前端不顯示寬×高數字。1080P 約為 720P 的兩倍像素，VRAM 與時間隨之增加。
-- **結果舞台**：媒體滿版（`object-fit: contain`），下載／再生成／全螢幕為浮動工具列；多張輸出以格狀排列。生成中顯示骨架、進度、取消與失敗重試。
-- **我的佇列**：頂列按鈕顯示 tempcode（如 `U-7F3A2C`）與進行中數量，抽屜列出最近 24 小時任務，可取消排隊中／生成中的任務；取消會以 `prompt_id` 精準中斷 ComfyUI，不影響其他任務。
-- **作品庫**：全站共享，所有人都看得到所有人的 prompt 與作品；支援狀態篩選、下載、再生成，載入失敗會顯示錯誤與重試。需要 `JOB_OBSERVABILITY_ENABLED=true`（Compose 已設定），否則 `/api/history` 回 503。
-- 舊網址 `login.html`／`profile.html` 302 導向 dashboard。
-
-## LINE Bot
-
-在 LINE Developers Console 將 Webhook URL 設為 `<LINE_PUBLIC_BASE_URL>/line/webhook`。Quick Tunnel 每次重新建立時網址都會改變，需要同步更新。
-
-對話流程：
-
-1. （可選）上傳 0–3 張圖片，Bot 回覆「已收到第 N 張」。
-2. 輸入提示詞。
-3. 以 Quick Reply 選擇「圖片」或「影片」後建立 job。
-
-| 選擇 | 圖片數 | Workflow |
-| --- | --- | --- |
-| 圖片 | 0–3 | `image_gpt25_sunburst`（參考圖） |
-| 影片 | 0 / 1 / 2 | `video_minimax_h3`（T2V / I2V 首幀 / FL2V 首尾幀） |
-
-- 輸入「取消」清除已上傳的圖片與提示詞；已上傳 3 張時只提供「圖片」選項。
-- LINE 提示詞可指定 `9:20`／`手機比例`（576×1280）、`9:16`／`直式`（864×1536）、`16:9`／`橫式`（1536×864）或 `1:1`（1024×1024），圖片與影片使用原生尺寸，不拉伸輸出。未指定比例且有參考圖時沿用第一張圖的比例（含 EXIF 旋轉）；其他參數與無參考圖的預設值仍使用 catalog `defaults`。Sunburst 的 9:20 使用自訂尺寸；MiniMax 影片寬高維持 32 的倍數。
-- 完成後由 Backend 推送 LINE `image` 或 `video` 訊息，媒體透過 `/line/download/<token>`、`/line/preview/<token>` 以 opaque token 提供，token 預設 7 天有效（`LINE_DOWNLOAD_TOKEN_TTL=604800`）；建立連結時同步延長 LINE 任務 mapping 與任務狀態至至少相同期限，下載或預覽不會續期。Worker 每小時清理超過 30 天的輸出檔。此期限是本服務媒體網址的有效期，LINE App 內的快取與保存行為由 LINE 決定。
-- LINE 本機配樂預設關閉；啟用且曲庫可用時，選影片後先詢問是否配樂，選曲或略過後才開始生成。選曲逾時自動不配樂；後製失敗交付原影片；只推送最終影片。曲庫、啟用與 rollback 見 [操作說明](docs/line-local-music.md)。所有媒體交付（含配樂／配樂回退）均使用上述 7 天期限。
-
-## Workflow
-
-唯一的 metadata 來源是 `ComfyUIworkflow/config.json`，由 `shared/workflow_catalog.py` 解析，Backend 與 Worker 共用。`ComfyUIworkflow_api/` 存放可直接送進 ComfyUI `/prompt` 的 API 格式 workflow；`ComfyUIworkflow/` 中的 UI 匯出檔會 fallback 到同名 API 檔。
-
-StudioCore workflow：
-
-| ID | 網頁名稱 | 說明 |
-| --- | --- | --- |
-| `image_gpt25_sunburst` | 圖像生成 | GPT Image 2.5（Azure），最多 3 張參考圖，預設 1024x1024 |
-| `image_upscale_seedvr2` | 圖像放大 | SeedVR2 7B，2x／4x，只在網頁提供 |
-| `video_minimax_h3` | 影像生成 | MiniMax H3，T2V／I2V／FL2V／L2V；預設 1024x1024、5 秒、Lightning LoRA turbo（3 步） |
-
-MiniMax 預設值實測：5 秒影片約 70–90 秒（RTX 5090）。turbo 開關為 API workflow 節點 `105:126`，同時影響網頁與 LINE。
-
-catalog 中標示 enabled 的其他 workflow（`text_to_image`、`ltx_i2v` 等）需要對應模型與 custom node；本機缺少時會在執行階段失敗，enabled 不代表本機可執行。
-
-## 設定
-
-`.env.local.example` 是唯一受版本控制的範本。Compose 將 `.env.local` mount 為容器內的 `.env.selected`（僅為檔名 alias）。設定一律經 `shared/config_base.py` 與各服務的 `config.py` 取得。
-
-| 類別 | 變數 |
+| 用途 | 指令 |
 | --- | --- |
-| Redis | `REDIS_HOST`、`REDIS_PORT`、`REDIS_PASSWORD` |
-| MySQL | `DB_HOST`、`DB_PORT`、`DB_NAME`、`DB_USER`、`DB_PASSWORD`、`MYSQL_ROOT_PASSWORD` |
-| ComfyUI | `COMFYUI_SERVER_URL`、`COMFYUI_HOST`、`COMFY_HOST`、`COMFYUI_PORT` |
-| StudioCore | `STUDIOCORE_AZURE_API_KEY`、`STUDIOCORE_AZURE_ENDPOINT`（只由 Worker 在記憶體注入） |
-| LINE | `LINE_CHANNEL_SECRET`、`LINE_CHANNEL_ACCESS_TOKEN`、`LINE_PUBLIC_BASE_URL`、`LINE_*_TTL`、`LINE_MAX_*` |
-| Workflow / Storage | `WORKFLOW_DIR`、`WORKFLOW_MANIFEST_POLICY`、`STORAGE_DIR`、`STORAGE_OUTPUT_DIR`、`MODEL_PATH` |
-| Worker | `WORKER_ID`、`WORKER_TIMEOUT`、`COMFY_HTTP_TIMEOUT`、`SKIP_WARMUP` |
+| 健康檢查 | `Invoke-RestMethod http://localhost:5000/api/health` |
+| 服務狀態 | `docker compose --env-file .env.local ps` |
+| 查看 log | `docker compose --env-file .env.local logs -f backend worker` |
+| 停止服務 | `docker compose --env-file .env.local down` |
+| 重建映像 | `docker compose --env-file .env.local up -d --build backend worker` |
 
-## API
+| 修改位置 | 是否需要重建 |
+| --- | --- |
+| `backend/src`、`worker/src`、`shared/` | 需要 |
+| `ComfyUIworkflow/config.json` | 不需要（唯讀 mount，每次請求重讀） |
+| `ComfyUIworkflow/*.json`、`ComfyUIworkflow_api/*.json` | 不需要（唯讀 mount） |
+| `frontend/` | 不需要（唯讀 mount，重新整理即可） |
+
+---
+
+## 4. 網頁介面（Prompt Hub）
+
+入口 `frontend/dashboard.html`（`dashboard.js`／`dashboard.css`），黑底＋螢光綠 `#D7FF3F`。
+
+```mermaid
+flowchart LR
+    H["#/home<br/>探索 / Hero"] --> I["#/image/&lt;tool&gt;"]
+    H --> V["#/video/&lt;tool&gt;"]
+    H --> A["#/avatar"]
+    H --> G["#/gallery<br/>作品庫"]
+    I & V & A --> Q["我的佇列（抽屜）"]
+```
+
+| 功能 | 說明 |
+| --- | --- |
+| 導覽 | 上方水平導覽；手機版改 Pill 導覽，生成按鈕固定底部 |
+| Hash 路由 | 支援上一頁、重新整理、深層連結 |
+| 首頁 Hero | 選工具後直接設定比例／解析度／張數，與工作區共用草稿；缺上傳檔時開啟工作區 |
+| 解析度 | 比例 16:9（預設）、9:16、2:3；720P（預設）／1080P，由 catalog `_runtime.resolution_tiers` 換算 |
+| 結果舞台 | 媒體滿版，浮動工具列（下載／再生成／全螢幕），生成中顯示骨架、進度、取消、重試 |
+| 我的佇列 | 顯示 tempcode（如 `U-7F3A2C`），列出最近 24 小時任務，可取消排隊中／生成中任務 |
+| 作品庫 | 全站共享，支援狀態篩選、下載、再生成；需 `JOB_OBSERVABILITY_ENABLED=true` |
+| 舊網址 | `login.html`／`profile.html` 302 導向 dashboard |
+
+**Tempcode 身分**：首次請求自動發 `studio_tc` cookie（HttpOnly、SameSite=Lax、一年），MySQL／Redis 只存 HMAC 標籤。清除 cookie、換瀏覽器或輪替 `SECRET_KEY` 都會失去原佇列存取權；HTTPS 環境需設 `SESSION_COOKIE_SECURE=true`。
+
+---
+
+## 5. Workflow
+
+```mermaid
+flowchart LR
+    CFG["ComfyUIworkflow/config.json<br/>（唯一 metadata 來源）"] --> CAT["shared/workflow_catalog.py"]
+    CAT --> BE["Backend<br/>runtime-config / 驗證"]
+    CAT --> W["Worker<br/>loader → injectors → runtime"]
+    WF["ComfyUIworkflow/*.json<br/>ComfyUIworkflow_api/*.json"] --> W
+```
+
+| 分類 | ID | 說明 |
+| --- | --- | --- |
+| 圖片 | `text_to_image` | Z-Image Turbo 文字生圖 |
+| 圖片 | `image_edit` | Qwen 單圖編輯 |
+| 圖片 | `face_swap` | Qwen 換臉 |
+| 圖片 | `sketch_to_image` | Qwen 草圖生圖 |
+| 圖片 | `multi_image_blend` | Qwen 多圖融合 |
+| 圖片 | `multi_angle` | Qwen 多角度鏡頭 |
+| 圖片 | `ideogram4_regional_t2i` | Ideogram 4 區域提示詞（BBox 畫布） |
+| 圖片 | `image_gpt25_sunburst` | StudioCore：GPT Image 2.5（Azure），最多 3 張參考圖 |
+| 圖片 | `image_upscale_seedvr2` | StudioCore：SeedVR2 7B 放大 2x／4x（僅網頁） |
+| 影片 | `image_to_video` | Veo3 圖生影片 |
+| 影片 | `ltx_i2v` | LTX-2.3 圖生影片 |
+| 影片 | `ltx_flf` | LTX-2.3 首尾幀影片 |
+| 影片 | `ltx_retake_v2v` | LTX-2 影片重生成（ReTake） |
+| 影片 | `video_minimax_h3` | StudioCore：MiniMax H3，T2V／I2V／FL2V／L2V，預設 5 秒、Lightning LoRA turbo（節點 `105:126`） |
+| 數位人 | `virtual_human` | InfiniteTalk + IndexTTS 數位人像說話 |
+
+> catalog 的 `enabled` 不代表本機可執行；缺少對應模型或 custom node 時會在執行階段失敗。MiniMax 5 秒影片實測約 70–90 秒（RTX 5090）。
+
+---
+
+## 6. API
 
 | Method | Endpoint | 用途 |
 | --- | --- | --- |
 | GET | `/api/health`、`/health` | Backend、Redis、MySQL、Worker 健康狀態 |
 | GET | `/api/runtime-config` | runtime 與 enabled workflow catalog（不含憑證） |
 | POST | `/api/generate` | 建立並排入 job；選填 `resolution: "720p" \| "1080p"` |
-| GET | `/api/history` | 全站共享作品庫；`offset`、`limit`、`status`（`all`／`completed`／`running`／`failed`，預設 `completed`） |
-| GET | `/api/queue/me` | 此瀏覽器最近 24 小時最多 50 筆任務、進度、排隊位置與縮圖 |
-| GET | `/api/status/<job_id>` | 查詢 job（完成狀態為 `finished`） |
-| POST | `/api/cancel/<job_id>` | 限送出任務的瀏覽器取消，非本人回 403 |
-| POST | `/api/upload` | 上傳輸入檔案 |
-| GET | `/outputs/<path>` | 取得輸出檔案；resolve 後位於輸出根目錄外（含 symlink）回 403 |
+| GET | `/api/status/<job_id>` | 查詢 job |
+| POST | `/api/cancel/<job_id>` | 取消；限送出者的瀏覽器，否則 403 |
+| POST | `/api/upload` | 上傳輸入檔 |
+| GET | `/api/queue/me` | 此瀏覽器最近 24 小時最多 50 筆任務 |
+| GET | `/api/history` | 作品庫；`offset`、`limit`、`status`（`all`／`completed`／`running`／`failed`） |
+| GET | `/outputs/<path>` | 輸出檔；resolve 後超出輸出根目錄（含 symlink）回 403 |
 | GET | `/api/models`、`/api/metrics` | 模型清單、metrics |
 | POST | `/line/webhook` | LINE webhook（HMAC-SHA256 簽章驗證） |
 | GET | `/line/download/<token>`、`/line/preview/<token>` | LINE 媒體下載與縮圖 |
 | GET | `/admin`、`/api/admin/*` | 管理與觀測頁面 |
 
-Web 首次請求自動取得 `studio_tc`（HttpOnly、SameSite=Lax、一年有效），MySQL／Redis 只存其 HMAC 標籤。清除 cookie 或換瀏覽器後無法存取原佇列；舊 `IP#` 任務仍在作品庫，但無法從網頁取消。輪替 `SECRET_KEY` 會使既有佇列對應失效。Phase 2 的 HTTPS 環境需設定 `SESSION_COOKIE_SECURE=true`。
+---
 
-套用 `004_dispatch_source_label_index.sql` 後，先部署 worker 再部署 backend／frontend；worker 依 catalog `resolution_tiers` 換算尺寸，未傳 `resolution` 的 LINE／API 呼叫維持舊預設。指定 prompt 取消要求 ComfyUI **0.34.2 以上**，只停止該任務，不卸載模型。回滾索引可用 `DROP INDEX idx_dispatch_source_label ON job_dispatches`。
+## 7. 設定（`.env.local`）
 
-## Repository 結構
+`.env.local.example` 是唯一受版控的範本；Compose 將 `.env.local` mount 為容器內 `.env.selected`，設定一律經 `shared/config_base.py` 與各服務 `config.py` 取得。
 
-~~~
-start-vwe.bat              一鍵啟動 Docker、Cloudflare Tunnel、ComfyUI
-docker-compose.yml         唯一 Compose
-.env.local.example         local env 範本
+| 類別 | 變數 |
+| --- | --- |
+| Redis | `REDIS_HOST`、`REDIS_PORT`、`REDIS_PASSWORD` |
+| MySQL | `DB_HOST`、`DB_PORT`、`DB_NAME`、`DB_USER`、`DB_PASSWORD`、`MYSQL_ROOT_PASSWORD` |
+| 安全 | `SECRET_KEY`、`SESSION_COOKIE_SECURE` |
+| ComfyUI | `COMFYUI_SERVER_URL`、`COMFYUI_HOST`、`COMFY_HOST`、`COMFYUI_PORT` |
+| StudioCore | `STUDIOCORE_AZURE_API_KEY`、`STUDIOCORE_AZURE_ENDPOINT`（僅 Worker 記憶體注入） |
+| LINE | `LINE_CHANNEL_SECRET`、`LINE_CHANNEL_ACCESS_TOKEN`、`LINE_PUBLIC_BASE_URL`、`LINE_*_TTL`、`LINE_MAX_*`、`LINE_MUSIC_*` |
+| Workflow／Storage | `WORKFLOW_DIR`、`WORKFLOW_MANIFEST_POLICY`、`STORAGE_DIR`、`STORAGE_OUTPUT_DIR`、`MODEL_PATH` |
+| Worker | `WORKER_ID`、`WORKER_TIMEOUT`、`COMFY_HTTP_TIMEOUT`、`COMFY_POLLING_INTERVAL`、`SKIP_WARMUP` |
+| 觀測 | `JOB_OBSERVABILITY_ENABLED`、`JOB_RECONCILE_SECONDS`、`JOB_STALE_GRACE_SECONDS`、`WORKER_HEARTBEAT_*` |
 
-backend/src/
-  app.py                   Flask app 組裝
-  api_routes.py            generate／status／cancel／upload
-  system_routes.py         health、runtime-config、outputs、前端
-  admin_routes.py          admin／observability
-  line_routes.py           LINE adapter 與完成通知 monitor
-  job_service.py           輸入驗證與排入 job
+---
 
-worker/src/
-  main.py、job_processor.py  Worker lifecycle 與 job 執行
-  comfy_client.py          ComfyUI HTTP／WebSocket client
-  workflow/                loader、runtime、injectors
+## 8. Repository 結構
 
-shared/                    config、workflow catalog、job contract、path safety
-frontend/                  dashboard.html／.js／.css（Prompt Hub）、admin、靜態資源
-ComfyUIworkflow/           config.json 與 UI workflow
-ComfyUIworkflow_api/       API 格式 workflow
-migrations/                MySQL 加法式 migration（001–004）
-scripts/                   repair-services.ps1、validate_local_startup.py、維護工具
-openspec/                  規格（specs/）與變更紀錄（changes/archive/）
-tests/                     unit、integration 測試
-~~~
+| 路徑 | 內容 |
+| --- | --- |
+| `start-vwe.bat` | 一鍵啟動 Docker、Cloudflare Tunnel、ComfyUI |
+| `docker-compose.yml` | 唯一 Compose |
+| `.env.local.example` | 環境變數範本 |
+| `backend/src/app.py` | Flask app 組裝 |
+| `backend/src/api_routes.py` | generate／status／cancel／upload |
+| `backend/src/system_routes.py` | health、runtime-config、outputs、前端 |
+| `backend/src/admin_routes.py`、`admin_queries.py` | admin／observability |
+| `backend/src/line_routes.py` | LINE adapter 與完成通知 monitor |
+| `backend/src/line_music_service.py`、`media_postprocess.py` | LINE 配樂與 ffmpeg 後製 |
+| `backend/src/job_service.py` | 輸入驗證與排入 job |
+| `worker/src/main.py`、`job_processor.py` | Worker lifecycle、heartbeat、job 執行與清理 |
+| `worker/src/comfy_client.py` | ComfyUI HTTP／WebSocket client |
+| `worker/src/workflow/` | loader、injectors、runtime、observability |
+| `worker/src/regional_prompt.py` | 區域提示詞處理 |
+| `shared/` | config、workflow catalog、job contract／repository、path safety |
+| `frontend/` | Prompt Hub（dashboard）、admin、canvas 元件、靜態資源 |
+| `ComfyUIworkflow/` | `config.json` 與 workflow JSON |
+| `ComfyUIworkflow_api/` | StudioCore API 格式 workflow |
+| `migrations/` | MySQL 加法式 migration（001–004） |
+| `scripts/` | `repair-services.ps1`、`validate_local_startup.py`、維護工具 |
+| `docs/` | 架構、觀測、運維文件 |
+| `openspec/` | 規格變更紀錄（`changes/`、`changes/archive/`） |
+| `tests/` | unit、integration、migration、frontend 測試 |
 
-## 開發與驗證
+---
 
-~~~powershell
-python -m pytest -q
-python -m compileall backend worker shared scripts tests
-docker compose --env-file .env.local config
-python scripts/validate_local_startup.py
-openspec validate --specs --strict
-~~~
+## 9. 開發與驗證
 
-維護工具只清理可重建的 local cache：
+| 用途 | 指令 |
+| --- | --- |
+| 單元／整合測試 | `python -m pytest -q` |
+| 語法檢查 | `python -m compileall backend worker shared scripts tests` |
+| Compose 檢查 | `docker compose --env-file .env.local config` |
+| 本機啟動驗證 | `python scripts/validate_local_startup.py` |
+| 清理可重建 cache | `bash scripts/maintenance.sh --dry-run` |
 
-~~~powershell
-bash scripts/maintenance.sh --dry-run
-~~~
+**部署順序**：套用 `004_dispatch_source_label_index.sql` 後，先部署 Worker 再部署 Backend／Frontend。回滾索引：`DROP INDEX idx_dispatch_source_label ON job_dispatches`。
 
-## 故障排除
+---
 
-**Backend 無法啟動**：查看 `docker compose --env-file .env.local logs backend`，確認 `.env.local` 存在、MySQL healthcheck 通過、Redis／MySQL 密碼與 Compose 一致。
+## 10. 故障排除
 
-**Worker 無法連線 ComfyUI**：確認 `http://localhost:8188/system_stats` 有回應、`COMFYUI_SERVER_URL` 指向 `http://host.docker.internal:8188`。ComfyUI 重啟期間 worker log 會短暫出現 `Connection refused`，連上後顯示 `ComfyUI connected`。
-
-**MiniMax 出現 `HostBuffer.read_file_slice failed`**：系統 RAM 不足。確認 ComfyUI 帶有 `--cache-ram 32`，必要時關閉 ComfyUI 視窗後重新執行 `start-vwe.bat`。
-
-**StudioCore job 被拒絕送出**：ComfyUI 未帶 `--disable-metadata`。
-
-**Sunburst 回傳 `HTTP 408`**：Azure 端逾時，重試即可。
-
-**LINE 沒有回應**：確認 Tunnel 網址與 LINE 後台的 Webhook URL 一致（`logs/cloudflared.stdout.log`、`.env.local` 的 `LINE_PUBLIC_BASE_URL`）。
-
-**作品庫顯示「暫不可用」**：`/api/history` 回 503，確認 `JOB_OBSERVABILITY_ENABLED=true` 且 MySQL 正常；已套用 `003`、`004` migration。
-
-**輸出檔案不存在**：確認 `storage/outputs/` 存在，且 backend 與 worker mount 同一個 `storage/`。
-
-## 變更紀錄
-
-規格與變更以 OpenSpec 管理：現行規格在 `openspec/specs/`，已完成的變更在 `openspec/changes/archive/`。
+| 症狀 | 檢查 / 處理 |
+| --- | --- |
+| Backend 無法啟動 | `docker compose --env-file .env.local logs backend`；確認 `.env.local` 存在、MySQL healthcheck 通過、密碼一致 |
+| Worker 連不到 ComfyUI | `http://localhost:8188/system_stats` 有回應；`COMFYUI_SERVER_URL` 為 `http://host.docker.internal:8188`。重啟期間短暫 `Connection refused` 屬正常 |
+| MiniMax `HostBuffer.read_file_slice failed` | RAM 不足；確認 `--cache-ram 32`，必要時關閉 ComfyUI 後重跑 `start-vwe.bat` |
+| StudioCore job 被拒絕 | ComfyUI 未帶 `--disable-metadata` |
+| Sunburst `HTTP 408` | Azure 端逾時，重試即可 |
+| LINE 沒有回應 | Tunnel 網址與 LINE 後台 Webhook 一致（`logs/cloudflared.stdout.log`、`LINE_PUBLIC_BASE_URL`） |
+| 作品庫「暫不可用」 | `/api/history` 回 503；確認 `JOB_OBSERVABILITY_ENABLED=true`、MySQL 正常、已套用 003／004 migration |
+| 輸出檔不存在 | `storage/outputs/` 存在，且 backend 與 worker mount 同一個 `storage/` |
