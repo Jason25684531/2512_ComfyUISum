@@ -119,9 +119,9 @@ services:
       # ComfyUI 在 Windows 原生執行，容器內必須固定使用 host.docker.internal
       # 不讀取 .env 變數，避免 .env 中的 127.0.0.1 覆蓋 Docker 正確路由
       - COMFY_HOST=host.docker.internal
-      - COMFY_PORT=${COMFY_PORT:-8188}
+      - COMFY_PORT=${COMFYUI_PORT:-8188}
       - COMFYUI_HOST=host.docker.internal
-      - COMFYUI_SERVER_URL=http://host.docker.internal:${COMFY_PORT:-8188}
+      - COMFYUI_SERVER_URL=http://host.docker.internal:${COMFYUI_PORT:-8188}
       # Worker 跑在 Linux 容器但 ComfyUI 在 Windows，model 路徑用反斜線格式
       - COMFYUI_RUNTIME_PROFILE=windows
 

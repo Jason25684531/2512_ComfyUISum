@@ -16,7 +16,7 @@ if errorlevel 1 (
   exit /b 1
 )
 
-curl.exe -fsS --max-time 3 http://127.0.0.1:8188/system_stats >nul 2>nul
+curl.exe -fsS --max-time 3 http://127.0.0.1:8189/system_stats >nul 2>nul
 if not errorlevel 1 (
   echo ComfyUI is already running; no duplicate was started.
   echo VWE: http://localhost:5000/
@@ -36,5 +36,5 @@ echo VWE: http://localhost:5000/
 cd /d "%COMFYUI_DIR%"
 rem --disable-metadata: required by StudioCore credential workflows.
 rem --cache-ram 32: keep 32 GB RAM free so cached models cannot starve MiniMax.
-"%COMFYUI_DIR%\python_embeded\python.exe" -s ComfyUI\main.py --windows-standalone-build --disable-metadata --cache-ram 32 --verbose ERROR
+"%COMFYUI_DIR%\python_embeded\python.exe" -s ComfyUI\main.py --windows-standalone-build --disable-metadata --cache-ram 32 --verbose ERROR --port 8189
 pause
